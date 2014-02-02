@@ -127,7 +127,6 @@ CONFINCLUDEPY=	$(CONFINCLUDEDIR)/python$(LDVERSION)
 # Symbols used for using shared libraries
 SHLIB_SUFFIX=	@SHLIB_SUFFIX@
 EXT_SUFFIX=	@EXT_SUFFIX@
-SO=		$(SHLIB_SUFFIX)
 LDSHARED=	@LDSHARED@ $(PY_LDFLAGS)
 BLDSHARED=	@BLDSHARED@ $(PY_LDFLAGS)
 LDCXXSHARED=	@LDCXXSHARED@
@@ -149,11 +148,20 @@ PYTHONFRAMEWORKINSTALLDIR= @PYTHONFRAMEWORKINSTALLDIR@
 MACOSX_DEPLOYMENT_TARGET=@CONFIGURE_MACOSX_DEPLOYMENT_TARGET@
 @EXPORT_MACOSX_DEPLOYMENT_TARGET@export MACOSX_DEPLOYMENT_TARGET
 
+# Option to install to strip binaries
+STRIPFLAG=-s
+
+# Flags to lipo to produce a 32-bit-only universal executable
+LIPO_32BIT_FLAGS=@LIPO_32BIT_FLAGS@
+
 # Options to enable prebinding (for fast startup prior to Mac OS X 10.3)
 OTHER_LIBTOOL_OPT=@OTHER_LIBTOOL_OPT@
 
 # Environment to run shared python without installed libraries
 RUNSHARED=       @RUNSHARED@
+
+# ensurepip options
+ENSUREPIP=      @ENSUREPIP@
 
 # Modes for directories, executables and data files created by the
 # install process.  Default to user-only-writable for all file types.
@@ -215,6 +223,12 @@ TCLTK_LIBS=	@TCLTK_LIBS@
 # The task to run while instrument when building the profile-opt target
 PROFILE_TASK=	$(srcdir)/Tools/pybench/pybench.py -n 2 --with-gc --with-syscheck
 #PROFILE_TASK=	$(srcdir)/Lib/test/regrtest.py
+
+# report files for gcov / lcov coverage report
+COVERAGE_INFO=	$(abs_builddir)/coverage.info
+COVERAGE_REPORT=$(abs_builddir)/lcov-report
+COVERAGE_REPORT_OPTIONS=--no-branch-coverage --title "CPython lcov report"
+
 
 # === Definitions added by makesetup ===
 
@@ -361,6 +375,7 @@ PYTHON_OBJS=	\
 		Python/pyarena.o \
 		Python/pyctype.o \
 		Python/pyfpe.o \
+		Python/pyhash.o \
 		Python/pymath.o \
 		Python/pystate.o \
 		Python/pythonrun.o \
@@ -444,7 +459,7 @@ LIBRARY_OBJS=	\
 
 # Default target
 all:		build_all
-build_all:	$(BUILDPYTHON) oldsharedmods sharedmods gdbhooks Modules/_testembed
+build_all:	$(BUILDPYTHON) oldsharedmods sharedmods gdbhooks Modules/_testembed python-config
 
 # Compile a binary with gcc profile guided optimization.
 profile-opt:
@@ -468,11 +483,53 @@ run_profile_task:
 build_all_use_profile:
 	$(MAKE) all CFLAGS="$(CFLAGS) -fprofile-use -fprofile-correction"
 
+# Compile and run with gcov
+.PHONY=coverage coverage-lcov coverage-report
 coverage:
 	@echo "Building with support for coverage checking:"
-	$(MAKE) clean
+	$(MAKE) clean profile-removal
 	$(MAKE) all CFLAGS="$(CFLAGS) -O0 -pg -fprofile-arcs -ftest-coverage" LIBS="$(LIBS) -lgcov"
 
+coverage-lcov:
+	@echo "Creating Coverage HTML report with LCOV:"
+	@rm -f $(COVERAGE_INFO)
+	@rm -rf $(COVERAGE_REPORT)
+	@lcov --capture --directory $(abs_builddir) \
+	    --base-directory $(realpath $(abs_builddir)) \
+	    --path $(realpath $(abs_srcdir)) \
+	    --output-file $(COVERAGE_INFO)
+	: # remove 3rd party modules and system headers
+	@lcov --remove $(COVERAGE_INFO) \
+	    '*/Modules/_ctypes/libffi*/*' \
+	    '*/Modules/_decimal/libmpdec/*' \
+	    '*/Modules/expat/*' \
+	    '*/Modules/zlib/*' \
+	    '*/Include/*' \
+	    '/usr/include/*' \
+	    '/usr/local/include/*' \
+	    --output-file $(COVERAGE_INFO)
+	@genhtml $(COVERAGE_INFO) --output-directory $(COVERAGE_REPORT) \
+	    $(COVERAGE_REPORT_OPTIONS)
+	@echo
+	@echo "lcov report at $(COVERAGE_REPORT)/index.html"
+	@echo
+
+coverage-report:
+	: # force rebuilding of parser and importlib
+	@touch $(GRAMMAR_INPUT)
+	@touch $(srcdir)/Lib/importlib/_bootstrap.py
+	: # build with coverage info
+	$(MAKE) coverage
+	: # run tests, ignore failures
+	$(TESTRUNNER) $(TESTOPTS) || true
+	: # build lcov report
+	$(MAKE) coverage-lcov
+
+# Run "Argument Clinic" over all source files
+# (depends on python having already been built)
+.PHONY=clinic
+clinic: $(BUILDPYTHON)
+	$(RUNSHARED) $(PYTHON_FOR_BUILD) ./Tools/clinic/clinic.py --make
 
 # Build the interpreter
 $(BUILDPYTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY) $(PY3LIBRARY)
@@ -646,6 +703,8 @@ Modules/python.o: $(srcdir)/Modules/python.c
 Modules/_testembed.o: $(srcdir)/Modules/_testembed.c
 	$(MAINCC) -c $(PY_CORE_CFLAGS) -o $@ $(srcdir)/Modules/_testembed.c
 
+Modules/_sre.o: $(srcdir)/Modules/_sre.c $(srcdir)/Modules/sre.h $(srcdir)/Modules/sre_constants.h $(srcdir)/Modules/sre_lib.h
+
 Modules/posixmodule.o: $(srcdir)/Modules/posixmodule.c $(srcdir)/Modules/posixmodule.h
 
 Modules/grpmodule.o: $(srcdir)/Modules/grpmodule.c $(srcdir)/Modules/posixmodule.h
@@ -713,27 +772,31 @@ Objects/unicodectype.o:	$(srcdir)/Objects/unicodectype.c \
 				$(srcdir)/Objects/unicodetype_db.h
 
 BYTESTR_DEPS = \
-		$(srcdir)/Include/bytes_methods.h \
 		$(srcdir)/Objects/stringlib/count.h \
 		$(srcdir)/Objects/stringlib/ctype.h \
-		$(srcdir)/Objects/stringlib/eq.h \
 		$(srcdir)/Objects/stringlib/fastsearch.h \
 		$(srcdir)/Objects/stringlib/find.h \
-		$(srcdir)/Objects/stringlib/find_max_char.h \
+		$(srcdir)/Objects/stringlib/join.h \
 		$(srcdir)/Objects/stringlib/partition.h \
 		$(srcdir)/Objects/stringlib/split.h \
 		$(srcdir)/Objects/stringlib/stringdefs.h \
-		$(srcdir)/Objects/stringlib/transmogrify.h \
-		$(srcdir)/Objects/stringlib/unicodedefs.h \
-		$(srcdir)/Objects/stringlib/localeutil.h \
-		$(srcdir)/Objects/stringlib/undef.h
+		$(srcdir)/Objects/stringlib/transmogrify.h
 
-UNICODE_DEPS = $(BYTESTR_DEPS) \
+UNICODE_DEPS = \
 		$(srcdir)/Objects/stringlib/asciilib.h \
 		$(srcdir)/Objects/stringlib/codecs.h \
+		$(srcdir)/Objects/stringlib/count.h \
+		$(srcdir)/Objects/stringlib/fastsearch.h \
+		$(srcdir)/Objects/stringlib/find.h \
+		$(srcdir)/Objects/stringlib/find_max_char.h \
+		$(srcdir)/Objects/stringlib/localeutil.h \
+		$(srcdir)/Objects/stringlib/partition.h \
+		$(srcdir)/Objects/stringlib/replace.h \
+		$(srcdir)/Objects/stringlib/split.h \
 		$(srcdir)/Objects/stringlib/ucs1lib.h \
 		$(srcdir)/Objects/stringlib/ucs2lib.h \
 		$(srcdir)/Objects/stringlib/ucs4lib.h \
+		$(srcdir)/Objects/stringlib/undef.h \
 		$(srcdir)/Objects/stringlib/unicode_format.h \
 		$(srcdir)/Objects/stringlib/unicodedefs.h
 
@@ -750,9 +813,6 @@ $(OPCODETARGETS_H): $(OPCODETARGETGEN_FILES)
 	$(OPCODETARGETGEN) $(OPCODETARGETS_H)
 
 Python/ceval.o: $(OPCODETARGETS_H) $(srcdir)/Python/ceval_gil.h
-
-Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
-				$(BYTESTR_DEPS)
 
 Python/frozen.o: Python/importlib.h
 
@@ -823,6 +883,7 @@ PYTHON_HEADERS= \
 		$(srcdir)/Include/pydebug.h \
 		$(srcdir)/Include/pyerrors.h \
 		$(srcdir)/Include/pyfpe.h \
+		$(srcdir)/Include/pyhash.h \
 		$(srcdir)/Include/pymath.h \
 		$(srcdir)/Include/pygetopt.h \
 		$(srcdir)/Include/pymacro.h \
@@ -901,16 +962,38 @@ buildbottest:	all platform
 
 QUICKTESTOPTS=	$(TESTOPTS) -x test_subprocess test_io test_lib2to3 \
 		test_multibytecodec test_urllib2_localnet test_itertools \
-		test_multiprocessing test_mailbox test_socket test_poll \
+		test_multiprocessing_fork test_multiprocessing_spawn \
+		test_multiprocessing_forkserver \
+		test_mailbox test_socket test_poll \
 		test_select test_zipfile test_concurrent_futures
 quicktest:	all platform
 		$(TESTRUNNER) $(QUICKTESTOPTS)
 
 
-install: altinstall bininstall maninstall
+install: @FRAMEWORKINSTALLFIRST@ commoninstall bininstall maninstall @FRAMEWORKINSTALLLAST@
+	if test "x$(ENSUREPIP)" != "xno"  ; then \
+		case $(ENSUREPIP) in \
+			upgrade) ensurepip="--upgrade" ;; \
+			install|*) ensurepip="" ;; \
+		esac; \
+		$(RUNSHARED) $(PYTHON_FOR_BUILD) -m ensurepip \
+			$$ensurepip --root=$(DESTDIR)/ ; \
+	fi
 
-altinstall:	@FRAMEWORKALTINSTALLFIRST@ altbininstall libinstall inclinstall libainstall \
-                sharedinstall oldsharedinstall altmaninstall @FRAMEWORKALTINSTALLLAST@
+altinstall: commoninstall
+	if test "x$(ENSUREPIP)" != "xno"  ; then \
+		case $(ENSUREPIP) in \
+			upgrade) ensurepip="--altinstall --upgrade" ;; \
+			install|*) ensurepip="--altinstall" ;; \
+		esac; \
+		$(RUNSHARED) $(PYTHON_FOR_BUILD) -m ensurepip \
+			$$ensurepip --root=$(DESTDIR)/ ; \
+	fi
+
+commoninstall:  @FRAMEWORKALTINSTALLFIRST@ \
+		altbininstall libinstall inclinstall libainstall \
+		sharedinstall oldsharedinstall altmaninstall \
+		@FRAMEWORKALTINSTALLLAST@
 
 # Install shared libraries enabled by Setup
 DESTDIRS=	$(exec_prefix) $(LIBDIR) $(BINLIBDEST) $(DESTSHARED)
@@ -935,7 +1018,7 @@ $(DESTSHARED):
 
 # Install the interpreter with $(VERSION) affixed
 # This goes into $(exec_prefix)
-altbininstall: $(BUILDPYTHON)
+altbininstall: $(BUILDPYTHON) @FRAMEWORKPYTHONW@
 	@for i in $(BINDIR) $(LIBDIR); \
 	do \
 		if test ! -d $(DESTDIR)$$i; then \
@@ -944,14 +1027,18 @@ altbininstall: $(BUILDPYTHON)
 		else	true; \
 		fi; \
 	done
-	$(INSTALL_PROGRAM) $(BUILDPYTHON) $(DESTDIR)$(BINDIR)/python$(LDVERSION)$(EXE)
+	if test "$(PYTHONFRAMEWORKDIR)" = "no-framework" ; then \
+		$(INSTALL_PROGRAM) $(BUILDPYTHON) $(DESTDIR)$(BINDIR)/python$(LDVERSION)$(EXE); \
+	else \
+		$(INSTALL_PROGRAM) $(STRIPFLAG) Mac/pythonw $(DESTDIR)$(BINDIR)/python$(LDVERSION)$(EXE); \
+	fi
 	-if test "$(VERSION)" != "$(LDVERSION)"; then \
 		if test -f $(DESTDIR)$(BINDIR)/python$(VERSION)$(EXE) -o -h $(DESTDIR)$(BINDIR)/python$(VERSION)$(EXE); \
 		then rm -f $(DESTDIR)$(BINDIR)/python$(VERSION)$(EXE); \
 		fi; \
 		(cd $(DESTDIR)$(BINDIR); $(LN) python$(LDVERSION)$(EXE) python$(VERSION)$(EXE)); \
 	fi
-	if test -f $(LDLIBRARY); then \
+	if test -f $(LDLIBRARY) && test "$(PYTHONFRAMEWORKDIR)" = "no-framework" ; then \
 		if test -n "$(DLLLIBRARY)" ; then \
 			$(INSTALL_SHARED) $(DLLLIBRARY) $(DESTDIR)$(BINDIR); \
 		else \
@@ -964,6 +1051,12 @@ altbininstall: $(BUILDPYTHON)
 			$(INSTALL_SHARED) $(PY3LIBRARY) $(DESTDIR)$(LIBDIR)/$(PY3LIBRARY); \
 		fi; \
 	else	true; \
+	fi
+	if test "x$(LIPO_32BIT_FLAGS)" != "x" ; then \
+		rm -f $(DESTDIR)$(BINDIR)python$(VERSION)-32$(EXE); \
+		lipo $(LIPO_32BIT_FLAGS) \
+			-output $(DESTDIR)$(BINDIR)/python$(VERSION)-32$(EXE) \
+			$(DESTDIR)$(BINDIR)/python$(VERSION)$(EXE); \
 	fi
 
 bininstall: altbininstall
@@ -990,6 +1083,10 @@ bininstall: altbininstall
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s 2to3-$(VERSION) 2to3)
 	-rm -f $(DESTDIR)$(BINDIR)/pyvenv
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s pyvenv-$(VERSION) pyvenv)
+	if test "x$(LIPO_32BIT_FLAGS)" != "x" ; then \
+		rm -f $(DESTDIR)$(BINDIR)/python3-32$(EXE); \
+		(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)-32$(EXE) python3-32$(EXE)) \
+	fi
 
 # Install the versioned manual page
 altmaninstall:
@@ -1041,8 +1138,11 @@ LIBSUBDIRS=	tkinter tkinter/test tkinter/test/test_tkinter \
 		test/namespace_pkgs/project3/parent/child \
                 test/namespace_pkgs/module_and_namespace_package \
                 test/namespace_pkgs/module_and_namespace_package/a_test \
+		asyncio \
+		test/test_asyncio \
 		collections concurrent concurrent/futures encodings \
 		email email/mime test/test_email test/test_email/data \
+		ensurepip ensurepip/_bundled \
 		html json test/test_json http dbm xmlrpc \
 		sqlite3 sqlite3/test \
 		logging csv wsgiref urllib \
@@ -1160,10 +1260,19 @@ $(srcdir)/Lib/$(PLATDIR):
 	fi; \
 	cd $(srcdir)/Lib/$(PLATDIR); $(RUNSHARED) ./regen
 
-python-config: $(srcdir)/Misc/python-config.in
+python-config: $(srcdir)/Misc/python-config.in Misc/python-config.sh
 	# Substitution happens here, as the completely-expanded BINDIR
 	# is not available in configure
-	sed -e "s,@EXENAME@,$(BINDIR)/python$(LDVERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config
+	sed -e "s,@EXENAME@,$(BINDIR)/python$(LDVERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config.py
+	# Replace makefile compat. variable references with shell script compat. ones; $(VAR) -> ${VAR}
+	sed -e 's,\$$(\([A-Za-z0-9_]*\)),\$$\{\1\},g' < Misc/python-config.sh >python-config
+	# On Darwin, always use the python version of the script, the shell
+	# version doesn't use the compiler customizations that are provided
+	# in python (_osx_support.py).
+	if test `uname -s` = Darwin; then \
+		cp python-config.py python-config; \
+	fi
+
 
 # Install the include files
 INCLDIRSTOMAKE=$(INCLUDEDIR) $(CONFINCLUDEDIR) $(INCLUDEPY) $(CONFINCLUDEPY)
@@ -1221,8 +1330,8 @@ libainstall:	all python-config
 	$(INSTALL_DATA) Misc/python.pc $(DESTDIR)$(LIBPC)/python-$(VERSION).pc
 	$(INSTALL_SCRIPT) $(srcdir)/Modules/makesetup $(DESTDIR)$(LIBPL)/makesetup
 	$(INSTALL_SCRIPT) $(srcdir)/install-sh $(DESTDIR)$(LIBPL)/install-sh
+	$(INSTALL_SCRIPT) python-config.py $(DESTDIR)$(LIBPL)/python-config.py
 	$(INSTALL_SCRIPT) python-config $(DESTDIR)$(BINDIR)/python$(LDVERSION)-config
-	rm python-config
 	@if [ -s Modules/python.exp -a \
 		"`echo $(MACHDEP) | sed 's/^\(...\).*/\1/'`" = "aix" ]; then \
 		echo; echo "Installing support files for building shared extension modules on AIX:"; \
@@ -1304,7 +1413,14 @@ frameworkinstallmaclib:
 frameworkinstallapps:
 	cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
 
-# This install the unix python and pythonw tools in /usr/local/bin
+# Build the bootstrap executable that will spawn the interpreter inside
+# an app bundle within the framework.  This allows the interpreter to
+# run OS X GUI APIs.
+frameworkpythonw:
+	cd Mac && $(MAKE) pythonw
+
+# This installs the python* and other bin symlinks in $prefix/bin or in
+# a bin directory relative to the framework root
 frameworkinstallunixtools:
 	cd Mac && $(MAKE) installunixtools DESTDIR="$(DESTDIR)"
 
@@ -1402,6 +1518,8 @@ clean: pycremoval
 
 profile-removal:
 	find . -name '*.gc??' -exec rm -f {} ';'
+	rm -f $(COVERAGE_INFO)
+	rm -rf $(COVERAGE_REPORT)
 
 clobber: clean profile-removal
 	-rm -f $(BUILDPYTHON) $(PGEN) $(LIBRARY) $(LDLIBRARY) $(DLLLIBRARY) \
@@ -1409,6 +1527,7 @@ clobber: clean profile-removal
 		config.cache config.log pyconfig.h Modules/config.c
 	-rm -rf build platform
 	-rm -rf $(PYTHONFRAMEWORKDIR)
+	-rm -f python-config.py python-config
 
 # Make things extra clean, before making a distribution:
 # remove all generated files, even Makefile[.pre]
@@ -1480,7 +1599,7 @@ Python/thread.o: @THREADHEADERS@
 .PHONY: frameworkinstall frameworkinstallframework frameworkinstallstructure
 .PHONY: frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools
 .PHONY: frameworkaltinstallunixtools recheck autoconf clean clobber distclean
-.PHONY: smelly funny patchcheck touch altmaninstall
+.PHONY: smelly funny patchcheck touch altmaninstall commoninstall
 .PHONY: gdbhooks
 
 # IF YOU PUT ANYTHING HERE IT WILL GO AWAY

@@ -79,9 +79,8 @@ howto/logging,,:Started,INFO:root:Started
 howto/logging,,:This,DEBUG:root:This message should go to the log file
 howto/logging,,:This,DEBUG:This message should appear on the console
 howto/logging,,:Watch,WARNING:root:Watch out!
-howto/pyporting,75,::,# make sure to use :: Python *and* :: Python :: 3 so
-howto/pyporting,75,::,"'Programming Language :: Python',"
-howto/pyporting,75,::,'Programming Language :: Python :: 3'
+howto/pyporting,,::,Programming Language :: Python :: 2
+howto/pyporting,,::,Programming Language :: Python :: 3
 howto/regex,,::,
 howto/regex,,:foo,(?:foo)
 howto/urllib2,,:example,"for example ""joe@password:example.com"""
@@ -141,15 +140,8 @@ library/linecache,,:sys,"sys:x:3:3:sys:/dev:/bin/sh"
 library/logging.handlers,,:port,host:port
 library/mmap,,:i2,obj[i1:i2]
 library/multiprocessing,,`,# Add more tasks using `put()`
-library/multiprocessing,,`,# A test file for the `multiprocessing` package
-library/multiprocessing,,`,# A test of `multiprocessing.Pool` class
-library/multiprocessing,,`,# `BaseManager`.
-library/multiprocessing,,`,# in the original order then consider using `Pool.map()` or
 library/multiprocessing,,`,">>> l._callmethod('__getitem__', (20,))     # equiv to `l[20]`"
 library/multiprocessing,,`,">>> l._callmethod('__getslice__', (2, 7))   # equiv to `l[2:7]`"
-library/multiprocessing,,`,# Not sure if we should synchronize access to `socket.accept()` method by
-library/multiprocessing,,`,# object.  (We import `multiprocessing.reduction` to enable this pickling.)
-library/multiprocessing,,`,# `Pool.imap()` (which will save on the amount of code needed anyway).
 library/multiprocessing,,:queue,">>> QueueManager.register('get_queue', callable=lambda:queue)"
 library/multiprocessing,,`,# register the Foo class; make `f()` and `g()` accessible via proxy
 library/multiprocessing,,`,# register the Foo class; make `g()` and `_h()` accessible via proxy
@@ -158,20 +150,16 @@ library/nntplib,,:bytes,:bytes
 library/nntplib,,:lines,:lines
 library/optparse,,:len,"del parser.rargs[:len(value)]"
 library/os.path,,:foo,c:foo
+library/pathlib,,:bar,">>> PureWindowsPath('c:/Windows', 'd:bar')"
+library/pathlib,,:bar,PureWindowsPath('d:bar')
+library/pathlib,,:Program,>>> PureWindowsPath('c:Program Files/').root
+library/pathlib,,:Program,>>> PureWindowsPath('c:Program Files/').anchor
 library/pdb,,:lineno,filename:lineno
 library/pickle,,:memory,"conn = sqlite3.connect("":memory:"")"
 library/posix,,`,"CFLAGS=""`getconf LFS_CFLAGS`"" OPT=""-g -O2 $CFLAGS"""
-library/pprint,209,::,"'classifiers': ['Development Status :: 4 - Beta',"
-library/pprint,209,::,"'Intended Audience :: Developers',"
-library/pprint,209,::,"'License :: OSI Approved :: MIT License',"
-library/pprint,209,::,"'Natural Language :: English',"
-library/pprint,209,::,"'Operating System :: OS Independent',"
-library/pprint,209,::,"'Programming Language :: Python',"
-library/pprint,209,::,"'Programming Language :: Python :: 2',"
-library/pprint,209,::,"'Programming Language :: Python :: 2.6',"
-library/pprint,209,::,"'Programming Language :: Python :: 2.7',"
-library/pprint,209,::,"'Topic :: Software Development :: Libraries',"
-library/pprint,209,::,"'Topic :: Software Development :: Libraries :: Python Modules'],"
+library/pprint,,::,"'Programming Language :: Python :: 2 :: Only'],"
+library/pprint,,::,"'Programming Language :: Python :: 2.6',"
+library/pprint,,::,"'Programming Language :: Python :: 2.7',"
 library/profile,,:lineno,filename:lineno(function)
 library/pyexpat,,:elem1,<py:elem1 />
 library/pyexpat,,:py,"xmlns:py = ""http://www.python.org/ns/"">"
@@ -183,6 +171,7 @@ library/socket,,:len,fds.fromstring(cmsg_data[:len(cmsg_data) - (len(cmsg_data) 
 library/sqlite3,,:age,"cur.execute(""select * from people where name_last=:who and age=:age"", {""who"": who, ""age"": age})"
 library/sqlite3,,:memory,
 library/sqlite3,,:who,"cur.execute(""select * from people where name_last=:who and age=:age"", {""who"": who, ""age"": age})"
+library/sqlite3,,:path,"db = sqlite3.connect('file:path/to/database?mode=ro', uri=True)"
 library/ssl,,:My,"Organizational Unit Name (eg, section) []:My Group"
 library/ssl,,:My,"Organization Name (eg, company) [Internet Widgits Pty Ltd]:My Organization, Inc."
 library/ssl,,:myserver,"Common Name (eg, YOUR name) []:myserver.mygroup.myorganization.com"
@@ -207,7 +196,12 @@ library/tarfile,,:xz,'r:xz'
 library/tarfile,,:xz,'w:xz'
 library/time,,:mm,
 library/time,,:ss,
+library/tracemalloc,,:limit,"for index, stat in enumerate(top_stats[:limit], 1):"
 library/turtle,,::,Example::
+library/unittest,1412,:foo,"self.assertEqual(cm.output, ['INFO:foo:first message',"
+library/unittest,1412,:first,"self.assertEqual(cm.output, ['INFO:foo:first message',"
+library/unittest,1412,:foo,'ERROR:foo.bar:second message'])
+library/unittest,1412,:second,'ERROR:foo.bar:second message'])
 library/urllib.request,,:close,Connection:close
 library/urllib.request,,:lang,"xmlns=""http://www.w3.org/1999/xhtml"" xml:lang=""en"" lang=""en"">\n\n<head>\n"
 library/urllib.request,,:password,"""joe:password@python.org"""
@@ -283,6 +277,7 @@ whatsnew/3.2,,:gz,">>> with tarfile.open(name='myarchive.tar.gz', mode='w:gz') a
 whatsnew/3.2,,:location,zope9-location = ${zope9:location}
 whatsnew/3.2,,:prefix,zope-conf = ${custom:prefix}/etc/zope.conf
 whatsnew/changelog,,:platform,:platform:
+whatsnew/changelog,,:gz,": TarFile opened with external fileobj and ""w:gz"" mode didn't"
 whatsnew/changelog,,:PythonCmd,"With Tk < 8.5 _tkinter.c:PythonCmd() raised UnicodeDecodeError, caused"
 whatsnew/changelog,,::,": Fix FTP tests for IPv6, bind to ""::1"" instead of ""localhost""."
 whatsnew/changelog,,::,": Use ""127.0.0.1"" or ""::1"" instead of ""localhost"" as much as"
