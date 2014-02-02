@@ -506,7 +506,7 @@ class IOBinding:
         else:
             try:
                 pwd = os.getcwd()
-            except os.error:
+            except OSError:
                 pwd = ""
             return pwd, ""
 
