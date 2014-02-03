@@ -4,7 +4,8 @@ import sys
 from collections import deque
 from functools import wraps
 
-__all__ = ["contextmanager", "closing", "ContextDecorator", "ExitStack"]
+__all__ = ["contextmanager", "closing", "ContextDecorator", "ExitStack",
+           "redirect_stdout", "suppress"]
 
 
 class ContextDecorator(object):
@@ -36,6 +37,16 @@ class _GeneratorContextManager(ContextDecorator):
     def __init__(self, func, *args, **kwds):
         self.gen = func(*args, **kwds)
         self.func, self.args, self.kwds = func, args, kwds
+        # Issue 19330: ensure context manager instances have good docstrings
+        doc = getattr(func, "__doc__", None)
+        if doc is None:
+            doc = type(self).__doc__
+        self.__doc__ = doc
+        # Unfortunately, this still doesn't provide good help output when
+        # inspecting the created context manager instances, since pydoc
+        # currently bypasses the instance docstring and shows the docstring
+        # for the class instead.
+        # See http://bugs.python.org/issue19404 for more details.
 
     def _recreate_cm(self):
         # _GCM instances are one-shot context managers, so the
@@ -47,7 +58,7 @@ class _GeneratorContextManager(ContextDecorator):
         try:
             return next(self.gen)
         except StopIteration:
-            raise RuntimeError("generator didn't yield")
+            raise RuntimeError("generator didn't yield") from None
 
     def __exit__(self, type, value, traceback):
         if type is None:
@@ -139,6 +150,62 @@ class closing(object):
         return self.thing
     def __exit__(self, *exc_info):
         self.thing.close()
+
+class redirect_stdout:
+    """Context manager for temporarily redirecting stdout to another file
+
+        # How to send help() to stderr
+        with redirect_stdout(sys.stderr):
+            help(dir)
+
+        # How to write help() to a file
+        with open('help.txt', 'w') as f:
+            with redirect_stdout(f):
+                help(pow)
+    """
+
+    def __init__(self, new_target):
+        self._new_target = new_target
+        # We use a list of old targets to make this CM re-entrant
+        self._old_targets = []
+
+    def __enter__(self):
+        self._old_targets.append(sys.stdout)
+        sys.stdout = self._new_target
+        return self._new_target
+
+    def __exit__(self, exctype, excinst, exctb):
+        sys.stdout = self._old_targets.pop()
+
+
+class suppress:
+    """Context manager to suppress specified exceptions
+
+    After the exception is suppressed, execution proceeds with the next
+    statement following the with statement.
+
+         with suppress(FileNotFoundError):
+             os.remove(somefile)
+         # Execution still resumes here if the file was already removed
+    """
+
+    def __init__(self, *exceptions):
+        self._exceptions = exceptions
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exctype, excinst, exctb):
+        # Unlike isinstance and issubclass, CPython exception handling
+        # currently only looks at the concrete type hierarchy (ignoring
+        # the instance and subclass checking hooks). While Guido considers
+        # that a bug rather than a feature, it's a fairly hard one to fix
+        # due to various internal implementation details. suppress provides
+        # the simpler issubclass based semantics, rather than trying to
+        # exactly reproduce the limitations of the CPython interpreter.
+        #
+        # See http://bugs.python.org/issue12029 for more details
+        return exctype is not None and issubclass(exctype, self._exceptions)
 
 
 # Inspired by discussions on http://bugs.python.org/issue13585
