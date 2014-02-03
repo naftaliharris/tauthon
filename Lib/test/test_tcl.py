@@ -55,6 +55,10 @@ class TclTest(unittest.TestCase):
         tcl.eval('set a 1')
         self.assertEqual(tcl.eval('set a'),'1')
 
+    def test_eval_null_in_result(self):
+        tcl = self.interp
+        self.assertEqual(tcl.eval('set a "a\\0b"'), 'a\x00b')
+
     def testEvalException(self):
         tcl = self.interp
         self.assertRaises(TclError,tcl.eval,'set a')
@@ -127,19 +131,28 @@ class TclTest(unittest.TestCase):
 
     def testEvalFile(self):
         tcl = self.interp
-        filename = "testEvalFile.tcl"
-        fd = open(filename,'w')
-        script = """set a 1
-        set b 2
-        set c [ expr $a + $b ]
-        """
-        fd.write(script)
-        fd.close()
-        tcl.evalfile(filename)
-        os.remove(filename)
+        with open(support.TESTFN, 'w') as f:
+            self.addCleanup(support.unlink, support.TESTFN)
+            f.write("""set a 1
+            set b 2
+            set c [ expr $a + $b ]
+            """)
+        tcl.evalfile(support.TESTFN)
         self.assertEqual(tcl.eval('set a'),'1')
         self.assertEqual(tcl.eval('set b'),'2')
         self.assertEqual(tcl.eval('set c'),'3')
+
+    def test_evalfile_null_in_result(self):
+        tcl = self.interp
+        with open(support.TESTFN, 'w') as f:
+            self.addCleanup(support.unlink, support.TESTFN)
+            f.write("""
+            set a "a\0b"
+            set b "a\\0b"
+            """)
+        tcl.evalfile(support.TESTFN)
+        self.assertEqual(tcl.eval('set a'), 'a\x00b')
+        self.assertEqual(tcl.eval('set b'), 'a\x00b')
 
     def testEvalFileException(self):
         tcl = self.interp
@@ -177,6 +190,142 @@ class TclTest(unittest.TestCase):
         # exit code must be zero
         self.assertEqual(f.close(), None)
 
+    def test_exprstring(self):
+        tcl = self.interp
+        tcl.call('set', 'a', 3)
+        tcl.call('set', 'b', 6)
+        def check(expr, expected):
+            result = tcl.exprstring(expr)
+            self.assertEqual(result, expected)
+            self.assertIsInstance(result, str)
+
+        self.assertRaises(TypeError, tcl.exprstring)
+        self.assertRaises(TypeError, tcl.exprstring, '8.2', '+6')
+        self.assertRaises(TypeError, tcl.exprstring, b'8.2 + 6')
+        self.assertRaises(TclError, tcl.exprstring, 'spam')
+        check('', '0')
+        check('8.2 + 6', '14.2')
+        check('2**64', str(2**64))
+        check('3.1 + $a', '6.1')
+        check('2 + "$a.$b"', '5.6')
+        check('4*[llength "6 2"]', '8')
+        check('{word one} < "word $a"', '0')
+        check('4*2 < 7', '0')
+        check('hypot($a, 4)', '5.0')
+        check('5 / 4', '1')
+        check('5 / 4.0', '1.25')
+        check('5 / ( [string length "abcd"] + 0.0 )', '1.25')
+        check('20.0/5.0', '4.0')
+        check('"0x03" > "2"', '1')
+        check('[string length "a\xbd\u20ac"]', '3')
+        check(r'[string length "a\xbd\u20ac"]', '3')
+        check('"abc"', 'abc')
+        check('"a\xbd\u20ac"', 'a\xbd\u20ac')
+        check(r'"a\xbd\u20ac"', 'a\xbd\u20ac')
+        check(r'"a\0b"', 'a\x00b')
+
+    def test_exprdouble(self):
+        tcl = self.interp
+        tcl.call('set', 'a', 3)
+        tcl.call('set', 'b', 6)
+        def check(expr, expected):
+            result = tcl.exprdouble(expr)
+            self.assertEqual(result, expected)
+            self.assertIsInstance(result, float)
+
+        self.assertRaises(TypeError, tcl.exprdouble)
+        self.assertRaises(TypeError, tcl.exprdouble, '8.2', '+6')
+        self.assertRaises(TypeError, tcl.exprdouble, b'8.2 + 6')
+        self.assertRaises(TclError, tcl.exprdouble, 'spam')
+        check('', 0.0)
+        check('8.2 + 6', 14.2)
+        check('2**64', float(2**64))
+        check('3.1 + $a', 6.1)
+        check('2 + "$a.$b"', 5.6)
+        check('4*[llength "6 2"]', 8.0)
+        check('{word one} < "word $a"', 0.0)
+        check('4*2 < 7', 0.0)
+        check('hypot($a, 4)', 5.0)
+        check('5 / 4', 1.0)
+        check('5 / 4.0', 1.25)
+        check('5 / ( [string length "abcd"] + 0.0 )', 1.25)
+        check('20.0/5.0', 4.0)
+        check('"0x03" > "2"', 1.0)
+        check('[string length "a\xbd\u20ac"]', 3.0)
+        check(r'[string length "a\xbd\u20ac"]', 3.0)
+        self.assertRaises(TclError, tcl.exprdouble, '"abc"')
+
+    def test_exprlong(self):
+        tcl = self.interp
+        tcl.call('set', 'a', 3)
+        tcl.call('set', 'b', 6)
+        def check(expr, expected):
+            result = tcl.exprlong(expr)
+            self.assertEqual(result, expected)
+            self.assertIsInstance(result, int)
+
+        self.assertRaises(TypeError, tcl.exprlong)
+        self.assertRaises(TypeError, tcl.exprlong, '8.2', '+6')
+        self.assertRaises(TypeError, tcl.exprlong, b'8.2 + 6')
+        self.assertRaises(TclError, tcl.exprlong, 'spam')
+        check('', 0)
+        check('8.2 + 6', 14)
+        self.assertRaises(TclError, tcl.exprlong, '2**64')
+        check('3.1 + $a', 6)
+        check('2 + "$a.$b"', 5)
+        check('4*[llength "6 2"]', 8)
+        check('{word one} < "word $a"', 0)
+        check('4*2 < 7', 0)
+        check('hypot($a, 4)', 5)
+        check('5 / 4', 1)
+        check('5 / 4.0', 1)
+        check('5 / ( [string length "abcd"] + 0.0 )', 1)
+        check('20.0/5.0', 4)
+        check('"0x03" > "2"', 1)
+        check('[string length "a\xbd\u20ac"]', 3)
+        check(r'[string length "a\xbd\u20ac"]', 3)
+        self.assertRaises(TclError, tcl.exprlong, '"abc"')
+
+    def test_exprboolean(self):
+        tcl = self.interp
+        tcl.call('set', 'a', 3)
+        tcl.call('set', 'b', 6)
+        def check(expr, expected):
+            result = tcl.exprboolean(expr)
+            self.assertEqual(result, expected)
+            self.assertIsInstance(result, int)
+            self.assertNotIsInstance(result, bool)
+
+        self.assertRaises(TypeError, tcl.exprboolean)
+        self.assertRaises(TypeError, tcl.exprboolean, '8.2', '+6')
+        self.assertRaises(TypeError, tcl.exprboolean, b'8.2 + 6')
+        self.assertRaises(TclError, tcl.exprboolean, 'spam')
+        check('', False)
+        for value in ('0', 'false', 'no', 'off'):
+            check(value, False)
+            check('"%s"' % value, False)
+            check('{%s}' % value, False)
+        for value in ('1', 'true', 'yes', 'on'):
+            check(value, True)
+            check('"%s"' % value, True)
+            check('{%s}' % value, True)
+        check('8.2 + 6', True)
+        check('2**64', True)
+        check('3.1 + $a', True)
+        check('2 + "$a.$b"', True)
+        check('4*[llength "6 2"]', True)
+        check('{word one} < "word $a"', False)
+        check('4*2 < 7', False)
+        check('hypot($a, 4)', True)
+        check('5 / 4', True)
+        check('5 / 4.0', True)
+        check('5 / ( [string length "abcd"] + 0.0 )', True)
+        check('20.0/5.0', True)
+        check('"0x03" > "2"', True)
+        check('[string length "a\xbd\u20ac"]', True)
+        check(r'[string length "a\xbd\u20ac"]', True)
+        self.assertRaises(TclError, tcl.exprboolean, '"abc"')
+
     def test_passing_values(self):
         def passValue(value):
             return self.interp.call('set', '_', value)
@@ -185,6 +334,11 @@ class TclTest(unittest.TestCase):
         self.assertEqual(passValue(False), False if self.wantobjects else '0')
         self.assertEqual(passValue('string'), 'string')
         self.assertEqual(passValue('string\u20ac'), 'string\u20ac')
+        self.assertEqual(passValue('str\x00ing'), 'str\x00ing')
+        self.assertEqual(passValue('str\x00ing\xbd'), 'str\x00ing\xbd')
+        self.assertEqual(passValue('str\x00ing\u20ac'), 'str\x00ing\u20ac')
+        self.assertEqual(passValue(b'str\x00ing'), 'str\x00ing')
+        self.assertEqual(passValue(b'str\xc0\x80ing'), 'str\x00ing')
         for i in (0, 1, -1, 2**31-1, -2**31):
             self.assertEqual(passValue(i), i if self.wantobjects else str(i))
         for f in (0.0, 1.0, -1.0, 1/3,
@@ -233,6 +387,13 @@ class TclTest(unittest.TestCase):
         check('string', 'string')
         check('string\xbd', 'string\xbd')
         check('string\u20ac', 'string\u20ac')
+        check(b'string', 'string')
+        check(b'string\xe2\x82\xac', 'string\u20ac')
+        check('str\x00ing', 'str\x00ing')
+        check('str\x00ing\xbd', 'str\x00ing\xbd')
+        check('str\x00ing\u20ac', 'str\x00ing\u20ac')
+        check(b'str\xc0\x80ing', 'str\x00ing')
+        check(b'str\xc0\x80ing\xe2\x82\xac', 'str\x00ing\u20ac')
         for i in (0, 1, -1, 2**31-1, -2**31):
             check(i, str(i))
         for f in (0.0, 1.0, -1.0):
@@ -261,6 +422,7 @@ class TclTest(unittest.TestCase):
             (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
             ('a \u20ac', ('a', '\u20ac')),
             (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            (b'a\xc0\x80b c\xc0\x80d', ('a\x00b', 'c\x00d')),
             ('a {b c}', ('a', 'b c')),
             (r'a b\ c', ('a', 'b c')),
             (('a', 'b c'), ('a', 'b c')),
@@ -303,6 +465,9 @@ class TclTest(unittest.TestCase):
             (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
             ('a \u20ac', ('a', '\u20ac')),
             (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            (b'a\xc0\x80b', 'a\x00b'),
+            (b'a\xc0\x80b c\xc0\x80d', ('a\x00b', 'c\x00d')),
+            (b'{a\xc0\x80b c\xc0\x80d', '{a\x00b c\x00d'),
             ('a {b c}', ('a', ('b', 'c'))),
             (r'a b\ c', ('a', ('b', 'c'))),
             (('a', b'b c'), ('a', ('b', 'c'))),
