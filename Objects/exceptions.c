@@ -16,9 +16,6 @@ PyObject *PyExc_IOError = NULL;
 #ifdef MS_WINDOWS
 PyObject *PyExc_WindowsError = NULL;
 #endif
-#ifdef __VMS
-PyObject *PyExc_VMSError = NULL;
-#endif
 
 /* The dict map from errno codes to OSError subclasses */
 static PyObject *errnomap = NULL;
@@ -121,11 +118,11 @@ BaseException_str(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_repr(PyBaseExceptionObject *self)
 {
-    char *name;
-    char *dot;
+    const char *name;
+    const char *dot;
 
-    name = (char *)Py_TYPE(self)->tp_name;
-    dot = strrchr(name, '.');
+    name = Py_TYPE(self)->tp_name;
+    dot = (const char *) strrchr(name, '.');
     if (dot != NULL) name = dot+1;
 
     return PyUnicode_FromFormat("%s%R", name, self->args);
@@ -845,7 +842,7 @@ oserror_init(PyOSErrorObject *self, PyObject **p_args,
     /* Steals the reference to args */
     Py_CLEAR(self->args);
     self->args = args;
-    args = NULL;
+    *p_args = args = NULL;
 
     return 0;
 }
@@ -885,11 +882,12 @@ OSError_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     PyObject *winerror = NULL;
 #endif
 
+    Py_INCREF(args);
+
     if (!oserror_use_init(type)) {
         if (!_PyArg_NoKeywords(type->tp_name, kwds))
-            return NULL;
+            goto error;
 
-        Py_INCREF(args);
         if (oserror_parse_args(&args, &myerrno, &strerror, &filename
 #ifdef MS_WINDOWS
                                , &winerror
@@ -932,6 +930,7 @@ OSError_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             goto error;
     }
 
+    Py_XDECREF(args);
     return (PyObject *) self;
 
 error:
@@ -2327,7 +2326,7 @@ PyObject *PyExc_RecursionErrorInst = NULL;
     }
 
 #ifdef MS_WINDOWS
-#include <Winsock2.h>
+#include <winsock2.h>
 /* The following constants were added to errno.h in VS2010 but have
    preferred WSA equivalents. */
 #undef EADDRINUSE
@@ -2471,9 +2470,6 @@ _PyExc_Init(PyObject *bltinmod)
 #ifdef MS_WINDOWS
     INIT_ALIAS(WindowsError, OSError)
 #endif
-#ifdef __VMS
-    INIT_ALIAS(VMSError, OSError)
-#endif
     POST_INIT(EOFError)
     POST_INIT(RuntimeError)
     POST_INIT(NotImplementedError)
@@ -2590,4 +2586,135 @@ _PyExc_Fini(void)
     Py_CLEAR(PyExc_RecursionErrorInst);
     free_preallocated_memerrors();
     Py_CLEAR(errnomap);
+}
+
+/* Helper to do the equivalent of "raise X from Y" in C, but always using
+ * the current exception rather than passing one in.
+ *
+ * We currently limit this to *only* exceptions that use the BaseException
+ * tp_init and tp_new methods, since we can be reasonably sure we can wrap
+ * those correctly without losing data and without losing backwards
+ * compatibility.
+ *
+ * We also aim to rule out *all* exceptions that might be storing additional
+ * state, whether by having a size difference relative to BaseException,
+ * additional arguments passed in during construction or by having a
+ * non-empty instance dict.
+ *
+ * We need to be very careful with what we wrap, since changing types to
+ * a broader exception type would be backwards incompatible for
+ * existing codecs, and with different init or new method implementations
+ * may either not support instantiation with PyErr_Format or lose
+ * information when instantiated that way.
+ *
+ * XXX (ncoghlan): This could be made more comprehensive by exploiting the
+ * fact that exceptions are expected to support pickling. If more builtin
+ * exceptions (e.g. AttributeError) start to be converted to rich
+ * exceptions with additional attributes, that's probably a better approach
+ * to pursue over adding special cases for particular stateful subclasses.
+ *
+ * Returns a borrowed reference to the new exception (if any), NULL if the
+ * existing exception was left in place.
+ */
+PyObject *
+_PyErr_TrySetFromCause(const char *format, ...)
+{
+    PyObject* msg_prefix;
+    PyObject *exc, *val, *tb;
+    PyTypeObject *caught_type;
+    PyObject **dictptr;
+    PyObject *instance_args;
+    Py_ssize_t num_args, caught_type_size, base_exc_size;
+    PyObject *new_exc, *new_val, *new_tb;
+    va_list vargs;
+    int same_basic_size;
+
+    PyErr_Fetch(&exc, &val, &tb);
+    caught_type = (PyTypeObject *)exc;
+    /* Ensure type info indicates no extra state is stored at the C level
+     * and that the type can be reinstantiated using PyErr_Format
+     */
+    caught_type_size = caught_type->tp_basicsize;
+    base_exc_size = _PyExc_BaseException.tp_basicsize;
+    same_basic_size = (
+        caught_type_size == base_exc_size ||
+        (PyType_SUPPORTS_WEAKREFS(caught_type) &&
+            (caught_type_size == base_exc_size + sizeof(PyObject *))
+        )
+    );
+    if (caught_type->tp_init != (initproc)BaseException_init ||
+        caught_type->tp_new != BaseException_new ||
+        !same_basic_size ||
+        caught_type->tp_itemsize != _PyExc_BaseException.tp_itemsize) {
+        /* We can't be sure we can wrap this safely, since it may contain
+         * more state than just the exception type. Accordingly, we just
+         * leave it alone.
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* Check the args are empty or contain a single string */
+    PyErr_NormalizeException(&exc, &val, &tb);
+    instance_args = ((PyBaseExceptionObject *)val)->args;
+    num_args = PyTuple_GET_SIZE(instance_args);
+    if (num_args > 1 ||
+        (num_args == 1 &&
+         !PyUnicode_CheckExact(PyTuple_GET_ITEM(instance_args, 0)))) {
+        /* More than 1 arg, or the one arg we do have isn't a string
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* Ensure the instance dict is also empty */
+    dictptr = _PyObject_GetDictPtr(val);
+    if (dictptr != NULL && *dictptr != NULL &&
+        PyObject_Length(*dictptr) > 0) {
+        /* While we could potentially copy a non-empty instance dictionary
+         * to the replacement exception, for now we take the more
+         * conservative path of leaving exceptions with attributes set
+         * alone.
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* For exceptions that we can wrap safely, we chain the original
+     * exception to a new one of the exact same type with an
+     * error message that mentions the additional details and the
+     * original exception.
+     *
+     * It would be nice to wrap OSError and various other exception
+     * types as well, but that's quite a bit trickier due to the extra
+     * state potentially stored on OSError instances.
+     */
+    /* Ensure the traceback is set correctly on the existing exception */
+    if (tb != NULL) {
+        PyException_SetTraceback(val, tb);
+        Py_DECREF(tb);
+    }
+
+#ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+#else
+    va_start(vargs);
+#endif
+    msg_prefix = PyUnicode_FromFormatV(format, vargs);
+    va_end(vargs);
+    if (msg_prefix == NULL) {
+        Py_DECREF(exc);
+        Py_DECREF(val);
+        return NULL;
+    }
+
+    PyErr_Format(exc, "%U (%s: %S)",
+                 msg_prefix, Py_TYPE(val)->tp_name, val);
+    Py_DECREF(exc);
+    Py_DECREF(msg_prefix);
+    PyErr_Fetch(&new_exc, &new_val, &new_tb);
+    PyErr_NormalizeException(&new_exc, &new_val, &new_tb);
+    PyException_SetCause(new_val, val);
+    PyErr_Restore(new_exc, new_val, new_tb);
+    return new_val;
 }
