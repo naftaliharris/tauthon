@@ -329,6 +329,19 @@ class WarnTests(BaseTest):
             warning_tests.__name__ = module_name
             sys.argv = argv
 
+    def test_warn_explicit_non_ascii_filename(self):
+        with original_warnings.catch_warnings(record=True,
+                module=self.module) as w:
+            self.module.resetwarnings()
+            self.module.filterwarnings("always", category=UserWarning)
+            for filename in ("nonascii\xe9\u20ac", "surrogate\udc80"):
+                try:
+                    os.fsencode(filename)
+                except UnicodeEncodeError:
+                    continue
+                self.module.warn_explicit("text", UserWarning, filename, 1)
+                self.assertEqual(w[-1].filename, filename)
+
     def test_warn_explicit_type_errors(self):
         # warn_explicit() should error out gracefully if it is given objects
         # of the wrong types.
@@ -765,6 +778,25 @@ class BootstrapTest(unittest.TestCase):
 
             # Use -W to load warnings module at startup
             assert_python_ok('-c', 'pass', '-W', 'always', PYTHONPATH=cwd)
+
+class FinalizationTest(unittest.TestCase):
+    def test_finalization(self):
+        # Issue #19421: warnings.warn() should not crash
+        # during Python finalization
+        code = """
+import warnings
+warn = warnings.warn
+
+class A:
+    def __del__(self):
+        warn("test")
+
+a=A()
+        """
+        rc, out, err = assert_python_ok("-c", code)
+        # note: "__main__" filename is not correct, it should be the name
+        # of the script
+        self.assertEqual(err, b'__main__:7: UserWarning: test')
 
 
 def setUpModule():

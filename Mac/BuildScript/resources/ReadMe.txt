@@ -28,6 +28,36 @@ of the Tcl/Tk frameworks.  Visit http://www.python.org/download/mac/tcltk/
 for current information about supported and recommended versions of
 Tcl/Tk for this version of Python and of Mac OS X.
 
+              **NEW* As of Python 3.4.0b1:
+
+New Installation Options and Defaults
+=====================================
+
+The Python installer now includes an option to automatically install
+or upgrade pip, a tool for installing and managing Python packages.
+This option is enabled by default and no Internet access is required.
+If you do not want the installer to do this, select the "Customize"
+option at the "Installation Type" step and uncheck the "Install or
+ugprade pip" option.
+
+To make it easier to use scripts installed by third-party Python
+packages, with pip or by other means, the "Shell profile updater"
+option is now enabled by default, as has been the case with Python
+2.7.x installers. You can also turn this option off by selecting
+"Customize" and unchecking the "Shell profile updater" option. You
+can also update your shell profile later by launching the "Update
+Shell Profile" command found in the /Applications/Python $VERSION
+folder.  You may need to start a new terminal window for the
+changes to take effect.
+
+Python.org Python $VERSION and 2.7.x versions can both be installed and
+will not conflict. Command names for Python 3 contain a 3 in them,
+python3 (or python$VERSION), idle3 (or idle$VERSION), pip3 (or pip$VERSION), etc.
+Python 2.7 command names contain a 2 or no digit: python2 (or
+python2.7 or python), idle2 (or idle2.7 or idle), etc. If you want to
+use pip with Python 2.7.x, you will need to download and install a
+separate copy of it from the Python Package Index
+(https://pypi.python.org/pypi).
 
 Using this version of Python on OS X
 ====================================
