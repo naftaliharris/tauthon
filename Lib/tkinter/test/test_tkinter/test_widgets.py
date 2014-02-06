@@ -631,8 +631,8 @@ class TextTest(AbstractWidgetTest, unittest.TestCase):
         self.assertIsNone(widget.bbox('end'))
         self.assertRaises(tkinter.TclError, widget.bbox, 'noindex')
         self.assertRaises(tkinter.TclError, widget.bbox, None)
-        self.assertRaises(tkinter.TclError, widget.bbox)
-        self.assertRaises(tkinter.TclError, widget.bbox, '1.1', 'end')
+        self.assertRaises(TypeError, widget.bbox)
+        self.assertRaises(TypeError, widget.bbox, '1.1', 'end')
 
 
 @add_standard_options(PixelSizeTests, StandardOptionsTests)
