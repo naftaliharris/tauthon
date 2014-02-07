@@ -327,13 +327,26 @@ class BaseTest:
         self.checkraises(TypeError, 'hello', 'upper', 42)
 
     def test_expandtabs(self):
-        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi', 'expandtabs')
-        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi', 'expandtabs', 8)
-        self.checkequal('abc\rab  def\ng   hi', 'abc\rab\tdef\ng\thi', 'expandtabs', 4)
-        self.checkequal('abc\r\nab  def\ng   hi', 'abc\r\nab\tdef\ng\thi', 'expandtabs', 4)
-        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi', 'expandtabs')
-        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi', 'expandtabs', 8)
-        self.checkequal('abc\r\nab\r\ndef\ng\r\nhi', 'abc\r\nab\r\ndef\ng\r\nhi', 'expandtabs', 4)
+        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi',
+                        'expandtabs')
+        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi',
+                        'expandtabs', 8)
+        self.checkequal('abc\rab  def\ng   hi', 'abc\rab\tdef\ng\thi',
+                        'expandtabs', 4)
+        self.checkequal('abc\r\nab      def\ng       hi', 'abc\r\nab\tdef\ng\thi',
+                        'expandtabs')
+        self.checkequal('abc\r\nab      def\ng       hi', 'abc\r\nab\tdef\ng\thi',
+                        'expandtabs', 8)
+        self.checkequal('abc\r\nab  def\ng   hi', 'abc\r\nab\tdef\ng\thi',
+                        'expandtabs', 4)
+        self.checkequal('abc\r\nab\r\ndef\ng\r\nhi', 'abc\r\nab\r\ndef\ng\r\nhi',
+                        'expandtabs', 4)
+        # check keyword args
+        self.checkequal('abc\rab      def\ng       hi', 'abc\rab\tdef\ng\thi',
+                        'expandtabs', tabsize=8)
+        self.checkequal('abc\rab  def\ng   hi', 'abc\rab\tdef\ng\thi',
+                        'expandtabs', tabsize=4)
+
         self.checkequal('  a\n b', ' \ta\n\tb', 'expandtabs', 1)
 
         self.checkraises(TypeError, 'hello', 'expandtabs', 42, 42)
@@ -1165,7 +1178,8 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(TypeError, 'abc', '__mod__')
         self.checkraises(TypeError, '%(foo)s', '__mod__', 42)
         self.checkraises(TypeError, '%s%s', '__mod__', (42,))
-        self.checkraises(TypeError, '%c', '__mod__', (None,))
+        with self.assertWarns(DeprecationWarning):
+            self.checkraises(TypeError, '%c', '__mod__', (None,))
         self.checkraises(ValueError, '%(foo', '__mod__', {})
         self.checkraises(TypeError, '%(foo)s %(bar)s', '__mod__', ('foo', 42))
         self.checkraises(TypeError, '%d', '__mod__', "42") # not numeric

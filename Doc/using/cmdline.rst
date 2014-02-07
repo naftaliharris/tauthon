@@ -24,7 +24,7 @@ Command line
 
 When invoking Python, you may specify any of these options::
 
-    python [-bBdEhiOqsSuvVWx?] [-c command | -m module-name | script | - ] [args]
+    python [-bBdEhiIOqsSuvVWx?] [-c command | -m module-name | script | - ] [args]
 
 The most common use case is, of course, a simple invocation of a script::
 
@@ -81,7 +81,8 @@ source.
    the implementation may not always enforce this (e.g. it may allow you to
    use a name that includes a hyphen).
 
-   Package names are also permitted. When a package name is supplied instead
+   Package names (including namespace packages) are also permitted. When a
+   package name is supplied instead
    of a normal module, the interpreter will execute ``<pkg>.__main__`` as
    the main module. This behaviour is deliberately similar to the handling
    of directories and zipfiles that are passed to the interpreter as the
@@ -115,6 +116,9 @@ source.
    .. versionchanged:: 3.1
       Supply the package name to run a ``__main__`` submodule.
 
+   .. versionchanged:: 3.4
+      namespace packages are also supported
+
 
 .. describe:: -
 
@@ -147,7 +151,12 @@ source.
 
 If no interface option is given, :option:`-i` is implied, ``sys.argv[0]`` is
 an empty string (``""``) and the current directory will be added to the
-start of :data:`sys.path`.
+start of :data:`sys.path`.  Also, tab-completion and history editing is
+automatically enabled, if available on your platform (see
+:ref:`rlcompleter-config`).
+
+.. versionchanged:: 3.4
+   Automatic enabling of tab-completion and history editing.
 
 .. seealso::  :ref:`tut-invoking`
 
@@ -169,6 +178,8 @@ Generic options
 
        Python 3.0
 
+
+.. _using-on-misc-options:
 
 Miscellaneous options
 ~~~~~~~~~~~~~~~~~~~~~
@@ -206,6 +217,17 @@ Miscellaneous options
 
    This can be useful to inspect global variables or a stack trace when a script
    raises an exception.  See also :envvar:`PYTHONINSPECT`.
+
+
+.. cmdoption:: -I
+
+   Run Python in isolated mode. This also implies -E and -s.
+   In isolated mode :data:`sys.path` contains neither the script's directory nor
+   the user's site-packages directory. All :envvar:`PYTHON*` environment
+   variables are ignored, too. Further restrictions may be imposed to prevent
+   the user from injecting malicious code.
+
+   .. versionadded:: 3.4
 
 
 .. cmdoption:: -O
@@ -358,15 +380,28 @@ Miscellaneous options
 .. cmdoption:: -X
 
    Reserved for various implementation-specific options.  CPython currently
-   defines just one, you can use ``-X faulthandler`` to enable
-   :mod:`faulthandler`. It also allows to pass arbitrary values and retrieve
-   them through the :data:`sys._xoptions` dictionary.
+   defines the following possible values:
+
+   * ``-X faulthandler`` to enable :mod:`faulthandler`;
+   * ``-X showrefcount`` to enable the output of the total reference count
+     and memory blocks (only works on debug builds);
+   * ``-X tracemalloc`` to start tracing Python memory allocations using the
+     :mod:`tracemalloc` module. By default, only the most recent frame is
+     stored in a traceback of a trace. Use ``-X tracemalloc=NFRAME`` to start
+     tracing with a traceback limit of *NFRAME* frames. See the
+     :func:`tracemalloc.start` for more information.
+
+   It also allows to pass arbitrary values and retrieve them through the
+   :data:`sys._xoptions` dictionary.
 
    .. versionchanged:: 3.2
       It is now allowed to pass :option:`-X` with CPython.
 
    .. versionadded:: 3.3
       The ``-X faulthandler`` option.
+
+   .. versionadded:: 3.4
+      The ``-X showrefcount`` and ``-X tracemalloc`` options.
 
 
 Options you shouldn't use
@@ -385,7 +420,7 @@ Environment variables
 ---------------------
 
 These environment variables influence Python's behavior, they are processed
-before the command-line switches other than -E.  It is customary that
+before the command-line switches other than -E or -I.  It is customary that
 command-line switches override environmental variables where there is a
 conflict.
 
@@ -430,7 +465,7 @@ conflict.
    is executed in the same namespace where interactive commands are executed so
    that objects defined or imported in it can be used without qualification in
    the interactive session.  You can also change the prompts :data:`sys.ps1` and
-   :data:`sys.ps2` in this file.
+   :data:`sys.ps2` and the hook :data:`sys.__interactivehook__` in this file.
 
 
 .. envvar:: PYTHONY2K
@@ -485,9 +520,9 @@ conflict.
 
 .. envvar:: PYTHONDONTWRITEBYTECODE
 
-   If this is set, Python won't try to write ``.pyc`` or ``.pyo`` files on the
-   import of source modules.  This is equivalent to specifying the :option:`-B`
-   option.
+   If this is set to a non-empty string, Python won't try to write ``.pyc`` or
+   ``.pyo`` files on the import of source modules.  This is equivalent to
+   specifying the :option:`-B` option.
 
 
 .. envvar:: PYTHONHASHSEED
@@ -512,12 +547,15 @@ conflict.
 .. envvar:: PYTHONIOENCODING
 
    If this is set before running the interpreter, it overrides the encoding used
-   for stdin/stdout/stderr, in the syntax ``encodingname:errorhandler``. The
-   ``:errorhandler`` part is optional and has the same meaning as in
-   :func:`str.encode`.
+   for stdin/stdout/stderr, in the syntax ``encodingname:errorhandler``.  Both
+   the ``encodingname`` and the ``:errorhandler`` parts are optional and have
+   the same meaning as in :func:`str.encode`.
 
    For stderr, the ``:errorhandler`` part is ignored; the handler will always be
    ``'backslashreplace'``.
+
+   .. versionchanged:: 3.4
+      The ``encodingname`` part is now optional.
 
 
 .. envvar:: PYTHONNOUSERSITE
@@ -556,13 +594,24 @@ conflict.
 
 .. envvar:: PYTHONFAULTHANDLER
 
-   If this environment variable is set, :func:`faulthandler.enable` is called
-   at startup: install a handler for :const:`SIGSEGV`, :const:`SIGFPE`,
-   :const:`SIGABRT`, :const:`SIGBUS` and :const:`SIGILL` signals to dump the
-   Python traceback.  This is equivalent to :option:`-X` ``faulthandler``
-   option.
+   If this environment variable is set to a non-empty string,
+   :func:`faulthandler.enable` is called at startup: install a handler for
+   :const:`SIGSEGV`, :const:`SIGFPE`, :const:`SIGABRT`, :const:`SIGBUS` and
+   :const:`SIGILL` signals to dump the Python traceback.  This is equivalent to
+   :option:`-X` ``faulthandler`` option.
 
    .. versionadded:: 3.3
+
+
+.. envvar:: PYTHONTRACEMALLOC
+
+   If this environment variable is set to a non-empty string, start tracing
+   Python memory allocations using the :mod:`tracemalloc` module. The value of
+   the variable is the maximum number of frames stored in a traceback of a
+   trace. For example, ``PYTHONTRACEMALLOC=1`` stores only the most recent
+   frame. See the :func:`tracemalloc.start` for more information.
+
+   .. versionadded:: 3.4
 
 
 Debug-mode variables
