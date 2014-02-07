@@ -24,10 +24,13 @@ optional arguments:
                         raised.
   --upgrade             Upgrade the environment directory to use this version
                         of Python, assuming Python has been upgraded in-place.
+  --without-pip         Skips installing or upgrading pip in the virtual
+                        environment (pip is bootstrapped by default)
 """
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import sysconfig
 import types
@@ -56,14 +59,17 @@ class EnvBuilder:
     :param symlinks: If True, attempt to symlink rather than copy files into
                      virtual environment.
     :param upgrade: If True, upgrade an existing virtual environment.
+    :param with_pip: If True, ensure pip is installed in the virtual
+                     environment
     """
 
     def __init__(self, system_site_packages=False, clear=False,
-                 symlinks=False, upgrade=False):
+                 symlinks=False, upgrade=False, with_pip=False):
         self.system_site_packages = system_site_packages
         self.clear = clear
         self.symlinks = symlinks
         self.upgrade = upgrade
+        self.with_pip = with_pip
 
     def create(self, env_dir):
         """
@@ -76,9 +82,19 @@ class EnvBuilder:
         context = self.ensure_directories(env_dir)
         self.create_configuration(context)
         self.setup_python(context)
+        if self.with_pip:
+            self._setup_pip(context)
         if not self.upgrade:
             self.setup_scripts(context)
             self.post_setup(context)
+
+    def clear_directory(self, path):
+        for fn in os.listdir(path):
+            fn = os.path.join(path, fn)
+            if os.path.islink(fn) or os.path.isfile(fn):
+                os.remove(fn)
+            elif os.path.isdir(fn):
+                shutil.rmtree(fn)
 
     def ensure_directories(self, env_dir):
         """
@@ -91,11 +107,11 @@ class EnvBuilder:
         def create_if_needed(d):
             if not os.path.exists(d):
                 os.makedirs(d)
+            elif os.path.islink(d) or os.path.isfile(d):
+                raise ValueError('Unable to create directory %r' % d)
 
-        if os.path.exists(env_dir) and not (self.clear or self.upgrade):
-            raise ValueError('Directory exists: %s' % env_dir)
         if os.path.exists(env_dir) and self.clear:
-            shutil.rmtree(env_dir)
+            self.clear_directory(env_dir)
         context = types.SimpleNamespace()
         context.env_dir = env_dir
         context.env_name = os.path.split(env_dir)[1]
@@ -216,6 +232,15 @@ class EnvBuilder:
                     shutil.copyfile(src, dst)
                     break
 
+    def _setup_pip(self, context):
+        """Installs or upgrades pip in a virtual environment"""
+        # We run ensurepip in isolated mode to avoid side effects from
+        # environment vars, the current directory and anything else
+        # intended for the global Python environment
+        cmd = [context.env_exe, '-Im', 'ensurepip', '--upgrade',
+                                                    '--default-pip']
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+
     def setup_scripts(self, context):
         """
         Set up scripts into the created environment from a directory.
@@ -253,7 +278,8 @@ class EnvBuilder:
                         being processed.
         """
         text = text.replace('__VENV_DIR__', context.env_dir)
-        text = text.replace('__VENV_NAME__', context.prompt)
+        text = text.replace('__VENV_NAME__', context.env_name)
+        text = text.replace('__VENV_PROMPT__', context.prompt)
         text = text.replace('__VENV_BIN_NAME__', context.bin_name)
         text = text.replace('__VENV_PYTHON__', context.env_exe)
         return text
@@ -308,7 +334,8 @@ class EnvBuilder:
                     shutil.copymode(srcfile, dstfile)
 
 
-def create(env_dir, system_site_packages=False, clear=False, symlinks=False):
+def create(env_dir, system_site_packages=False, clear=False,
+                    symlinks=False, with_pip=False):
     """
     Create a virtual environment in a directory.
 
@@ -324,9 +351,11 @@ def create(env_dir, system_site_packages=False, clear=False, symlinks=False):
                   raised.
     :param symlinks: If True, attempt to symlink rather than copy files into
                      virtual environment.
+    :param with_pip: If True, ensure pip is installed in the virtual
+                     environment
     """
     builder = EnvBuilder(system_site_packages=system_site_packages,
-                                   clear=clear, symlinks=symlinks)
+                         clear=clear, symlinks=symlinks, with_pip=with_pip)
     builder.create(env_dir)
 
 def main(args=None):
@@ -360,28 +389,40 @@ def main(args=None):
             use_symlinks = False
         else:
             use_symlinks = True
-        parser.add_argument('--symlinks', default=use_symlinks,
-                            action='store_true', dest='symlinks',
-                            help='Try to use symlinks rather than copies, '
-                                 'when symlinks are not the default for '
-                                 'the platform.')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--symlinks', default=use_symlinks,
+                           action='store_true', dest='symlinks',
+                           help='Try to use symlinks rather than copies, '
+                                'when symlinks are not the default for '
+                                'the platform.')
+        group.add_argument('--copies', default=not use_symlinks,
+                           action='store_false', dest='symlinks',
+                           help='Try to use copies rather than symlinks, '
+                                'even when symlinks are the default for '
+                                'the platform.')
         parser.add_argument('--clear', default=False, action='store_true',
-                            dest='clear', help='Delete the environment '
-                                               'directory if it already '
-                                               'exists. If not specified and '
-                                               'the directory exists, an error'
-                                               ' is raised.')
+                            dest='clear', help='Delete the contents of the '
+                                               'environment directory if it '
+                                               'already exists, before '
+                                               'environment creation.')
         parser.add_argument('--upgrade', default=False, action='store_true',
                             dest='upgrade', help='Upgrade the environment '
                                                'directory to use this version '
                                                'of Python, assuming Python '
                                                'has been upgraded in-place.')
+        parser.add_argument('--without-pip', dest='with_pip',
+                            default=True, action='store_false',
+                            help='Skips installing or upgrading pip in the '
+                                 'virtual environment (pip is bootstrapped '
+                                 'by default)')
         options = parser.parse_args(args)
         if options.upgrade and options.clear:
             raise ValueError('you cannot supply --upgrade and --clear together.')
         builder = EnvBuilder(system_site_packages=options.system_site,
-                             clear=options.clear, symlinks=options.symlinks,
-                             upgrade=options.upgrade)
+                             clear=options.clear,
+                             symlinks=options.symlinks,
+                             upgrade=options.upgrade,
+                             with_pip=options.with_pip)
         for d in options.dirs:
             builder.create(d)
 
