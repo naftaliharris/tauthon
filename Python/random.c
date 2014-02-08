@@ -12,13 +12,6 @@ static int _Py_HashSecret_Initialized = 0;
 #endif
 
 #ifdef MS_WINDOWS
-typedef BOOL (WINAPI *CRYPTACQUIRECONTEXTA)(HCRYPTPROV *phProv,\
-              LPCSTR pszContainer, LPCSTR pszProvider, DWORD dwProvType,\
-              DWORD dwFlags );
-typedef BOOL (WINAPI *CRYPTGENRANDOM)(HCRYPTPROV hProv, DWORD dwLen,\
-              BYTE *pbBuffer );
-
-static CRYPTGENRANDOM pCryptGenRandom = NULL;
 /* This handle is never explicitly released. Instead, the operating
    system will release it when the process terminates. */
 static HCRYPTPROV hCryptProv = 0;
@@ -26,29 +19,9 @@ static HCRYPTPROV hCryptProv = 0;
 static int
 win32_urandom_init(int raise)
 {
-    HINSTANCE hAdvAPI32 = NULL;
-    CRYPTACQUIRECONTEXTA pCryptAcquireContext = NULL;
-
-    /* Obtain handle to the DLL containing CryptoAPI. This should not fail. */
-    hAdvAPI32 = GetModuleHandle("advapi32.dll");
-    if(hAdvAPI32 == NULL)
-        goto error;
-
-    /* Obtain pointers to the CryptoAPI functions. This will fail on some early
-       versions of Win95. */
-    pCryptAcquireContext = (CRYPTACQUIRECONTEXTA)GetProcAddress(
-                               hAdvAPI32, "CryptAcquireContextA");
-    if (pCryptAcquireContext == NULL)
-        goto error;
-
-    pCryptGenRandom = (CRYPTGENRANDOM)GetProcAddress(hAdvAPI32,
-                                                     "CryptGenRandom");
-    if (pCryptGenRandom == NULL)
-        goto error;
-
     /* Acquire context */
-    if (! pCryptAcquireContext(&hCryptProv, NULL, NULL,
-                               PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
+    if (!CryptAcquireContext(&hCryptProv, NULL, NULL,
+                             PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
         goto error;
 
     return 0;
@@ -77,7 +50,7 @@ win32_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
     while (size > 0)
     {
         chunk = size > INT_MAX ? INT_MAX : size;
-        if (!pCryptGenRandom(hCryptProv, chunk, buffer))
+        if (!CryptGenRandom(hCryptProv, (DWORD)chunk, buffer))
         {
             /* CryptGenRandom() failed */
             if (raise)
@@ -95,40 +68,20 @@ win32_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
 #endif /* MS_WINDOWS */
 
 
-#ifdef __VMS
-/* Use openssl random routine */
-#include <openssl/rand.h>
-static int
-vms_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
-{
-    if (RAND_pseudo_bytes(buffer, size) < 0) {
-        if (raise) {
-            PyErr_Format(PyExc_ValueError,
-                         "RAND_pseudo_bytes");
-        } else {
-            Py_FatalError("Failed to initialize the randomized hash "
-                          "secret using RAND_pseudo_bytes");
-        }
-        return -1;
-    }
-    return 0;
-}
-#endif /* __VMS */
-
-
-#if !defined(MS_WINDOWS) && !defined(__VMS)
+#ifndef MS_WINDOWS
+static int urandom_fd = -1;
 
 /* Read size bytes from /dev/urandom into buffer.
    Call Py_FatalError() on error. */
 static void
-dev_urandom_noraise(char *buffer, Py_ssize_t size)
+dev_urandom_noraise(unsigned char *buffer, Py_ssize_t size)
 {
     int fd;
     Py_ssize_t n;
 
     assert (0 < size);
 
-    fd = open("/dev/urandom", O_RDONLY);
+    fd = _Py_open("/dev/urandom", O_RDONLY);
     if (fd < 0)
         Py_FatalError("Failed to open /dev/urandom");
 
@@ -160,18 +113,30 @@ dev_urandom_python(char *buffer, Py_ssize_t size)
     if (size <= 0)
         return 0;
 
-    Py_BEGIN_ALLOW_THREADS
-    fd = open("/dev/urandom", O_RDONLY);
-    Py_END_ALLOW_THREADS
-    if (fd < 0)
-    {
-        if (errno == ENOENT || errno == ENXIO ||
-            errno == ENODEV || errno == EACCES)
-            PyErr_SetString(PyExc_NotImplementedError,
-                            "/dev/urandom (or equivalent) not found");
+    if (urandom_fd >= 0)
+        fd = urandom_fd;
+    else {
+        Py_BEGIN_ALLOW_THREADS
+        fd = _Py_open("/dev/urandom", O_RDONLY);
+        Py_END_ALLOW_THREADS
+        if (fd < 0)
+        {
+            if (errno == ENOENT || errno == ENXIO ||
+                errno == ENODEV || errno == EACCES)
+                PyErr_SetString(PyExc_NotImplementedError,
+                                "/dev/urandom (or equivalent) not found");
+            else
+                PyErr_SetFromErrno(PyExc_OSError);
+            return -1;
+        }
+        if (urandom_fd >= 0) {
+            /* urandom_fd was initialized by another thread while we were
+               not holding the GIL, keep it. */
+            close(fd);
+            fd = urandom_fd;
+        }
         else
-            PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
+            urandom_fd = fd;
     }
 
     Py_BEGIN_ALLOW_THREADS
@@ -195,13 +160,21 @@ dev_urandom_python(char *buffer, Py_ssize_t size)
             PyErr_Format(PyExc_RuntimeError,
                          "Failed to read %zi bytes from /dev/urandom",
                          size);
-        close(fd);
         return -1;
     }
-    close(fd);
     return 0;
 }
-#endif /* !defined(MS_WINDOWS) && !defined(__VMS) */
+
+static void
+dev_urandom_close(void)
+{
+    if (urandom_fd >= 0) {
+        close(urandom_fd);
+        urandom_fd = -1;
+    }
+}
+
+#endif /* MS_WINDOWS */
 
 /* Fill buffer with pseudo-random bytes generated by a linear congruent
    generator (LCG):
@@ -243,11 +216,7 @@ _PyOS_URandom(void *buffer, Py_ssize_t size)
 #ifdef MS_WINDOWS
     return win32_urandom((unsigned char *)buffer, size, 1);
 #else
-# ifdef __VMS
-    return vms_urandom((unsigned char *)buffer, size, 1);
-# else
     return dev_urandom_python((char*)buffer, size);
-# endif
 #endif
 }
 
@@ -255,8 +224,9 @@ void
 _PyRandom_Init(void)
 {
     char *env;
-    void *secret = &_Py_HashSecret;
+    unsigned char *secret = (unsigned char *)&_Py_HashSecret.uc;
     Py_ssize_t secret_size = sizeof(_Py_HashSecret_t);
+    assert(secret_size == sizeof(_Py_HashSecret.uc));
 
     if (_Py_HashSecret_Initialized)
         return;
@@ -284,18 +254,22 @@ _PyRandom_Init(void)
             memset(secret, 0, secret_size);
         }
         else {
-            lcg_urandom(seed, (unsigned char*)secret, secret_size);
+            lcg_urandom(seed, secret, secret_size);
         }
     }
     else {
 #ifdef MS_WINDOWS
-        (void)win32_urandom((unsigned char *)secret, secret_size, 0);
-#else /* #ifdef MS_WINDOWS */
-# ifdef __VMS
-        vms_urandom((unsigned char *)secret, secret_size, 0);
-# else
-        dev_urandom_noraise((char*)secret, secret_size);
-# endif
+        (void)win32_urandom(secret, secret_size, 0);
+#else
+        dev_urandom_noraise(secret, secret_size);
 #endif
     }
+}
+
+void
+_PyRandom_Fini(void)
+{
+#ifndef MS_WINDOWS
+    dev_urandom_close();
+#endif
 }
