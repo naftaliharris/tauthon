@@ -10,6 +10,11 @@
 
 --------------
 
+.. note::
+
+   This module exists for backwards compatibility only.  For new code we
+   recommend using :mod:`asyncio`.
+
 This module builds on the :mod:`asyncore` infrastructure, simplifying
 asynchronous clients and servers and making it easier to handle protocols
 whose elements are terminated by arbitrary strings, or are of variable length.

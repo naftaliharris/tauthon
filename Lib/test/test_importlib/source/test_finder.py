@@ -1,9 +1,10 @@
 from .. import abc
+from .. import util
 from . import util as source_util
 
-from importlib import machinery
+machinery = util.import_importlib('importlib.machinery')
+
 import errno
-import imp
 import os
 import py_compile
 import stat
@@ -39,14 +40,15 @@ class FinderTests(abc.FinderTests):
     """
 
     def get_finder(self, root):
-        loader_details = [(machinery.SourceFileLoader,
-                            machinery.SOURCE_SUFFIXES),
-                          (machinery.SourcelessFileLoader,
-                            machinery.BYTECODE_SUFFIXES)]
-        return machinery.FileFinder(root, *loader_details)
+        loader_details = [(self.machinery.SourceFileLoader,
+                            self.machinery.SOURCE_SUFFIXES),
+                          (self.machinery.SourcelessFileLoader,
+                            self.machinery.BYTECODE_SUFFIXES)]
+        return self.machinery.FileFinder(root, *loader_details)
 
     def import_(self, root, module):
-        return self.get_finder(root).find_module(module)
+        finder = self.get_finder(root)
+        return self._find(finder, module, loader_only=True)
 
     def run_test(self, test, create=None, *, compile_=None, unlink=None):
         """Test the finding of 'test' with the creation of modules listed in
@@ -124,20 +126,20 @@ class FinderTests(abc.FinderTests):
 
     def test_empty_string_for_dir(self):
         # The empty string from sys.path means to search in the cwd.
-        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
-            machinery.SOURCE_SUFFIXES))
+        finder = self.machinery.FileFinder('', (self.machinery.SourceFileLoader,
+            self.machinery.SOURCE_SUFFIXES))
         with open('mod.py', 'w') as file:
             file.write("# test file for importlib")
         try:
-            loader = finder.find_module('mod')
+            loader = self._find(finder, 'mod', loader_only=True)
             self.assertTrue(hasattr(loader, 'load_module'))
         finally:
             os.unlink('mod.py')
 
     def test_invalidate_caches(self):
         # invalidate_caches() should reset the mtime.
-        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
-            machinery.SOURCE_SUFFIXES))
+        finder = self.machinery.FileFinder('', (self.machinery.SourceFileLoader,
+            self.machinery.SOURCE_SUFFIXES))
         finder._path_mtime = 42
         finder.invalidate_caches()
         self.assertEqual(finder._path_mtime, -1)
@@ -147,8 +149,10 @@ class FinderTests(abc.FinderTests):
         mod = 'mod'
         with source_util.create_modules(mod) as mapping:
             finder = self.get_finder(mapping['.root'])
-            self.assertIsNotNone(finder.find_module(mod))
-        self.assertIsNone(finder.find_module(mod))
+            found = self._find(finder, 'mod', loader_only=True)
+            self.assertIsNotNone(found)
+        found = self._find(finder, 'mod', loader_only=True)
+        self.assertIsNone(found)
 
     @unittest.skipUnless(sys.platform != 'win32',
             'os.chmod() does not support the needed arguments under Windows')
@@ -172,20 +176,57 @@ class FinderTests(abc.FinderTests):
         self.addCleanup(cleanup, tempdir)
         os.chmod(tempdir.name, stat.S_IWUSR | stat.S_IXUSR)
         finder = self.get_finder(tempdir.name)
-        self.assertEqual((None, []), finder.find_loader('doesnotexist'))
+        found = self._find(finder, 'doesnotexist')
+        self.assertEqual(found, self.NOT_FOUND)
 
     def test_ignore_file(self):
         # If a directory got changed to a file from underneath us, then don't
         # worry about looking for submodules.
         with tempfile.NamedTemporaryFile() as file_obj:
             finder = self.get_finder(file_obj.name)
-            self.assertEqual((None, []), finder.find_loader('doesnotexist'))
+            found = self._find(finder, 'doesnotexist')
+            self.assertEqual(found, self.NOT_FOUND)
 
 
-def test_main():
-    from test.support import run_unittest
-    run_unittest(FinderTests)
+class FinderTestsPEP451(FinderTests):
+
+    NOT_FOUND = None
+
+    def _find(self, finder, name, loader_only=False):
+        spec = finder.find_spec(name)
+        return spec.loader if spec is not None else spec
+
+Frozen_FinderTestsPEP451, Source_FinderTestsPEP451 = util.test_both(
+        FinderTestsPEP451, machinery=machinery)
+
+
+class FinderTestsPEP420(FinderTests):
+
+    NOT_FOUND = (None, [])
+
+    def _find(self, finder, name, loader_only=False):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            loader_portions = finder.find_loader(name)
+            return loader_portions[0] if loader_only else loader_portions
+
+Frozen_FinderTestsPEP420, Source_FinderTestsPEP420 = util.test_both(
+        FinderTestsPEP420, machinery=machinery)
+
+
+class FinderTestsPEP302(FinderTests):
+
+    NOT_FOUND = None
+
+    def _find(self, finder, name, loader_only=False):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return finder.find_module(name)
+
+Frozen_FinderTestsPEP302, Source_FinderTestsPEP302 = util.test_both(
+        FinderTestsPEP302, machinery=machinery)
+
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
