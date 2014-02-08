@@ -281,15 +281,42 @@ class TestMessageAPI(TestEmailBase):
         self.assertIn('TO', msg)
 
     def test_as_string(self):
-        eq = self.ndiffAssertEqual
         msg = self._msgobj('msg_01.txt')
         with openfile('msg_01.txt') as fp:
             text = fp.read()
-        eq(text, str(msg))
+        self.assertEqual(text, str(msg))
         fullrepr = msg.as_string(unixfrom=True)
         lines = fullrepr.split('\n')
         self.assertTrue(lines[0].startswith('From '))
-        eq(text, NL.join(lines[1:]))
+        self.assertEqual(text, NL.join(lines[1:]))
+
+    def test_as_string_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_string(policy=newpolicy)
+        s = StringIO()
+        g = Generator(s, policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
+
+    def test_as_bytes(self):
+        msg = self._msgobj('msg_01.txt')
+        with openfile('msg_01.txt') as fp:
+            data = fp.read().encode('ascii')
+        self.assertEqual(data, bytes(msg))
+        fullrepr = msg.as_bytes(unixfrom=True)
+        lines = fullrepr.split(b'\n')
+        self.assertTrue(lines[0].startswith(b'From '))
+        self.assertEqual(data, b'\n'.join(lines[1:]))
+
+    def test_as_bytes_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_bytes(policy=newpolicy)
+        s = BytesIO()
+        g = BytesGenerator(s,policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
 
     # test_headerregistry.TestContentTypeHeader.bad_params
     def test_bad_param(self):
@@ -742,8 +769,15 @@ class TestEncoders(unittest.TestCase):
         # whose output character set is 7bit gets a transfer-encoding
         # of 7bit.
         eq = self.assertEqual
-        msg = MIMEText('文', _charset='euc-jp')
+        msg = MIMEText('文\n', _charset='euc-jp')
         eq(msg['content-transfer-encoding'], '7bit')
+        eq(msg.as_string(), textwrap.dedent("""\
+            MIME-Version: 1.0
+            Content-Type: text/plain; charset="iso-2022-jp"
+            Content-Transfer-Encoding: 7bit
+
+            \x1b$BJ8\x1b(B
+            """))
 
     def test_qp_encode_latin1(self):
         msg = MIMEText('\xe1\xf6\n', 'text', 'ISO-8859-1')
