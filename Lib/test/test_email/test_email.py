@@ -1711,7 +1711,8 @@ From: bperson@dom.ain
 
 --BOUNDARY
 
---BOUNDARY--''')
+--BOUNDARY--
+''')
 
     def test_no_parts_in_a_multipart_with_empty_epilogue(self):
         outer = MIMEBase('multipart', 'mixed')
@@ -1756,7 +1757,8 @@ MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 
 hello world
---BOUNDARY--''')
+--BOUNDARY--
+''')
 
     def test_seq_parts_in_a_multipart_with_empty_preamble(self):
         eq = self.ndiffAssertEqual
@@ -1782,7 +1784,8 @@ MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 
 hello world
---BOUNDARY--''')
+--BOUNDARY--
+''')
 
 
     def test_seq_parts_in_a_multipart_with_none_preamble(self):
@@ -1808,7 +1811,8 @@ MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 
 hello world
---BOUNDARY--''')
+--BOUNDARY--
+''')
 
 
     def test_seq_parts_in_a_multipart_with_none_epilogue(self):
@@ -1834,7 +1838,8 @@ MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 
 hello world
---BOUNDARY--''')
+--BOUNDARY--
+''')
 
 
     def test_seq_parts_in_a_multipart_with_empty_epilogue(self):
@@ -3495,7 +3500,7 @@ Here's the message body
         self.assertTrue(msg.get_payload(0).get_payload().endswith('\r\n'))
 
 
-class Test8BitBytesHandling(unittest.TestCase):
+class Test8BitBytesHandling(TestEmailBase):
     # In Python3 all input is string, but that doesn't work if the actual input
     # uses an 8bit transfer encoding.  To hack around that, in email 5.1 we
     # decode byte streams using the surrogateescape error handler, and
@@ -3747,6 +3752,16 @@ class Test8BitBytesHandling(unittest.TestCase):
         out = StringIO()
         email.generator.Generator(out).flatten(msg)
         self.assertEqual(out.getvalue(), self.non_latin_bin_msg_as7bit_wrapped)
+
+    def test_str_generator_should_not_mutate_msg_when_handling_8bit(self):
+        msg = email.message_from_bytes(self.non_latin_bin_msg)
+        out = BytesIO()
+        BytesGenerator(out).flatten(msg)
+        orig_value = out.getvalue()
+        Generator(StringIO()).flatten(msg) # Should not mutate msg!
+        out = BytesIO()
+        BytesGenerator(out).flatten(msg)
+        self.assertEqual(out.getvalue(), orig_value)
 
     def test_bytes_generator_with_unix_from(self):
         # The unixfrom contains a current date, so we can't check it
@@ -5017,6 +5032,26 @@ Content-Type: application/x-foo; name*0=\"Frank's\"; name*1=\" Document\"
         param = msg.get_param('name')
         self.assertNotIsInstance(param, tuple)
         self.assertEqual(param, "Frank's Document")
+
+    def test_rfc2231_missing_tick(self):
+        m = '''\
+Content-Disposition: inline;
+\tfilename*0*="'This%20is%20broken";
+'''
+        msg = email.message_from_string(m)
+        self.assertEqual(
+            msg.get_filename(),
+            "'This is broken")
+
+    def test_rfc2231_missing_tick_with_encoded_non_ascii(self):
+        m = '''\
+Content-Disposition: inline;
+\tfilename*0*="'This%20is%E2broken";
+'''
+        msg = email.message_from_string(m)
+        self.assertEqual(
+            msg.get_filename(),
+            "'This is\ufffdbroken")
 
     # test_headerregistry.TestContentTypeHeader.rfc2231_single_quote_in_value_with_charset_and_lang
     def test_rfc2231_tick_attack_extended(self):

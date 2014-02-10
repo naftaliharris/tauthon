@@ -1846,8 +1846,7 @@ _PyUnicode_ClearStaticStrings()
 {
     _Py_Identifier *tmp, *s = static_strings;
     while (s) {
-        Py_DECREF(s->object);
-        s->object = NULL;
+        Py_CLEAR(s->object);
         tmp = s->next;
         s->next = NULL;
         s = tmp;
@@ -4082,8 +4081,7 @@ make_decode_exception(PyObject **exceptionObject,
     return;
 
 onError:
-    Py_DECREF(*exceptionObject);
-    *exceptionObject = NULL;
+    Py_CLEAR(*exceptionObject);
 }
 
 /* error handling callback helper:
@@ -4474,8 +4472,16 @@ utf7Error:
     /* return state */
     if (consumed) {
         if (inShift) {
-            outpos = shiftOutStart; /* back off output */
             *consumed = startinpos;
+            if (outpos != shiftOutStart &&
+                PyUnicode_MAX_CHAR_VALUE(unicode) > 127) {
+                PyObject *result = PyUnicode_FromKindAndData(
+                        PyUnicode_KIND(unicode), PyUnicode_DATA(unicode),
+                        shiftOutStart);
+                Py_DECREF(unicode);
+                unicode = result;
+            }
+            outpos = shiftOutStart; /* back off output */
         }
         else {
             *consumed = s-starts;
@@ -6216,8 +6222,7 @@ make_encode_exception(PyObject **exceptionObject,
             goto onError;
         return;
       onError:
-        Py_DECREF(*exceptionObject);
-        *exceptionObject = NULL;
+        Py_CLEAR(*exceptionObject);
     }
 }
 
@@ -8217,8 +8222,7 @@ make_translate_exception(PyObject **exceptionObject,
             goto onError;
         return;
       onError:
-        Py_DECREF(*exceptionObject);
-        *exceptionObject = NULL;
+        Py_CLEAR(*exceptionObject);
     }
 }
 

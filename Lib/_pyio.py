@@ -2044,7 +2044,7 @@ class StringIO(TextIOWrapper):
     def __init__(self, initial_value="", newline="\n"):
         super(StringIO, self).__init__(BytesIO(),
                                        encoding="utf-8",
-                                       errors="strict",
+                                       errors="surrogatepass",
                                        newline=newline)
         # Issue #5645: make universal newlines semantics the same as in the
         # C version, even under Windows.
@@ -2060,7 +2060,13 @@ class StringIO(TextIOWrapper):
 
     def getvalue(self):
         self.flush()
-        return self.buffer.getvalue().decode(self._encoding, self._errors)
+        decoder = self._decoder or self._get_decoder()
+        old_state = decoder.getstate()
+        decoder.reset()
+        try:
+            return decoder.decode(self.buffer.getvalue(), final=True)
+        finally:
+            decoder.setstate(old_state)
 
     def __repr__(self):
         # TextIOWrapper tells the encoding in its repr. In StringIO,

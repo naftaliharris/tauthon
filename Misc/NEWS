@@ -10,8 +10,104 @@ What's New in Python 3.3.5 release candidate 1?
 Core and Builtins
 -----------------
 
+- Issue #20437: Fixed 21 potential bugs when deleting objects references.
+
+- Issue #20538: UTF-7 incremental decoder produced inconsistant string when
+  input was truncated in BASE64 section.
+
 Library
 -------
+
+- Issue #14983: email.generator now always adds a line end after each MIME
+  boundary marker, instead of doing so only when there is an epilogue.  This
+  fixes an RFC compliance bug and solves an issue with signed MIME parts.
+
+- Issue #20540: Fix a performance regression (vs. Python 3.2) when layering
+  a multiprocessing Connection over a TCP socket.  For small payloads, Nagle's
+  algorithm would introduce idle delays before the entire transmission of a
+  message.
+
+- Issue #16983: the new email header parsing code will now decode encoded words
+  that are (incorrectly) surrounded by quotes, and register a defect.
+
+- Issue #19772: email.generator no longer mutates the message object when
+  doing a down-transform from 8bit to 7bit CTEs.
+
+- Issue #18805: the netmask/hostmask parsing in ipaddress now more reliably
+  filters out illegal values and correctly allows any valid prefix length.
+
+- Issue #17369: get_filename was raising an exception if the filename
+  parameter's RFC2231 encoding was broken in certain ways.  This was
+  a regression relative to python2.
+
+- Issue #20013: Some imap servers disconnect if the current mailbox is
+  deleted, and imaplib did not handle that case gracefully.  Now it
+  handles the 'bye' correctly.
+
+- Issue #19920: TarFile.list() no longer fails when outputs a listing
+  containing non-encodable characters.  Based on patch by Vajrasky Kok.
+
+- Issue #20515: Fix NULL pointer dereference introduced by issue #20368.
+
+- Issue #19186: Restore namespacing of expat symbols inside the pyexpat module.
+
+- Issue #20426: When passing the re.DEBUG flag, re.compile() displays the
+  debug output every time it is called, regardless of the compilation cache.
+
+- Issue #20368: The null character now correctly passed from Tcl to Python.
+  Improved error handling in variables-related commands.
+
+- Issue #20435: Fix _pyio.StringIO.getvalue() to take into account newline
+  translation settings.
+
+- Issue #20288: fix handling of invalid numeric charrefs in HTMLParser.
+
+- Issue #20424: Python implementation of io.StringIO now supports lone surrogates.
+
+- Issue #19456: ntpath.join() now joins relative paths correctly when a drive
+  is present.
+
+- Issue #19077: tempfile.TemporaryDirectory cleanup is now most likely
+  successful when called during nulling out of modules during shutdown.
+  Misleading exception no longer raised when resource warning is emitted
+  during shutdown.
+
+- Issue #20367: Fix behavior of concurrent.futures.as_completed() for
+  duplicate arguments.  Patch by Glenn Langford.
+
+- Issue #8260: The read(), readline() and readlines() methods of
+  codecs.StreamReader returned incomplete data when were called after
+  readline() or read(size).  Based on patch by Amaury Forgeot d'Arc.
+
+IDLE
+----
+
+- Issue #20406: Use Python application icons for Idle window title bars.
+  Patch mostly by Serhiy Storchaka.
+
+- Update the python.gif icon for the Idle classbrowser and pathbowser
+  from the old green snake to the new new blue and yellow snakes.
+
+- Issue #17721: Remove non-functional configuration dialog help button until we
+  make it actually gives some help when clicked. Patch by Guilherme Simões.
+
+Tests
+-----
+
+- Issue #20532: Tests which use _testcapi are now marked as CPython only.
+
+- Issue #19920: Added tests for TarFile.list().  Based on patch by Vajrasky Kok.
+
+- Issue #19990: Added tests for the imghdr module.  Based on patch by
+  Claudiu Popa.
+
+- Issue #20474: Fix test_socket "unexpected success" failures on OS X 10.7+.
+
+Documentation
+-------------
+
+- Issue #20488: Importlib is no longer *an* implementation of import, it's *the*
+  implementation.
 
 
 What's New in Python 3.3.4?
@@ -46,11 +142,6 @@ Core and Builtins
   anything except a comment.  'python -x' works now again with files with the
   source encoding declarations, and can be used to make Python batch files
   on Windows.
-
-- Issue #19081: When a zipimport .zip file in sys.path being imported from
-  is modified during the lifetime of the Python process after zipimport has
-  already cached the zip's table of contents we detect this and recover
-  rather than read bad data from the .zip (causing odd import errors).
 
 - Issue #17432: Drop UCS2 from names of Unicode functions in python3.def.
 
@@ -300,7 +391,7 @@ IDLE
 
 - Issue #17390: Add Python version to Idle editor window title bar.
   Original patches by Edmond Burnett and Kent Johnson.
-  
+
 - Issue #18960: IDLE now ignores the source encoding declaration on the second
   line if the first line contains anything except a comment.
 
