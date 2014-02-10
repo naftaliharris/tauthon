@@ -29,7 +29,7 @@ the Unix :program:`ftp` program and other FTP clients.
    This implements security behavior equivalent to that of ftp and other
    programs that use :file:`.netrc`.
 
-   .. versionchanged:: 3.3.3 Added the POSIX permission check.
+   .. versionchanged:: 3.4 Added the POSIX permission check.
 
 
 .. exception:: NetrcParseError

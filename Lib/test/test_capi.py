@@ -9,6 +9,7 @@ import sys
 import time
 import unittest
 from test import support
+from test.support import MISSING_C_DOCSTRINGS
 try:
     import _posixsubprocess
 except ImportError:
@@ -44,7 +45,7 @@ class CAPITest(unittest.TestCase):
 
     @unittest.skipUnless(threading, 'Threading required for this test.')
     def test_no_FatalError_infinite_loop(self):
-        with support.suppress_crash_popup():
+        with support.SuppressCrashReport():
             p = subprocess.Popen([sys.executable, "-c",
                                   'import _testcapi;'
                                   '_testcapi.crash_no_current_thread()'],
@@ -109,6 +110,46 @@ class CAPITest(unittest.TestCase):
         # Issue #15738: crash in subprocess_fork_exec()
         self.assertRaises(TypeError, _posixsubprocess.fork_exec,
                           Z(),[b'1'],3,[1, 2],5,6,7,8,9,10,11,12,13,14,15,16,17)
+
+    @unittest.skipIf(MISSING_C_DOCSTRINGS,
+                     "Signature information for builtins requires docstrings")
+    def test_docstring_signature_parsing(self):
+
+        self.assertEqual(_testcapi.no_docstring.__doc__, None)
+        self.assertEqual(_testcapi.no_docstring.__text_signature__, None)
+
+        self.assertEqual(_testcapi.docstring_empty.__doc__, "")
+        self.assertEqual(_testcapi.docstring_empty.__text_signature__, None)
+
+        self.assertEqual(_testcapi.docstring_no_signature.__doc__,
+            "This docstring has no signature.")
+        self.assertEqual(_testcapi.docstring_no_signature.__text_signature__, None)
+
+        self.assertEqual(_testcapi.docstring_with_invalid_signature.__doc__,
+            "docstring_with_invalid_signature($module, /, boo)\n"
+            "\n"
+            "This docstring has an invalid signature."
+            )
+        self.assertEqual(_testcapi.docstring_with_invalid_signature.__text_signature__, None)
+
+        self.assertEqual(_testcapi.docstring_with_invalid_signature2.__doc__,
+            "docstring_with_invalid_signature2($module, /, boo)\n"
+            "\n"
+            "--\n"
+            "\n"
+            "This docstring also has an invalid signature."
+            )
+        self.assertEqual(_testcapi.docstring_with_invalid_signature2.__text_signature__, None)
+
+        self.assertEqual(_testcapi.docstring_with_signature.__doc__,
+            "This docstring has a valid signature.")
+        self.assertEqual(_testcapi.docstring_with_signature.__text_signature__, "($module, /, sig)")
+
+        self.assertEqual(_testcapi.docstring_with_signature_and_extra_newlines.__doc__,
+            "\nThis docstring has a valid signature and some extra newlines.")
+        self.assertEqual(_testcapi.docstring_with_signature_and_extra_newlines.__text_signature__,
+            "($module, /, parameter)")
+
 
 @unittest.skipUnless(threading, 'Threading required for this test.')
 class TestPendingCalls(unittest.TestCase):
@@ -193,6 +234,9 @@ class TestPendingCalls(unittest.TestCase):
         self.pendingcalls_submit(l, n)
         self.pendingcalls_wait(l, n)
 
+
+class SubinterpreterTest(unittest.TestCase):
+
     def test_subinterps(self):
         import builtins
         r, w = os.pipe()
@@ -203,10 +247,11 @@ class TestPendingCalls(unittest.TestCase):
                 pickle.dump(id(builtins), f)
             """.format(w)
         with open(r, "rb") as f:
-            ret = _testcapi.run_in_subinterp(code)
+            ret = support.run_in_subinterp(code)
             self.assertEqual(ret, 0)
             self.assertNotEqual(pickle.load(f), id(sys.modules))
             self.assertNotEqual(pickle.load(f), id(builtins))
+
 
 # Bug #6012
 class Test6012(unittest.TestCase):
@@ -214,36 +259,97 @@ class Test6012(unittest.TestCase):
         self.assertEqual(_testcapi.argparsing("Hello", "World"), 1)
 
 
-class EmbeddingTest(unittest.TestCase):
-
-    @unittest.skipIf(
-        sys.platform.startswith('win'),
-        "test doesn't work under Windows")
-    def test_subinterps(self):
-        # XXX only tested under Unix checkouts
+class EmbeddingTests(unittest.TestCase):
+    def setUp(self):
         basepath = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        oldcwd = os.getcwd()
+        exename = "_testembed"
+        if sys.platform.startswith("win"):
+            ext = ("_d" if "_d" in sys.executable else "") + ".exe"
+            exename += ext
+            exepath = os.path.dirname(sys.executable)
+        else:
+            exepath = os.path.join(basepath, "Modules")
+        self.test_exe = exe = os.path.join(exepath, exename)
+        if not os.path.exists(exe):
+            self.skipTest("%r doesn't exist" % exe)
         # This is needed otherwise we get a fatal error:
         # "Py_Initialize: Unable to get the locale encoding
         # LookupError: no codec search functions registered: can't find encoding"
+        self.oldcwd = os.getcwd()
         os.chdir(basepath)
+
+    def tearDown(self):
+        os.chdir(self.oldcwd)
+
+    def run_embedded_interpreter(self, *args):
+        """Runs a test in the embedded interpreter"""
+        cmd = [self.test_exe]
+        cmd.extend(args)
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        (out, err) = p.communicate()
+        self.assertEqual(p.returncode, 0,
+                         "bad returncode %d, stderr is %r" %
+                         (p.returncode, err))
+        return out.decode("latin1"), err.decode("latin1")
+
+    def test_subinterps(self):
+        # This is just a "don't crash" test
+        out, err = self.run_embedded_interpreter()
+        if support.verbose:
+            print()
+            print(out)
+            print(err)
+
+    @staticmethod
+    def _get_default_pipe_encoding():
+        rp, wp = os.pipe()
         try:
-            exe = os.path.join(basepath, "Modules", "_testembed")
-            if not os.path.exists(exe):
-                self.skipTest("%r doesn't exist" % exe)
-            p = subprocess.Popen([exe],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-            (out, err) = p.communicate()
-            self.assertEqual(p.returncode, 0,
-                             "bad returncode %d, stderr is %r" %
-                             (p.returncode, err))
-            if support.verbose:
-                print()
-                print(out.decode('latin1'))
-                print(err.decode('latin1'))
+            with os.fdopen(wp, 'w') as w:
+                default_pipe_encoding = w.encoding
         finally:
-            os.chdir(oldcwd)
+            os.close(rp)
+        return default_pipe_encoding
+
+    def test_forced_io_encoding(self):
+        # Checks forced configuration of embedded interpreter IO streams
+        out, err = self.run_embedded_interpreter("forced_io_encoding")
+        if support.verbose:
+            print()
+            print(out)
+            print(err)
+        expected_stdin_encoding = sys.__stdin__.encoding
+        expected_pipe_encoding = self._get_default_pipe_encoding()
+        expected_output = os.linesep.join([
+        "--- Use defaults ---",
+        "Expected encoding: default",
+        "Expected errors: default",
+        "stdin: {0}:strict",
+        "stdout: {1}:strict",
+        "stderr: {1}:backslashreplace",
+        "--- Set errors only ---",
+        "Expected encoding: default",
+        "Expected errors: surrogateescape",
+        "stdin: {0}:surrogateescape",
+        "stdout: {1}:surrogateescape",
+        "stderr: {1}:backslashreplace",
+        "--- Set encoding only ---",
+        "Expected encoding: latin-1",
+        "Expected errors: default",
+        "stdin: latin-1:strict",
+        "stdout: latin-1:strict",
+        "stderr: latin-1:backslashreplace",
+        "--- Set encoding and errors ---",
+        "Expected encoding: latin-1",
+        "Expected errors: surrogateescape",
+        "stdin: latin-1:surrogateescape",
+        "stdout: latin-1:surrogateescape",
+        "stderr: latin-1:backslashreplace"]).format(expected_stdin_encoding,
+                                                    expected_pipe_encoding)
+        # This is useful if we ever trip over odd platform behaviour
+        self.maxDiff = None
+        self.assertEqual(out.strip(), expected_output)
 
 class SkipitemTest(unittest.TestCase):
 
@@ -355,8 +461,9 @@ class Test_testcapi(unittest.TestCase):
     def test__testcapi(self):
         for name in dir(_testcapi):
             if name.startswith('test_'):
-                test = getattr(_testcapi, name)
-                test()
+                with self.subTest("internal", name=name):
+                    test = getattr(_testcapi, name)
+                    test()
 
 if __name__ == "__main__":
     unittest.main()
