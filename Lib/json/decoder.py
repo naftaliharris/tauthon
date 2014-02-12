@@ -1,9 +1,6 @@
 """Implementation of JSONDecoder
 """
-import binascii
 import re
-import sys
-import struct
 
 from json import scanner
 try:
@@ -15,14 +12,9 @@ __all__ = ['JSONDecoder']
 
 FLAGS = re.VERBOSE | re.MULTILINE | re.DOTALL
 
-def _floatconstants():
-    _BYTES = binascii.unhexlify(b'7FF80000000000007FF0000000000000')
-    if sys.byteorder != 'big':
-        _BYTES = _BYTES[:8][::-1] + _BYTES[8:][::-1]
-    nan, inf = struct.unpack('dd', _BYTES)
-    return nan, inf, -inf
-
-NaN, PosInf, NegInf = _floatconstants()
+NaN = float('nan')
+PosInf = float('inf')
+NegInf = float('-inf')
 
 
 def linecol(doc, pos):
@@ -195,8 +187,8 @@ def JSONObject(s_and_end, strict, scan_once, object_hook, object_pairs_hook,
 
         try:
             value, end = scan_once(s, end)
-        except StopIteration:
-            raise ValueError(errmsg("Expecting object", s, end))
+        except StopIteration as err:
+            raise ValueError(errmsg("Expecting value", s, err.value)) from None
         pairs_append((key, value))
         try:
             nextchar = s[end]
@@ -239,8 +231,8 @@ def JSONArray(s_and_end, scan_once, _w=WHITESPACE.match, _ws=WHITESPACE_STR):
     while True:
         try:
             value, end = scan_once(s, end)
-        except StopIteration:
-            raise ValueError(errmsg("Expecting object", s, end))
+        except StopIteration as err:
+            raise ValueError(errmsg("Expecting value", s, err.value)) from None
         _append(value)
         nextchar = s[end:end + 1]
         if nextchar in _ws:
@@ -250,7 +242,7 @@ def JSONArray(s_and_end, scan_once, _w=WHITESPACE.match, _ws=WHITESPACE_STR):
         if nextchar == ']':
             break
         elif nextchar != ',':
-            raise ValueError(errmsg("Expecting ',' delimiter", s, end))
+            raise ValueError(errmsg("Expecting ',' delimiter", s, end - 1))
         try:
             if s[end] in _ws:
                 end += 1
@@ -365,6 +357,6 @@ class JSONDecoder(object):
         """
         try:
             obj, end = self.scan_once(s, idx)
-        except StopIteration:
-            raise ValueError("No JSON object could be decoded")
+        except StopIteration as err:
+            raise ValueError(errmsg("Expecting value", s, err.value)) from None
         return obj, end
