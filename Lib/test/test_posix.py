@@ -603,8 +603,10 @@ class PosixTester(unittest.TestCase):
         r, w = os.pipe2(os.O_CLOEXEC|os.O_NONBLOCK)
         self.addCleanup(os.close, r)
         self.addCleanup(os.close, w)
-        self.assertTrue(fcntl.fcntl(r, fcntl.F_GETFD) & fcntl.FD_CLOEXEC)
-        self.assertTrue(fcntl.fcntl(w, fcntl.F_GETFD) & fcntl.FD_CLOEXEC)
+        self.assertFalse(os.get_inheritable(r))
+        self.assertFalse(os.get_inheritable(w))
+        self.assertTrue(fcntl.fcntl(r, fcntl.F_GETFL) & os.O_NONBLOCK)
+        self.assertTrue(fcntl.fcntl(w, fcntl.F_GETFL) & os.O_NONBLOCK)
         # try reading from an empty pipe: this should fail, not block
         self.assertRaises(OSError, os.read, r, 1)
         # try a write big enough to fill-up the pipe: this should either
@@ -652,7 +654,7 @@ class PosixTester(unittest.TestCase):
             self.assertEqual(st.st_flags | stat.UF_IMMUTABLE, new_st.st_flags)
             try:
                 fd = open(target_file, 'w+')
-            except IOError as e:
+            except OSError as e:
                 self.assertEqual(e.errno, errno.EPERM)
         finally:
             posix.chflags(target_file, st.st_flags)
@@ -710,41 +712,39 @@ class PosixTester(unittest.TestCase):
 
     @unittest.skipUnless(hasattr(posix, 'getcwd'), 'test needs posix.getcwd()')
     def test_getcwd_long_pathnames(self):
-        if hasattr(posix, 'getcwd'):
-            dirname = 'getcwd-test-directory-0123456789abcdef-01234567890abcdef'
-            curdir = os.getcwd()
-            base_path = os.path.abspath(support.TESTFN) + '.getcwd'
+        dirname = 'getcwd-test-directory-0123456789abcdef-01234567890abcdef'
+        curdir = os.getcwd()
+        base_path = os.path.abspath(support.TESTFN) + '.getcwd'
 
-            try:
-                os.mkdir(base_path)
-                os.chdir(base_path)
-            except:
-#               Just returning nothing instead of the SkipTest exception,
-#               because the test results in Error in that case.
-#               Is that ok?
-#                raise unittest.SkipTest("cannot create directory for testing")
-                return
+        try:
+            os.mkdir(base_path)
+            os.chdir(base_path)
+        except:
+            #  Just returning nothing instead of the SkipTest exception, because
+            #  the test results in Error in that case.  Is that ok?
+            #  raise unittest.SkipTest("cannot create directory for testing")
+            return
 
-                def _create_and_do_getcwd(dirname, current_path_length = 0):
-                    try:
-                        os.mkdir(dirname)
-                    except:
-                        raise unittest.SkipTest("mkdir cannot create directory sufficiently deep for getcwd test")
+            def _create_and_do_getcwd(dirname, current_path_length = 0):
+                try:
+                    os.mkdir(dirname)
+                except:
+                    raise unittest.SkipTest("mkdir cannot create directory sufficiently deep for getcwd test")
 
-                    os.chdir(dirname)
-                    try:
-                        os.getcwd()
-                        if current_path_length < 1027:
-                            _create_and_do_getcwd(dirname, current_path_length + len(dirname) + 1)
-                    finally:
-                        os.chdir('..')
-                        os.rmdir(dirname)
+                os.chdir(dirname)
+                try:
+                    os.getcwd()
+                    if current_path_length < 1027:
+                        _create_and_do_getcwd(dirname, current_path_length + len(dirname) + 1)
+                finally:
+                    os.chdir('..')
+                    os.rmdir(dirname)
 
-                _create_and_do_getcwd(dirname)
+            _create_and_do_getcwd(dirname)
 
-            finally:
-                os.chdir(curdir)
-                support.rmtree(base_path)
+        finally:
+            os.chdir(curdir)
+            support.rmtree(base_path)
 
     @unittest.skipUnless(hasattr(posix, 'getgrouplist'), "test needs posix.getgrouplist()")
     @unittest.skipUnless(hasattr(pwd, 'getpwuid'), "test needs pwd.getpwuid()")
@@ -1120,6 +1120,23 @@ class PosixTester(unittest.TestCase):
                 # For instance:
                 # http://lists.freebsd.org/pipermail/freebsd-amd64/2012-January/014332.html
                 raise unittest.SkipTest("OSError raised!")
+
+    def test_path_error2(self):
+        """
+        Test functions that call path_error2(), providing two filenames in their exceptions.
+        """
+        for name in ("rename", "replace", "link", "symlink"):
+            function = getattr(os, name, None)
+
+            if function:
+                for dst in ("noodly2", support.TESTFN):
+                    try:
+                        function('doesnotexistfilename', dst)
+                    except OSError as e:
+                        self.assertIn("'doesnotexistfilename' -> '{}'".format(dst), str(e))
+                        break
+                else:
+                    self.fail("No valid path_error2() test for os." + name)
 
 class PosixGroupsTester(unittest.TestCase):
 

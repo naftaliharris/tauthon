@@ -9,13 +9,6 @@
 
 --------------
 
-.. note::
-
-   The ``ipaddress`` module has been included in the standard library on a
-   :term:`provisional basis <provisional package>`. Backwards incompatible
-   changes (up to and including removal of the package) may occur if deemed
-   necessary by the core developers.
-
 :mod:`ipaddress` provides the capabilities to create, manipulate and
 operate on IPv4 and IPv6 addresses and networks.
 
@@ -161,7 +154,16 @@ write code that handles both IP versions correctly.
    .. attribute:: is_private
 
       ``True`` if the address is allocated for private networks.  See
-      :RFC:`1918` (for IPv4) or :RFC:`4193` (for IPv6).
+      iana-ipv4-special-registry (for IPv4) or iana-ipv6-special-registry
+      (for IPv6).
+
+   .. attribute:: is_global
+
+      ``True`` if the address is allocated for public networks.  See
+      iana-ipv4-special-registry (for IPv4) or iana-ipv6-special-registry
+      (for IPv6).
+
+   .. versionadded:: 3.4
 
    .. attribute:: is_unspecified
 

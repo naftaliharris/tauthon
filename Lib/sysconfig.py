@@ -1,7 +1,6 @@
 """Access to Python's configuration information."""
 
 import os
-import re
 import sys
 from os.path import pardir, realpath
 
@@ -51,25 +50,6 @@ _INSTALL_SCHEMES = {
         'platinclude': '{installed_base}/Include',
         'scripts': '{base}/Scripts',
         'data': '{base}',
-        },
-    'os2': {
-        'stdlib': '{installed_base}/Lib',
-        'platstdlib': '{base}/Lib',
-        'purelib': '{base}/Lib/site-packages',
-        'platlib': '{base}/Lib/site-packages',
-        'include': '{installed_base}/Include',
-        'platinclude': '{installed_base}/Include',
-        'scripts': '{base}/Scripts',
-        'data': '{base}',
-        },
-    'os2_home': {
-        'stdlib': '{userbase}/lib/python{py_version_short}',
-        'platstdlib': '{userbase}/lib/python{py_version_short}',
-        'purelib': '{userbase}/lib/python{py_version_short}/site-packages',
-        'platlib': '{userbase}/lib/python{py_version_short}/site-packages',
-        'include': '{userbase}/include/python{py_version_short}',
-        'scripts': '{userbase}/bin',
-        'data': '{userbase}',
         },
     'nt_user': {
         'stdlib': '{userbase}/Python{py_version_nodot}',
@@ -210,7 +190,6 @@ def _getuserbase():
     def joinuser(*args):
         return os.path.expanduser(os.path.join(*args))
 
-    # what about 'os2emx', 'riscos' ?
     if os.name == "nt":
         base = os.environ.get("APPDATA") or "~"
         if env_base:
@@ -242,6 +221,7 @@ def _parse_makefile(filename, vars=None):
     """
     # Regexes needed for parsing Makefile (and similar syntaxes,
     # like old-style Setup files).
+    import re
     _variable_rx = re.compile("([a-zA-Z][a-zA-Z0-9_]+)\s*=\s*(.*)")
     _findvar1_rx = re.compile(r"\$\(([A-Za-z][A-Za-z0-9_]*)\)")
     _findvar2_rx = re.compile(r"\${([A-Za-z][A-Za-z0-9_]*)}")
@@ -369,21 +349,21 @@ def _generate_posix_vars():
     makefile = get_makefile_filename()
     try:
         _parse_makefile(makefile, vars)
-    except IOError as e:
+    except OSError as e:
         msg = "invalid Python installation: unable to open %s" % makefile
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
-        raise IOError(msg)
+        raise OSError(msg)
     # load the installed pyconfig.h:
     config_h = get_config_h_filename()
     try:
         with open(config_h) as f:
             parse_config_h(f, vars)
-    except IOError as e:
+    except OSError as e:
         msg = "invalid Python installation: unable to open %s" % config_h
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
-        raise IOError(msg)
+        raise OSError(msg)
     # On AIX, there are wrong paths to the linker scripts in the Makefile
     # -- these paths are relative to the Python source, but when installed
     # the scripts are in another directory.
@@ -403,8 +383,8 @@ def _generate_posix_vars():
     # get_platform() succeeds.
     name = '_sysconfigdata'
     if 'darwin' in sys.platform:
-        import imp
-        module = imp.new_module(name)
+        import types
+        module = types.ModuleType(name)
         module.build_time_vars = vars
         sys.modules[name] = module
 
@@ -436,7 +416,6 @@ def _init_non_posix(vars):
     vars['LIBDEST'] = get_path('stdlib')
     vars['BINLIBDEST'] = get_path('platstdlib')
     vars['INCLUDEPY'] = get_path('include')
-    vars['SO'] = '.pyd'
     vars['EXT_SUFFIX'] = '.pyd'
     vars['EXE'] = '.exe'
     vars['VERSION'] = _PY_VERSION_SHORT_NO_DOT
@@ -456,6 +435,7 @@ def parse_config_h(fp, vars=None):
     """
     if vars is None:
         vars = {}
+    import re
     define_rx = re.compile("#define ([A-Z][A-Za-z0-9_]+) (.*)\n")
     undef_rx = re.compile("/[*] #undef ([A-Z][A-Za-z0-9_]+) [*]/\n")
 
@@ -552,10 +532,14 @@ def get_config_vars(*args):
             # sys.abiflags may not be defined on all platforms.
             _CONFIG_VARS['abiflags'] = ''
 
-        if os.name in ('nt', 'os2'):
+        if os.name == 'nt':
             _init_non_posix(_CONFIG_VARS)
         if os.name == 'posix':
             _init_posix(_CONFIG_VARS)
+        # For backward compatibility, see issue19555
+        SO = _CONFIG_VARS.get('EXT_SUFFIX')
+        if SO is not None:
+            _CONFIG_VARS['SO'] = SO
         # Setting 'userbase' is done below the call to the
         # init function to enable using 'get_config_var' in
         # the init-function.
@@ -599,6 +583,9 @@ def get_config_var(name):
 
     Equivalent to get_config_vars().get(name)
     """
+    if name == 'SO':
+        import warnings
+        warnings.warn('SO is deprecated, use EXT_SUFFIX', DeprecationWarning, 2)
     return get_config_vars().get(name)
 
 
@@ -679,6 +666,7 @@ def get_platform():
         return "%s-%s.%s" % (osname, version, release)
     elif osname[:6] == "cygwin":
         osname = "cygwin"
+        import re
         rel_re = re.compile(r'[\d.]+')
         m = rel_re.match(release)
         if m:
