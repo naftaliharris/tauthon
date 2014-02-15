@@ -53,6 +53,7 @@ typedef struct {
     PyObject *myerrno;
     PyObject *strerror;
     PyObject *filename;
+    PyObject *filename2;
 #ifdef MS_WINDOWS
     PyObject *winerror;
 #endif
@@ -75,6 +76,9 @@ typedef PyOSErrorObject PyWindowsErrorObject;
 
 PyAPI_FUNC(void) PyErr_SetNone(PyObject *);
 PyAPI_FUNC(void) PyErr_SetObject(PyObject *, PyObject *);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(void) _PyErr_SetKeyError(PyObject *);
+#endif
 PyAPI_FUNC(void) PyErr_SetString(
     PyObject *exception,
     const char *string   /* decoded from utf-8 */
@@ -198,9 +202,6 @@ PyAPI_DATA(PyObject *) PyExc_IOError;
 #ifdef MS_WINDOWS
 PyAPI_DATA(PyObject *) PyExc_WindowsError;
 #endif
-#ifdef __VMS
-PyAPI_DATA(PyObject *) PyExc_VMSError;
-#endif
 
 PyAPI_DATA(PyObject *) PyExc_RecursionErrorInst;
 
@@ -225,6 +226,8 @@ PyAPI_FUNC(PyObject *) PyErr_NoMemory(void);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrno(PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilenameObject(
     PyObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilenameObjects(
+    PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilename(
     PyObject *exc,
     const char *filename   /* decoded from the filesystem encoding */
@@ -253,6 +256,8 @@ PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithUnicodeFilename(
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErr(int);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilenameObject(
     PyObject *,int, PyObject *);
+PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilenameObjects(
+    PyObject *,int, PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilename(
     PyObject *exc,
     int ierr,
@@ -284,6 +289,28 @@ PyAPI_FUNC(PyObject *) PyErr_NewExceptionWithDoc(
     const char *name, const char *doc, PyObject *base, PyObject *dict);
 PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *);
 
+/* In exceptions.c */
+#ifndef Py_LIMITED_API
+/* Helper that attempts to replace the current exception with one of the
+ * same type but with a prefix added to the exception text. The resulting
+ * exception description looks like:
+ *
+ *     prefix (exc_type: original_exc_str)
+ *
+ * Only some exceptions can be safely replaced. If the function determines
+ * it isn't safe to perform the replacement, it will leave the original
+ * unmodified exception in place.
+ *
+ * Returns a borrowed reference to the new exception (if any), NULL if the
+ * existing exception was left in place.
+ */
+PyAPI_FUNC(PyObject *) _PyErr_TrySetFromCause(
+    const char *prefix_format,   /* ASCII-encoded string  */
+    ...
+    );
+#endif
+
+
 /* In sigcheck.c or signalmodule.c */
 PyAPI_FUNC(int) PyErr_CheckSignals(void);
 PyAPI_FUNC(void) PyErr_SetInterrupt(void);
@@ -301,9 +328,20 @@ PyAPI_FUNC(void) PyErr_SyntaxLocationEx(
     const char *filename,       /* decoded from the filesystem encoding */
     int lineno,
     int col_offset);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(void) PyErr_SyntaxLocationObject(
+    PyObject *filename,
+    int lineno,
+    int col_offset);
+#endif
 PyAPI_FUNC(PyObject *) PyErr_ProgramText(
     const char *filename,       /* decoded from the filesystem encoding */
     int lineno);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(PyObject *) PyErr_ProgramTextObject(
+    PyObject *filename,
+    int lineno);
+#endif
 
 /* The following functions are used to create and modify unicode
    exceptions from C */

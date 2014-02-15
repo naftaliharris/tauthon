@@ -115,7 +115,7 @@ classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
                      ((PyTypeObject *)type)->tp_name);
         return NULL;
     }
-    return PyCFunction_New(descr->d_method, type);
+    return PyCFunction_NewEx(descr->d_method, type, NULL);
 }
 
 static PyObject *
@@ -125,7 +125,7 @@ method_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
 
     if (descr_check((PyDescrObject *)descr, obj, &res))
         return res;
-    return PyCFunction_New(descr->d_method, obj);
+    return PyCFunction_NewEx(descr->d_method, obj, NULL);
 }
 
 static PyObject *
@@ -239,7 +239,7 @@ methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    func = PyCFunction_New(descr->d_method, self);
+    func = PyCFunction_NewEx(descr->d_method, self, NULL);
     if (func == NULL)
         return NULL;
     args = PyTuple_GetSlice(args, 1, argc);
@@ -292,7 +292,7 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
         return NULL;
     }
 
-    func = PyCFunction_New(descr->d_method, self);
+    func = PyCFunction_NewEx(descr->d_method, self, NULL);
     if (func == NULL)
         return NULL;
     args = PyTuple_GetSlice(args, 1, argc);
@@ -353,11 +353,13 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
 static PyObject *
 method_get_doc(PyMethodDescrObject *descr, void *closure)
 {
-    if (descr->d_method->ml_doc == NULL) {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-    return PyUnicode_FromString(descr->d_method->ml_doc);
+    return _PyType_GetDocFromInternalDoc(descr->d_method->ml_name, descr->d_method->ml_doc);
+}
+
+static PyObject *
+method_get_text_signature(PyMethodDescrObject *descr, void *closure)
+{
+    return _PyType_GetTextSignatureFromInternalDoc(descr->d_method->ml_name, descr->d_method->ml_doc);
 }
 
 static PyObject *
@@ -398,6 +400,24 @@ descr_get_qualname(PyDescrObject *descr)
     return descr->d_qualname;
 }
 
+static PyObject *
+descr_reduce(PyDescrObject *descr)
+{
+    PyObject *builtins;
+    PyObject *getattr;
+    _Py_IDENTIFIER(getattr);
+
+    builtins = PyEval_GetBuiltins();
+    getattr = _PyDict_GetItemId(builtins, &PyId_getattr);
+    return Py_BuildValue("O(OO)", getattr, PyDescr_TYPE(descr),
+                         PyDescr_NAME(descr));
+}
+
+static PyMethodDef descr_methods[] = {
+    {"__reduce__", (PyCFunction)descr_reduce, METH_NOARGS, NULL},
+    {NULL, NULL}
+};
+
 static PyMemberDef descr_members[] = {
     {"__objclass__", T_OBJECT, offsetof(PyDescrObject, d_type), READONLY},
     {"__name__", T_OBJECT, offsetof(PyDescrObject, d_name), READONLY},
@@ -407,6 +427,7 @@ static PyMemberDef descr_members[] = {
 static PyGetSetDef method_getset[] = {
     {"__doc__", (getter)method_get_doc},
     {"__qualname__", (getter)descr_get_qualname},
+    {"__text_signature__", (getter)method_get_text_signature},
     {0}
 };
 
@@ -445,16 +466,19 @@ static PyGetSetDef getset_getset[] = {
 static PyObject *
 wrapperdescr_get_doc(PyWrapperDescrObject *descr, void *closure)
 {
-    if (descr->d_base->doc == NULL) {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-    return PyUnicode_FromString(descr->d_base->doc);
+    return _PyType_GetDocFromInternalDoc(descr->d_base->name, descr->d_base->doc);
+}
+
+static PyObject *
+wrapperdescr_get_text_signature(PyWrapperDescrObject *descr, void *closure)
+{
+    return _PyType_GetTextSignatureFromInternalDoc(descr->d_base->name, descr->d_base->doc);
 }
 
 static PyGetSetDef wrapperdescr_getset[] = {
     {"__doc__", (getter)wrapperdescr_get_doc},
     {"__qualname__", (getter)descr_get_qualname},
+    {"__text_signature__", (getter)wrapperdescr_get_text_signature},
     {0}
 };
 
@@ -494,7 +518,7 @@ PyTypeObject PyMethodDescr_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    descr_methods,                              /* tp_methods */
     descr_members,                              /* tp_members */
     method_getset,                              /* tp_getset */
     0,                                          /* tp_base */
@@ -532,7 +556,7 @@ PyTypeObject PyClassMethodDescr_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    descr_methods,                              /* tp_methods */
     descr_members,                              /* tp_members */
     method_getset,                              /* tp_getset */
     0,                                          /* tp_base */
@@ -569,7 +593,7 @@ PyTypeObject PyMemberDescr_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    descr_methods,                              /* tp_methods */
     descr_members,                              /* tp_members */
     member_getset,                              /* tp_getset */
     0,                                          /* tp_base */
@@ -643,7 +667,7 @@ PyTypeObject PyWrapperDescr_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    descr_methods,                              /* tp_methods */
     descr_members,                              /* tp_members */
     wrapperdescr_getset,                        /* tp_getset */
     0,                                          /* tp_base */
@@ -1009,7 +1033,7 @@ wrapper_dealloc(wrapperobject *wp)
 static PyObject *
 wrapper_richcompare(PyObject *a, PyObject *b, int op)
 {
-    int result;
+    Py_intptr_t result;
     PyObject *v;
     PyWrapperDescrObject *a_descr, *b_descr;
 
@@ -1085,6 +1109,23 @@ wrapper_repr(wrapperobject *wp)
                                wp->self);
 }
 
+static PyObject *
+wrapper_reduce(wrapperobject *wp)
+{
+    PyObject *builtins;
+    PyObject *getattr;
+    _Py_IDENTIFIER(getattr);
+
+    builtins = PyEval_GetBuiltins();
+    getattr = _PyDict_GetItemId(builtins, &PyId_getattr);
+    return Py_BuildValue("O(OO)", getattr, wp->self, PyDescr_NAME(wp->descr));
+}
+
+static PyMethodDef wrapper_methods[] = {
+    {"__reduce__", (PyCFunction)wrapper_reduce, METH_NOARGS, NULL},
+    {NULL, NULL}
+};
+
 static PyMemberDef wrapper_members[] = {
     {"__self__", T_OBJECT, offsetof(wrapperobject, self), READONLY},
     {0}
@@ -1108,17 +1149,15 @@ wrapper_name(wrapperobject *wp)
 }
 
 static PyObject *
-wrapper_doc(wrapperobject *wp)
+wrapper_doc(wrapperobject *wp, void *closure)
 {
-    const char *s = wp->descr->d_base->doc;
+    return _PyType_GetDocFromInternalDoc(wp->descr->d_base->name, wp->descr->d_base->doc);
+}
 
-    if (s == NULL) {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-    else {
-        return PyUnicode_FromString(s);
-    }
+static PyObject *
+wrapper_text_signature(wrapperobject *wp, void *closure)
+{
+    return _PyType_GetTextSignatureFromInternalDoc(wp->descr->d_base->name, wp->descr->d_base->doc);
 }
 
 static PyObject *
@@ -1132,6 +1171,7 @@ static PyGetSetDef wrapper_getsets[] = {
     {"__name__", (getter)wrapper_name},
     {"__qualname__", (getter)wrapper_qualname},
     {"__doc__", (getter)wrapper_doc},
+    {"__text_signature__", (getter)wrapper_text_signature},
     {0}
 };
 
@@ -1193,7 +1233,7 @@ PyTypeObject _PyMethodWrapper_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    wrapper_methods,                            /* tp_methods */
     wrapper_members,                            /* tp_members */
     wrapper_getsets,                            /* tp_getset */
     0,                                          /* tp_base */
