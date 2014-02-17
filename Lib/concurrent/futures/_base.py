@@ -200,8 +200,7 @@ def as_completed(fs, timeout=None):
         waiter = _create_and_install_waiters(fs, _AS_COMPLETED)
 
     try:
-        for future in finished:
-            yield future
+        yield from finished
 
         while pending:
             if timeout is None:
@@ -226,7 +225,8 @@ def as_completed(fs, timeout=None):
 
     finally:
         for f in fs:
-            f._waiters.remove(waiter)
+            with f._condition:
+                f._waiters.remove(waiter)
 
 DoneAndNotDoneFutures = collections.namedtuple(
         'DoneAndNotDoneFutures', 'done not_done')
@@ -273,7 +273,8 @@ def wait(fs, timeout=None, return_when=ALL_COMPLETED):
 
     waiter.event.wait(timeout)
     for f in fs:
-        f._waiters.remove(waiter)
+        with f._condition:
+            f._waiters.remove(waiter)
 
     done.update(waiter.finished_futures)
     return DoneAndNotDoneFutures(done, set(fs) - done)

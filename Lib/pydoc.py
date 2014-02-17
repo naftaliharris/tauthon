@@ -44,16 +44,16 @@ Richard Chamberlain, for the first implementation of textdoc.
 """
 
 # Known bugs that can't be fixed here:
-#   - imp.load_module() cannot be prevented from clobbering existing
-#     loaded modules, so calling synopsis() on a binary module file
-#     changes the contents of any existing module with the same name.
+#   - synopsis() cannot be prevented from clobbering existing
+#     loaded modules.
 #   - If the __file__ attribute on a module is a relative path and
 #     the current directory is changed with os.chdir(), an incorrect
 #     path will be displayed.
 
 import builtins
-import imp
+import importlib._bootstrap
 import importlib.machinery
+import importlib.util
 import inspect
 import io
 import os
@@ -167,8 +167,9 @@ def _split_list(s, predicate):
 def visiblename(name, all=None, obj=None):
     """Decide whether to show documentation on a variable."""
     # Certain special names are redundant or internal.
+    # XXX Remove __initializing__?
     if name in {'__author__', '__builtins__', '__cached__', '__credits__',
-                '__date__', '__doc__', '__file__', '__initializing__',
+                '__date__', '__doc__', '__file__', '__spec__',
                 '__loader__', '__module__', '__name__', '__package__',
                 '__path__', '__qualname__', '__slots__', '__version__'}:
         return 0
@@ -224,34 +225,38 @@ def synopsis(filename, cache={}):
     mtime = os.stat(filename).st_mtime
     lastupdate, result = cache.get(filename, (None, None))
     if lastupdate is None or lastupdate < mtime:
-        try:
-            file = tokenize.open(filename)
-        except IOError:
-            # module can't be opened, so skip it
-            return None
-        binary_suffixes = importlib.machinery.BYTECODE_SUFFIXES[:]
-        binary_suffixes += importlib.machinery.EXTENSION_SUFFIXES[:]
-        if any(filename.endswith(x) for x in binary_suffixes):
-            # binary modules have to be imported
-            file.close()
-            if any(filename.endswith(x) for x in
-                    importlib.machinery.BYTECODE_SUFFIXES):
-                loader = importlib.machinery.SourcelessFileLoader('__temp__',
-                                                                  filename)
-            else:
-                loader = importlib.machinery.ExtensionFileLoader('__temp__',
-                                                                 filename)
+        # Look for binary suffixes first, falling back to source.
+        if filename.endswith(tuple(importlib.machinery.BYTECODE_SUFFIXES)):
+            loader_cls = importlib.machinery.SourcelessFileLoader
+        elif filename.endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES)):
+            loader_cls = importlib.machinery.ExtensionFileLoader
+        else:
+            loader_cls = None
+        # Now handle the choice.
+        if loader_cls is None:
+            # Must be a source file.
             try:
-                module = loader.load_module('__temp__')
+                file = tokenize.open(filename)
+            except OSError:
+                # module can't be opened, so skip it
+                return None
+            # text modules can be directly examined
+            with file:
+                result = source_synopsis(file)
+        else:
+            # Must be a binary module, which has to be imported.
+            loader = loader_cls('__temp__', filename)
+            # XXX We probably don't need to pass in the loader here.
+            spec = importlib.util.spec_from_file_location('__temp__', filename,
+                                                          loader=loader)
+            _spec = importlib._bootstrap._SpecMethods(spec)
+            try:
+                module = _spec.load()
             except:
                 return None
-            result = (module.__doc__ or '').splitlines()[0]
             del sys.modules['__temp__']
-        else:
-            # text modules can be directly examined
-            result = source_synopsis(file)
-            file.close()
-
+            result = (module.__doc__ or '').splitlines()[0]
+        # Cache the result.
         cache[filename] = (mtime, result)
     return result
 
@@ -267,20 +272,22 @@ class ErrorDuringImport(Exception):
 
 def importfile(path):
     """Import a Python source file or compiled file given its path."""
-    magic = imp.get_magic()
+    magic = importlib.util.MAGIC_NUMBER
     with open(path, 'rb') as file:
-        if file.read(len(magic)) == magic:
-            kind = imp.PY_COMPILED
-        else:
-            kind = imp.PY_SOURCE
-        file.seek(0)
-        filename = os.path.basename(path)
-        name, ext = os.path.splitext(filename)
-        try:
-            module = imp.load_module(name, file, path, (ext, 'r', kind))
-        except:
-            raise ErrorDuringImport(path, sys.exc_info())
-    return module
+        is_bytecode = magic == file.read(len(magic))
+    filename = os.path.basename(path)
+    name, ext = os.path.splitext(filename)
+    if is_bytecode:
+        loader = importlib._bootstrap.SourcelessFileLoader(name, path)
+    else:
+        loader = importlib._bootstrap.SourceFileLoader(name, path)
+    # XXX We probably don't need to pass in the loader here.
+    spec = importlib.util.spec_from_file_location(name, path, loader=loader)
+    _spec = importlib._bootstrap._SpecMethods(spec)
+    try:
+        return _spec.load()
+    except:
+        raise ErrorDuringImport(path, sys.exc_info())
 
 def safeimport(path, forceload=0, cache={}):
     """Import a module; handle errors; return None if the module isn't found.
@@ -916,20 +923,21 @@ class HTMLDoc(Doc):
                 reallink = realname
             title = '<a name="%s"><strong>%s</strong></a> = %s' % (
                 anchor, name, reallink)
-        if inspect.isfunction(object):
-            args, varargs, kwonlyargs, kwdefaults, varkw, defaults, ann = \
-                inspect.getfullargspec(object)
-            argspec = inspect.formatargspec(
-                args, varargs, kwonlyargs, kwdefaults, varkw, defaults, ann,
-                formatvalue=self.formatvalue,
-                formatannotation=inspect.formatannotationrelativeto(object))
-            if realname == '<lambda>':
-                title = '<strong>%s</strong> <em>lambda</em> ' % name
-                # XXX lambda's won't usually have func_annotations['return']
-                # since the syntax doesn't support but it is possible.
-                # So removing parentheses isn't truly safe.
-                argspec = argspec[1:-1] # remove parentheses
-        else:
+        argspec = None
+        if inspect.isfunction(object) or inspect.isbuiltin(object):
+            try:
+                signature = inspect.signature(object)
+            except (ValueError, TypeError):
+                signature = None
+            if signature:
+                argspec = str(signature)
+                if realname == '<lambda>':
+                    title = '<strong>%s</strong> <em>lambda</em> ' % name
+                    # XXX lambda's won't usually have func_annotations['return']
+                    # since the syntax doesn't support but it is possible.
+                    # So removing parentheses isn't truly safe.
+                    argspec = argspec[1:-1] # remove parentheses
+        if not argspec:
             argspec = '(...)'
 
         decl = title + argspec + (note and self.grey(
@@ -1236,8 +1244,9 @@ location listed above.
                         doc = getdoc(value)
                     else:
                         doc = None
-                    push(self.docother(getattr(object, name),
-                                       name, mod, maxlen=70, doc=doc) + '\n')
+                    push(self.docother(
+                        getattr(object, name, None) or homecls.__dict__[name],
+                        name, mod, maxlen=70, doc=doc) + '\n')
             return attrs
 
         attrs = [(name, kind, cls, value)
@@ -1259,7 +1268,6 @@ location listed above.
             else:
                 tag = "inherited from %s" % classname(thisclass,
                                                       object.__module__)
-
             # Sort attrs by name.
             attrs.sort()
 
@@ -1274,6 +1282,7 @@ location listed above.
                                      lambda t: t[1] == 'data descriptor')
             attrs = spilldata("Data and other attributes %s:\n" % tag, attrs,
                               lambda t: t[1] == 'data')
+
             assert attrs == []
             attrs = inherited
 
@@ -1312,20 +1321,22 @@ location listed above.
                 cl.__dict__[realname] is object):
                 skipdocs = 1
             title = self.bold(name) + ' = ' + realname
-        if inspect.isfunction(object):
-            args, varargs, varkw, defaults, kwonlyargs, kwdefaults, ann = \
-              inspect.getfullargspec(object)
-            argspec = inspect.formatargspec(
-                args, varargs, varkw, defaults, kwonlyargs, kwdefaults, ann,
-                formatvalue=self.formatvalue,
-                formatannotation=inspect.formatannotationrelativeto(object))
-            if realname == '<lambda>':
-                title = self.bold(name) + ' lambda '
-                # XXX lambda's won't usually have func_annotations['return']
-                # since the syntax doesn't support but it is possible.
-                # So removing parentheses isn't truly safe.
-                argspec = argspec[1:-1] # remove parentheses
-        else:
+        argspec = None
+
+        if inspect.isroutine(object):
+            try:
+                signature = inspect.signature(object)
+            except (ValueError, TypeError):
+                signature = None
+            if signature:
+                argspec = str(signature)
+                if realname == '<lambda>':
+                    title = self.bold(name) + ' lambda '
+                    # XXX lambda's won't usually have func_annotations['return']
+                    # since the syntax doesn't support but it is possible.
+                    # So removing parentheses isn't truly safe.
+                    argspec = argspec[1:-1] # remove parentheses
+        if not argspec:
             argspec = '(...)'
         decl = title + argspec + note
 
@@ -1396,7 +1407,7 @@ def getpager():
             return lambda text: pipepager(text, os.environ['PAGER'])
     if os.environ.get('TERM') in ('dumb', 'emacs'):
         return plainpager
-    if sys.platform == 'win32' or sys.platform.startswith('os2'):
+    if sys.platform == 'win32':
         return lambda text: tempfilepager(plain(text), 'more <')
     if hasattr(os, 'system') and os.system('(less) 2>/dev/null') == 0:
         return lambda text: pipepager(text, 'less')
@@ -1422,16 +1433,15 @@ def pipepager(text, cmd):
     try:
         pipe.write(text)
         pipe.close()
-    except IOError:
+    except OSError:
         pass # Ignore broken pipes caused by quitting the pager program.
 
 def tempfilepager(text, cmd):
     """Page through text by invoking a program on a temporary file."""
     import tempfile
     filename = tempfile.mktemp()
-    file = open(filename, 'w')
-    file.write(text)
-    file.close()
+    with open(filename, 'w') as file:
+        file.write(text)
     try:
         os.system(cmd + ' "' + filename + '"')
     finally:
@@ -1850,10 +1860,10 @@ Enter the name of any module, keyword, or topic to get help on writing
 Python programs and using Python modules.  To quit this help utility and
 return to the interpreter, just type "quit".
 
-To get a list of available modules, keywords, or topics, type "modules",
-"keywords", or "topics".  Each module also comes with a one-line summary
-of what it does; to list the modules whose summaries contain a given word
-such as "spam", type "modules spam".
+To get a list of available modules, keywords, symbols, or topics, type
+"modules", "keywords", "symbols", or "topics".  Each module also comes
+with a one-line summary of what it does; to list the modules whose name
+or summary contain a given string such as "spam", type "modules spam".
 ''' % tuple([sys.version[:3]]*2))
 
     def list(self, items, columns=4, width=80):
@@ -1917,11 +1927,10 @@ module "pydoc_data.topics" could not be found.
         if more_xrefs:
             xrefs = (xrefs or '') + ' ' + more_xrefs
         if xrefs:
-            import formatter
-            buffer = io.StringIO()
-            formatter.DumbWriter(buffer).send_flowing_data(
-                'Related help topics: ' + ', '.join(xrefs.split()) + '\n')
-            self.output.write('\n%s\n' % buffer.getvalue())
+            import textwrap
+            text = 'Related help topics: ' + ', '.join(xrefs.split()) + '\n'
+            wrapped_text = textwrap.wrap(text, 72)
+            self.output.write('\n%s\n' % ''.join(wrapped_text))
 
     def _gettopic(self, topic, more_xrefs=''):
         """Return unbuffered tuple of (topic, xrefs).
@@ -1958,9 +1967,10 @@ module "pydoc_data.topics" could not be found.
     def listmodules(self, key=''):
         if key:
             self.output.write('''
-Here is a list of matching modules.  Enter any module name to get more help.
+Here is a list of modules whose name or summary contains '{}'.
+If there are any, enter a module name to get more help.
 
-''')
+'''.format(key))
             apropos(key)
         else:
             self.output.write('''
@@ -1979,34 +1989,10 @@ Please wait a moment while I gather a list of all available modules...
             self.list(modules.keys())
             self.output.write('''
 Enter any module name to get more help.  Or, type "modules spam" to search
-for modules whose descriptions contain the word "spam".
+for modules whose name or summary contain the string "spam".
 ''')
 
 help = Helper()
-
-class Scanner:
-    """A generic tree iterator."""
-    def __init__(self, roots, children, descendp):
-        self.roots = roots[:]
-        self.state = []
-        self.children = children
-        self.descendp = descendp
-
-    def next(self):
-        if not self.state:
-            if not self.roots:
-                return None
-            root = self.roots.pop(0)
-            self.state = [(root, self.children(root))]
-        node, children = self.state[-1]
-        if not children:
-            self.state.pop()
-            return self.next()
-        child = children.pop(0)
-        if self.descendp(child):
-            self.state.append((child, self.children(child)))
-        return child
-
 
 class ModuleScanner:
     """An interruptible scanner that searches module synopses."""
@@ -2036,10 +2022,11 @@ class ModuleScanner:
                 callback(None, modname, '')
             else:
                 try:
-                    loader = importer.find_module(modname)
+                    spec = pkgutil._get_spec(importer, modname)
                 except SyntaxError:
                     # raised by tests for bad coding cookies or BOM
                     continue
+                loader = spec.loader
                 if hasattr(loader, 'get_source'):
                     try:
                         source = loader.get_source(modname)
@@ -2053,8 +2040,9 @@ class ModuleScanner:
                     else:
                         path = None
                 else:
+                    _spec = importlib._bootstrap._SpecMethods(spec)
                     try:
-                        module = loader.load_module(modname)
+                        module = _spec.load()
                     except ImportError:
                         if onerror:
                             onerror(modname)

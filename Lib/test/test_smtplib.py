@@ -222,7 +222,7 @@ class DebuggingServerTests(unittest.TestCase):
             self.assertEqual(smtp.source_address, ('127.0.0.1', port))
             self.assertEqual(smtp.local_hostname, 'localhost')
             smtp.quit()
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.EADDRINUSE:
                 self.skipTest("couldn't bind to port %d" % port)
             raise
@@ -524,12 +524,6 @@ class DebuggingServerTests(unittest.TestCase):
 
 class NonConnectingTests(unittest.TestCase):
 
-    def setUp(self):
-        smtplib.socket = mock_socket
-
-    def tearDown(self):
-        smtplib.socket = socket
-
     def testNotConnected(self):
         # Test various operations on an unconnected SMTP object that
         # should raise exceptions (at present the attempt in SMTP.send
@@ -541,10 +535,10 @@ class NonConnectingTests(unittest.TestCase):
                           smtp.send, 'test msg')
 
     def testNonnumericPort(self):
-        # check that non-numeric port raises socket.error
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        # check that non-numeric port raises OSError
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost", "bogus")
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost:bogus")
 
 
@@ -850,6 +844,15 @@ class SMTPSimTests(unittest.TestCase):
         try: smtp.login(sim_auth[0], sim_auth[1])
         except smtplib.SMTPAuthenticationError as err:
             self.assertIn(sim_auth_credentials['cram-md5'], str(err))
+        smtp.close()
+
+    def testAUTH_multiple(self):
+        # Test that multiple authentication methods are tried.
+        self.serv.add_feature("AUTH BOGUS PLAIN LOGIN CRAM-MD5")
+        smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
+        try: smtp.login(sim_auth[0], sim_auth[1])
+        except smtplib.SMTPAuthenticationError as err:
+            self.assertIn(sim_auth_login_password, str(err))
         smtp.close()
 
     def test_with_statement(self):
