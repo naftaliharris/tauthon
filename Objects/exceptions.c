@@ -16,9 +16,6 @@ PyObject *PyExc_IOError = NULL;
 #ifdef MS_WINDOWS
 PyObject *PyExc_WindowsError = NULL;
 #endif
-#ifdef __VMS
-PyObject *PyExc_VMSError = NULL;
-#endif
 
 /* The dict map from errno codes to OSError subclasses */
 static PyObject *errnomap = NULL;
@@ -121,11 +118,11 @@ BaseException_str(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_repr(PyBaseExceptionObject *self)
 {
-    char *name;
-    char *dot;
+    const char *name;
+    const char *dot;
 
-    name = (char *)Py_TYPE(self)->tp_name;
-    dot = strrchr(name, '.');
+    name = Py_TYPE(self)->tp_name;
+    dot = (const char *) strrchr(name, '.');
     if (dot != NULL) name = dot+1;
 
     return PyUnicode_FromFormat("%s%R", name, self->args);
@@ -727,13 +724,17 @@ ComplexExtendsException(PyExc_Exception, ImportError,
  * we hack args so that it only contains two items.  This also
  * means we need our own __str__() which prints out the filename
  * when it was supplied.
+ *
+ * (If a function has two filenames, such as rename(), symlink(),
+ * or copy(), PyErr_SetFromErrnoWithFilenameObjects() is called,
+ * which allows passing in a second filename.)
  */
 
 /* This function doesn't cleanup on error, the caller should */
 static int
 oserror_parse_args(PyObject **p_args,
                    PyObject **myerrno, PyObject **strerror,
-                   PyObject **filename
+                   PyObject **filename, PyObject **filename2
 #ifdef MS_WINDOWS
                    , PyObject **winerror
 #endif
@@ -741,14 +742,23 @@ oserror_parse_args(PyObject **p_args,
 {
     Py_ssize_t nargs;
     PyObject *args = *p_args;
+#ifndef MS_WINDOWS
+    /*
+     * ignored on non-Windows platforms,
+     * but parsed so OSError has a consistent signature
+     */
+    PyObject *_winerror = NULL;
+    PyObject **winerror = &_winerror;
+#endif /* MS_WINDOWS */
 
     nargs = PyTuple_GET_SIZE(args);
 
-#ifdef MS_WINDOWS
-    if (nargs >= 2 && nargs <= 4) {
-        if (!PyArg_UnpackTuple(args, "OSError", 2, 4,
-                               myerrno, strerror, filename, winerror))
+    if (nargs >= 2 && nargs <= 5) {
+        if (!PyArg_UnpackTuple(args, "OSError", 2, 5,
+                               myerrno, strerror,
+                               filename, winerror, filename2))
             return -1;
+#ifdef MS_WINDOWS
         if (*winerror && PyLong_Check(*winerror)) {
             long errcode, winerrcode;
             PyObject *newargs;
@@ -780,14 +790,8 @@ oserror_parse_args(PyObject **p_args,
             Py_DECREF(args);
             args = *p_args = newargs;
         }
+#endif /* MS_WINDOWS */
     }
-#else
-    if (nargs >= 2 && nargs <= 3) {
-        if (!PyArg_UnpackTuple(args, "OSError", 2, 3,
-                               myerrno, strerror, filename))
-            return -1;
-    }
-#endif
 
     return 0;
 }
@@ -795,7 +799,7 @@ oserror_parse_args(PyObject **p_args,
 static int
 oserror_init(PyOSErrorObject *self, PyObject **p_args,
              PyObject *myerrno, PyObject *strerror,
-             PyObject *filename
+             PyObject *filename, PyObject *filename2
 #ifdef MS_WINDOWS
              , PyObject *winerror
 #endif
@@ -819,9 +823,14 @@ oserror_init(PyOSErrorObject *self, PyObject **p_args,
             Py_INCREF(filename);
             self->filename = filename;
 
-            if (nargs >= 2 && nargs <= 3) {
-                /* filename is removed from the args tuple (for compatibility
-                   purposes, see test_exceptions.py) */
+            if (filename2 && filename2 != Py_None) {
+                Py_INCREF(filename2);
+                self->filename2 = filename2;
+            }
+
+            if (nargs >= 2 && nargs <= 5) {
+                /* filename, filename2, and winerror are removed from the args tuple
+                   (for compatibility purposes, see test_exceptions.py) */
                 PyObject *subslice = PyTuple_GetSlice(args, 0, 2);
                 if (!subslice)
                     return -1;
@@ -845,7 +854,7 @@ oserror_init(PyOSErrorObject *self, PyObject **p_args,
     /* Steals the reference to args */
     Py_CLEAR(self->args);
     self->args = args;
-    args = NULL;
+    *p_args = args = NULL;
 
     return 0;
 }
@@ -880,17 +889,20 @@ static PyObject *
 OSError_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     PyOSErrorObject *self = NULL;
-    PyObject *myerrno = NULL, *strerror = NULL, *filename = NULL;
+    PyObject *myerrno = NULL, *strerror = NULL;
+    PyObject *filename = NULL, *filename2 = NULL;
 #ifdef MS_WINDOWS
     PyObject *winerror = NULL;
 #endif
 
+    Py_INCREF(args);
+
     if (!oserror_use_init(type)) {
         if (!_PyArg_NoKeywords(type->tp_name, kwds))
-            return NULL;
+            goto error;
 
-        Py_INCREF(args);
-        if (oserror_parse_args(&args, &myerrno, &strerror, &filename
+        if (oserror_parse_args(&args, &myerrno, &strerror,
+                               &filename, &filename2
 #ifdef MS_WINDOWS
                                , &winerror
 #endif
@@ -919,7 +931,7 @@ OSError_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->written = -1;
 
     if (!oserror_use_init(type)) {
-        if (oserror_init(self, &args, myerrno, strerror, filename
+        if (oserror_init(self, &args, myerrno, strerror, filename, filename2
 #ifdef MS_WINDOWS
                          , winerror
 #endif
@@ -932,6 +944,7 @@ OSError_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             goto error;
     }
 
+    Py_XDECREF(args);
     return (PyObject *) self;
 
 error:
@@ -943,7 +956,8 @@ error:
 static int
 OSError_init(PyOSErrorObject *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *myerrno = NULL, *strerror = NULL, *filename = NULL;
+    PyObject *myerrno = NULL, *strerror = NULL;
+    PyObject *filename = NULL, *filename2 = NULL;
 #ifdef MS_WINDOWS
     PyObject *winerror = NULL;
 #endif
@@ -956,14 +970,14 @@ OSError_init(PyOSErrorObject *self, PyObject *args, PyObject *kwds)
         return -1;
 
     Py_INCREF(args);
-    if (oserror_parse_args(&args, &myerrno, &strerror, &filename
+    if (oserror_parse_args(&args, &myerrno, &strerror, &filename, &filename2
 #ifdef MS_WINDOWS
                            , &winerror
 #endif
         ))
         goto error;
 
-    if (oserror_init(self, &args, myerrno, strerror, filename
+    if (oserror_init(self, &args, myerrno, strerror, filename, filename2
 #ifdef MS_WINDOWS
                      , winerror
 #endif
@@ -983,6 +997,7 @@ OSError_clear(PyOSErrorObject *self)
     Py_CLEAR(self->myerrno);
     Py_CLEAR(self->strerror);
     Py_CLEAR(self->filename);
+    Py_CLEAR(self->filename2);
 #ifdef MS_WINDOWS
     Py_CLEAR(self->winerror);
 #endif
@@ -1004,6 +1019,7 @@ OSError_traverse(PyOSErrorObject *self, visitproc visit,
     Py_VISIT(self->myerrno);
     Py_VISIT(self->strerror);
     Py_VISIT(self->filename);
+    Py_VISIT(self->filename2);
 #ifdef MS_WINDOWS
     Py_VISIT(self->winerror);
 #endif
@@ -1013,23 +1029,42 @@ OSError_traverse(PyOSErrorObject *self, visitproc visit,
 static PyObject *
 OSError_str(PyOSErrorObject *self)
 {
+#define OR_NONE(x) ((x)?(x):Py_None)
 #ifdef MS_WINDOWS
     /* If available, winerror has the priority over myerrno */
-    if (self->winerror && self->filename)
-        return PyUnicode_FromFormat("[WinError %S] %S: %R",
-                                    self->winerror ? self->winerror: Py_None,
-                                    self->strerror ? self->strerror: Py_None,
-                                    self->filename);
+    if (self->winerror && self->filename) {
+        if (self->filename2) {
+            return PyUnicode_FromFormat("[WinError %S] %S: %R -> %R",
+                                        OR_NONE(self->winerror),
+                                        OR_NONE(self->strerror),
+                                        self->filename,
+                                        self->filename2);
+        } else {
+            return PyUnicode_FromFormat("[WinError %S] %S: %R",
+                                        OR_NONE(self->winerror),
+                                        OR_NONE(self->strerror),
+                                        self->filename);
+        }
+    }
     if (self->winerror && self->strerror)
         return PyUnicode_FromFormat("[WinError %S] %S",
                                     self->winerror ? self->winerror: Py_None,
                                     self->strerror ? self->strerror: Py_None);
 #endif
-    if (self->filename)
-        return PyUnicode_FromFormat("[Errno %S] %S: %R",
-                                    self->myerrno ? self->myerrno: Py_None,
-                                    self->strerror ? self->strerror: Py_None,
-                                    self->filename);
+    if (self->filename) {
+        if (self->filename2) {
+            return PyUnicode_FromFormat("[Errno %S] %S: %R -> %R",
+                                        OR_NONE(self->myerrno),
+                                        OR_NONE(self->strerror),
+                                        self->filename,
+                                        self->filename2);
+        } else {
+            return PyUnicode_FromFormat("[Errno %S] %S: %R",
+                                        OR_NONE(self->myerrno),
+                                        OR_NONE(self->strerror),
+                                        self->filename);
+        }
+    }
     if (self->myerrno && self->strerror)
         return PyUnicode_FromFormat("[Errno %S] %S",
                                     self->myerrno ? self->myerrno: Py_None,
@@ -1046,7 +1081,8 @@ OSError_reduce(PyOSErrorObject *self)
     /* self->args is only the first two real arguments if there was a
      * file name given to OSError. */
     if (PyTuple_GET_SIZE(args) == 2 && self->filename) {
-        args = PyTuple_New(3);
+        Py_ssize_t size = self->filename2 ? 5 : 3;
+        args = PyTuple_New(size);
         if (!args)
             return NULL;
 
@@ -1060,6 +1096,20 @@ OSError_reduce(PyOSErrorObject *self)
 
         Py_INCREF(self->filename);
         PyTuple_SET_ITEM(args, 2, self->filename);
+
+        if (self->filename2) {
+            /*
+             * This tuple is essentially used as OSError(*args).
+             * So, to recreate filename2, we need to pass in
+             * winerror as well.
+             */
+            Py_INCREF(Py_None);
+            PyTuple_SET_ITEM(args, 3, Py_None);
+
+            /* filename2 */
+            Py_INCREF(self->filename2);
+            PyTuple_SET_ITEM(args, 4, self->filename2);
+        }
     } else
         Py_INCREF(args);
 
@@ -1099,6 +1149,8 @@ static PyMemberDef OSError_members[] = {
         PyDoc_STR("exception strerror")},
     {"filename", T_OBJECT, offsetof(PyOSErrorObject, filename), 0,
         PyDoc_STR("exception filename")},
+    {"filename2", T_OBJECT, offsetof(PyOSErrorObject, filename2), 0,
+        PyDoc_STR("second exception filename")},
 #ifdef MS_WINDOWS
     {"winerror", T_OBJECT, offsetof(PyOSErrorObject, winerror), 0,
         PyDoc_STR("Win32 exception code")},
@@ -2327,7 +2379,7 @@ PyObject *PyExc_RecursionErrorInst = NULL;
     }
 
 #ifdef MS_WINDOWS
-#include <Winsock2.h>
+#include <winsock2.h>
 /* The following constants were added to errno.h in VS2010 but have
    preferred WSA equivalents. */
 #undef EADDRINUSE
@@ -2471,9 +2523,6 @@ _PyExc_Init(PyObject *bltinmod)
 #ifdef MS_WINDOWS
     INIT_ALIAS(WindowsError, OSError)
 #endif
-#ifdef __VMS
-    INIT_ALIAS(VMSError, OSError)
-#endif
     POST_INIT(EOFError)
     POST_INIT(RuntimeError)
     POST_INIT(NotImplementedError)
@@ -2590,4 +2639,135 @@ _PyExc_Fini(void)
     Py_CLEAR(PyExc_RecursionErrorInst);
     free_preallocated_memerrors();
     Py_CLEAR(errnomap);
+}
+
+/* Helper to do the equivalent of "raise X from Y" in C, but always using
+ * the current exception rather than passing one in.
+ *
+ * We currently limit this to *only* exceptions that use the BaseException
+ * tp_init and tp_new methods, since we can be reasonably sure we can wrap
+ * those correctly without losing data and without losing backwards
+ * compatibility.
+ *
+ * We also aim to rule out *all* exceptions that might be storing additional
+ * state, whether by having a size difference relative to BaseException,
+ * additional arguments passed in during construction or by having a
+ * non-empty instance dict.
+ *
+ * We need to be very careful with what we wrap, since changing types to
+ * a broader exception type would be backwards incompatible for
+ * existing codecs, and with different init or new method implementations
+ * may either not support instantiation with PyErr_Format or lose
+ * information when instantiated that way.
+ *
+ * XXX (ncoghlan): This could be made more comprehensive by exploiting the
+ * fact that exceptions are expected to support pickling. If more builtin
+ * exceptions (e.g. AttributeError) start to be converted to rich
+ * exceptions with additional attributes, that's probably a better approach
+ * to pursue over adding special cases for particular stateful subclasses.
+ *
+ * Returns a borrowed reference to the new exception (if any), NULL if the
+ * existing exception was left in place.
+ */
+PyObject *
+_PyErr_TrySetFromCause(const char *format, ...)
+{
+    PyObject* msg_prefix;
+    PyObject *exc, *val, *tb;
+    PyTypeObject *caught_type;
+    PyObject **dictptr;
+    PyObject *instance_args;
+    Py_ssize_t num_args, caught_type_size, base_exc_size;
+    PyObject *new_exc, *new_val, *new_tb;
+    va_list vargs;
+    int same_basic_size;
+
+    PyErr_Fetch(&exc, &val, &tb);
+    caught_type = (PyTypeObject *)exc;
+    /* Ensure type info indicates no extra state is stored at the C level
+     * and that the type can be reinstantiated using PyErr_Format
+     */
+    caught_type_size = caught_type->tp_basicsize;
+    base_exc_size = _PyExc_BaseException.tp_basicsize;
+    same_basic_size = (
+        caught_type_size == base_exc_size ||
+        (PyType_SUPPORTS_WEAKREFS(caught_type) &&
+            (caught_type_size == base_exc_size + sizeof(PyObject *))
+        )
+    );
+    if (caught_type->tp_init != (initproc)BaseException_init ||
+        caught_type->tp_new != BaseException_new ||
+        !same_basic_size ||
+        caught_type->tp_itemsize != _PyExc_BaseException.tp_itemsize) {
+        /* We can't be sure we can wrap this safely, since it may contain
+         * more state than just the exception type. Accordingly, we just
+         * leave it alone.
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* Check the args are empty or contain a single string */
+    PyErr_NormalizeException(&exc, &val, &tb);
+    instance_args = ((PyBaseExceptionObject *)val)->args;
+    num_args = PyTuple_GET_SIZE(instance_args);
+    if (num_args > 1 ||
+        (num_args == 1 &&
+         !PyUnicode_CheckExact(PyTuple_GET_ITEM(instance_args, 0)))) {
+        /* More than 1 arg, or the one arg we do have isn't a string
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* Ensure the instance dict is also empty */
+    dictptr = _PyObject_GetDictPtr(val);
+    if (dictptr != NULL && *dictptr != NULL &&
+        PyObject_Length(*dictptr) > 0) {
+        /* While we could potentially copy a non-empty instance dictionary
+         * to the replacement exception, for now we take the more
+         * conservative path of leaving exceptions with attributes set
+         * alone.
+         */
+        PyErr_Restore(exc, val, tb);
+        return NULL;
+    }
+
+    /* For exceptions that we can wrap safely, we chain the original
+     * exception to a new one of the exact same type with an
+     * error message that mentions the additional details and the
+     * original exception.
+     *
+     * It would be nice to wrap OSError and various other exception
+     * types as well, but that's quite a bit trickier due to the extra
+     * state potentially stored on OSError instances.
+     */
+    /* Ensure the traceback is set correctly on the existing exception */
+    if (tb != NULL) {
+        PyException_SetTraceback(val, tb);
+        Py_DECREF(tb);
+    }
+
+#ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+#else
+    va_start(vargs);
+#endif
+    msg_prefix = PyUnicode_FromFormatV(format, vargs);
+    va_end(vargs);
+    if (msg_prefix == NULL) {
+        Py_DECREF(exc);
+        Py_DECREF(val);
+        return NULL;
+    }
+
+    PyErr_Format(exc, "%U (%s: %S)",
+                 msg_prefix, Py_TYPE(val)->tp_name, val);
+    Py_DECREF(exc);
+    Py_DECREF(msg_prefix);
+    PyErr_Fetch(&new_exc, &new_val, &new_tb);
+    PyErr_NormalizeException(&new_exc, &new_val, &new_tb);
+    PyException_SetCause(new_val, val);
+    PyErr_Restore(new_exc, new_val, new_tb);
+    return new_val;
 }

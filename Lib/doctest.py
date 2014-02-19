@@ -62,6 +62,7 @@ __all__ = [
     'REPORT_NDIFF',
     'REPORT_ONLY_FIRST_FAILURE',
     'REPORTING_FLAGS',
+    'FAIL_FAST',
     # 1. Utility Functions
     # 2. Example & DocTest
     'Example',
@@ -92,6 +93,7 @@ __all__ = [
 ]
 
 import __future__
+import argparse
 import difflib
 import inspect
 import linecache
@@ -150,11 +152,13 @@ REPORT_UDIFF = register_optionflag('REPORT_UDIFF')
 REPORT_CDIFF = register_optionflag('REPORT_CDIFF')
 REPORT_NDIFF = register_optionflag('REPORT_NDIFF')
 REPORT_ONLY_FIRST_FAILURE = register_optionflag('REPORT_ONLY_FIRST_FAILURE')
+FAIL_FAST = register_optionflag('FAIL_FAST')
 
 REPORTING_FLAGS = (REPORT_UDIFF |
                    REPORT_CDIFF |
                    REPORT_NDIFF |
-                   REPORT_ONLY_FIRST_FAILURE)
+                   REPORT_ONLY_FIRST_FAILURE |
+                   FAIL_FAST)
 
 # Special string markers for use in `want` strings:
 BLANKLINE_MARKER = '<BLANKLINE>'
@@ -212,7 +216,7 @@ def _load_testfile(filename, package, module_relative, encoding):
     if module_relative:
         package = _normalize_module(package, 3)
         filename = _module_relative_path(package, filename)
-        if hasattr(package, '__loader__'):
+        if getattr(package, '__loader__', None) is not None:
             if hasattr(package.__loader__, 'get_data'):
                 file_contents = package.__loader__.get_data(filename)
                 file_contents = file_contents.decode(encoding)
@@ -940,6 +944,14 @@ class DocTestFinder:
             return module is inspect.getmodule(object)
         elif inspect.isfunction(object):
             return module.__dict__ is object.__globals__
+        elif inspect.ismethoddescriptor(object):
+            if hasattr(object, '__objclass__'):
+                obj_mod = object.__objclass__.__module__
+            elif hasattr(object, '__module__'):
+                obj_mod = object.__module__
+            else:
+                return True # [XX] no easy way to tell otherwise
+            return module.__name__ == obj_mod
         elif inspect.isclass(object):
             return module.__name__ == object.__module__
         elif hasattr(object, '__module__'):
@@ -972,7 +984,7 @@ class DocTestFinder:
             for valname, val in obj.__dict__.items():
                 valname = '%s.%s' % (name, valname)
                 # Recurse to functions & classes.
-                if ((inspect.isfunction(val) or inspect.isclass(val)) and
+                if ((inspect.isroutine(val) or inspect.isclass(val)) and
                     self._from_module(module, val)):
                     self._find(tests, val, valname, module, source_lines,
                                globs, seen)
@@ -984,9 +996,8 @@ class DocTestFinder:
                     raise ValueError("DocTestFinder.find: __test__ keys "
                                      "must be strings: %r" %
                                      (type(valname),))
-                if not (inspect.isfunction(val) or inspect.isclass(val) or
-                        inspect.ismethod(val) or inspect.ismodule(val) or
-                        isinstance(val, str)):
+                if not (inspect.isroutine(val) or inspect.isclass(val) or
+                        inspect.ismodule(val) or isinstance(val, str)):
                     raise ValueError("DocTestFinder.find: __test__ values "
                                      "must be strings, functions, methods, "
                                      "classes, or modules: %r" %
@@ -1005,7 +1016,7 @@ class DocTestFinder:
                     val = getattr(obj, valname).__func__
 
                 # Recurse to methods, properties, and nested classes.
-                if ((inspect.isfunction(val) or inspect.isclass(val) or
+                if ((inspect.isroutine(val) or inspect.isclass(val) or
                       isinstance(val, property)) and
                       self._from_module(module, val)):
                     valname = '%s.%s' % (name, valname)
@@ -1366,6 +1377,9 @@ class DocTestRunner:
                 failures += 1
             else:
                 assert False, ("unknown outcome", outcome)
+
+            if failures and self.optionflags & FAIL_FAST:
+                break
 
         # Restore the option flags (in case they were modified)
         self.optionflags = original_optionflags
@@ -2308,6 +2322,12 @@ class SkipDocTestCase(DocTestCase):
     __str__ = shortDescription
 
 
+class _DocTestSuite(unittest.TestSuite):
+
+    def _removeTestAtIndex(self, index):
+        pass
+
+
 def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
                  **options):
     """
@@ -2353,7 +2373,7 @@ def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
 
     if not tests and sys.flags.optimize >=2:
         # Skip doctests when running with -O2
-        suite = unittest.TestSuite()
+        suite = _DocTestSuite()
         suite.addTest(SkipDocTestCase(module))
         return suite
     elif not tests:
@@ -2367,7 +2387,7 @@ def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
         raise ValueError(module, "has no docstrings")
 
     tests.sort()
-    suite = unittest.TestSuite()
+    suite = _DocTestSuite()
 
     for test in tests:
         if len(test.examples) == 0:
@@ -2477,7 +2497,7 @@ def DocFileSuite(*paths, **kw):
     encoding
       An encoding that will be used to convert the files to unicode.
     """
-    suite = unittest.TestSuite()
+    suite = _DocTestSuite()
 
     # We do this here so that _normalize_module is called at the right
     # level.  If it were called in DocFileTest, then this function
@@ -2727,13 +2747,30 @@ __test__ = {"_TestClass": _TestClass,
 
 
 def _test():
-    testfiles = [arg for arg in sys.argv[1:] if arg and arg[0] != '-']
-    if not testfiles:
-        name = os.path.basename(sys.argv[0])
-        if '__loader__' in globals():          # python -m
-            name, _ = os.path.splitext(name)
-        print("usage: {0} [-v] file ...".format(name))
-        return 2
+    parser = argparse.ArgumentParser(description="doctest runner")
+    parser.add_argument('-v', '--verbose', action='store_true', default=False,
+                        help='print very verbose output for all tests')
+    parser.add_argument('-o', '--option', action='append',
+                        choices=OPTIONFLAGS_BY_NAME.keys(), default=[],
+                        help=('specify a doctest option flag to apply'
+                              ' to the test run; may be specified more'
+                              ' than once to apply multiple options'))
+    parser.add_argument('-f', '--fail-fast', action='store_true',
+                        help=('stop running tests after first failure (this'
+                              ' is a shorthand for -o FAIL_FAST, and is'
+                              ' in addition to any other -o options)'))
+    parser.add_argument('file', nargs='+',
+                        help='file containing the tests to run')
+    args = parser.parse_args()
+    testfiles = args.file
+    # Verbose used to be handled by the "inspect argv" magic in DocTestRunner,
+    # but since we are using argparse we are passing it manually now.
+    verbose = args.verbose
+    options = 0
+    for option in args.option:
+        options |= OPTIONFLAGS_BY_NAME[option]
+    if args.fail_fast:
+        options |= FAIL_FAST
     for filename in testfiles:
         if filename.endswith(".py"):
             # It is a module -- insert its dir into sys.path and try to
@@ -2743,9 +2780,10 @@ def _test():
             sys.path.insert(0, dirname)
             m = __import__(filename[:-3])
             del sys.path[0]
-            failures, _ = testmod(m)
+            failures, _ = testmod(m, verbose=verbose, optionflags=options)
         else:
-            failures, _ = testfile(filename, module_relative=False)
+            failures, _ = testfile(filename, module_relative=False,
+                                     verbose=verbose, optionflags=options)
         if failures:
             return 1
     return 0

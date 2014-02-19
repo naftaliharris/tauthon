@@ -11,6 +11,8 @@ typedef struct {
     PyObject *md_dict;
     struct PyModuleDef *md_def;
     void *md_state;
+    PyObject *md_weaklist;
+    PyObject *md_name;  /* for logging purposes after md_dict is cleared */
 } PyModuleObject;
 
 static PyMemberDef module_members[] = {
@@ -26,6 +28,35 @@ static PyTypeObject moduledef_type = {
 };
 
 
+static int
+module_init_dict(PyModuleObject *mod, PyObject *md_dict,
+                 PyObject *name, PyObject *doc)
+{
+    if (md_dict == NULL)
+        return -1;
+    if (doc == NULL)
+        doc = Py_None;
+
+    if (PyDict_SetItemString(md_dict, "__name__", name) != 0)
+        return -1;
+    if (PyDict_SetItemString(md_dict, "__doc__", doc) != 0)
+        return -1;
+    if (PyDict_SetItemString(md_dict, "__package__", Py_None) != 0)
+        return -1;
+    if (PyDict_SetItemString(md_dict, "__loader__", Py_None) != 0)
+        return -1;
+    if (PyDict_SetItemString(md_dict, "__spec__", Py_None) != 0)
+        return -1;
+    if (PyUnicode_CheckExact(name)) {
+        Py_INCREF(name);
+        Py_XDECREF(mod->md_name);
+        mod->md_name = name;
+    }
+
+    return 0;
+}
+
+
 PyObject *
 PyModule_NewObject(PyObject *name)
 {
@@ -35,14 +66,10 @@ PyModule_NewObject(PyObject *name)
         return NULL;
     m->md_def = NULL;
     m->md_state = NULL;
+    m->md_weaklist = NULL;
+    m->md_name = NULL;
     m->md_dict = PyDict_New();
-    if (m->md_dict == NULL)
-        goto fail;
-    if (PyDict_SetItemString(m->md_dict, "__name__", name) != 0)
-        goto fail;
-    if (PyDict_SetItemString(m->md_dict, "__doc__", Py_None) != 0)
-        goto fail;
-    if (PyDict_SetItemString(m->md_dict, "__package__", Py_None) != 0)
+    if (module_init_dict(m, m->md_dict, name, NULL) != 0)
         goto fail;
     PyObject_GC_Track(m);
     return (PyObject *)m;
@@ -272,6 +299,14 @@ PyModule_GetState(PyObject* m)
 void
 _PyModule_Clear(PyObject *m)
 {
+    PyObject *d = ((PyModuleObject *)m)->md_dict;
+    if (d != NULL)
+        _PyModule_ClearDict(d);
+}
+
+void
+_PyModule_ClearDict(PyObject *d)
+{
     /* To make the execution order of destructors for global
        objects a bit more predictable, we first zap all objects
        whose name starts with a single underscore, before we clear
@@ -281,11 +316,6 @@ _PyModule_Clear(PyObject *m)
 
     Py_ssize_t pos;
     PyObject *key, *value;
-    PyObject *d;
-
-    d = ((PyModuleObject *)m)->md_dict;
-    if (d == NULL)
-        return;
 
     /* First, clear only names starting with a single underscore */
     pos = 0;
@@ -349,9 +379,7 @@ module_init(PyModuleObject *m, PyObject *args, PyObject *kwds)
             return -1;
         m->md_dict = dict;
     }
-    if (PyDict_SetItemString(dict, "__name__", name) < 0)
-        return -1;
-    if (PyDict_SetItemString(dict, "__doc__", doc) < 0)
+    if (module_init_dict(m, dict, name, doc) < 0)
         return -1;
     return 0;
 }
@@ -360,12 +388,15 @@ static void
 module_dealloc(PyModuleObject *m)
 {
     PyObject_GC_UnTrack(m);
+    if (Py_VerboseFlag && m->md_name) {
+        PySys_FormatStderr("# destroy %S\n", m->md_name);
+    }
+    if (m->md_weaklist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) m);
     if (m->md_def && m->md_def->m_free)
         m->md_def->m_free(m);
-    if (m->md_dict != NULL) {
-        _PyModule_Clear((PyObject *)m);
-        Py_DECREF(m->md_dict);
-    }
+    Py_XDECREF(m->md_dict);
+    Py_XDECREF(m->md_name);
     if (m->md_state != NULL)
         PyMem_FREE(m->md_state);
     Py_TYPE(m)->tp_free((PyObject *)m);
@@ -374,55 +405,10 @@ module_dealloc(PyModuleObject *m)
 static PyObject *
 module_repr(PyModuleObject *m)
 {
-    PyObject *name, *filename, *repr, *loader = NULL;
+    PyThreadState *tstate = PyThreadState_GET();
+    PyInterpreterState *interp = tstate->interp;
 
-    /* See if the module has an __loader__.  If it does, give the loader the
-     * first shot at producing a repr for the module.
-     */
-    if (m->md_dict != NULL) {
-        loader = PyDict_GetItemString(m->md_dict, "__loader__");
-    }
-    if (loader != NULL) {
-        repr = PyObject_CallMethod(loader, "module_repr", "(O)",
-                                   (PyObject *)m, NULL);
-        if (repr == NULL) {
-            PyErr_Clear();
-        }
-        else {
-            return repr;
-        }
-    }
-    /* __loader__.module_repr(m) did not provide us with a repr.  Next, see if
-     * the module has an __file__.  If it doesn't then use repr(__loader__) if
-     * it exists, otherwise, just use module.__name__.
-     */
-    name = PyModule_GetNameObject((PyObject *)m);
-    if (name == NULL) {
-        PyErr_Clear();
-        name = PyUnicode_FromStringAndSize("?", 1);
-        if (name == NULL)
-            return NULL;
-    }
-    filename = PyModule_GetFilenameObject((PyObject *)m);
-    if (filename == NULL) {
-        PyErr_Clear();
-        /* There's no m.__file__, so if there was an __loader__, use that in
-         * the repr, otherwise, the only thing you can use is m.__name__
-         */
-        if (loader == NULL) {
-            repr = PyUnicode_FromFormat("<module %R>", name);
-        }
-        else {
-            repr = PyUnicode_FromFormat("<module %R (%R)>", name, loader);
-        }
-    }
-    /* Finally, use m.__file__ */
-    else {
-        repr = PyUnicode_FromFormat("<module %R from %R>", name, filename);
-        Py_DECREF(filename);
-    }
-    Py_DECREF(name);
-    return repr;
+    return PyObject_CallMethod(interp->importlib, "_module_repr", "O", m);
 }
 
 static int
@@ -511,7 +497,7 @@ PyTypeObject PyModule_Type = {
     (traverseproc)module_traverse,              /* tp_traverse */
     (inquiry)module_clear,                      /* tp_clear */
     0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
+    offsetof(PyModuleObject, md_weaklist),      /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     module_methods,                             /* tp_methods */
