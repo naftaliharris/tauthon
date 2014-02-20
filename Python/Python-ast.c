@@ -271,6 +271,10 @@ static PyTypeObject *Bytes_type;
 static char *Bytes_fields[]={
     "s",
 };
+static PyTypeObject *NameConstant_type;
+static char *NameConstant_fields[]={
+    "value",
+};
 static PyTypeObject *Ellipsis_type;
 static PyTypeObject *Attribute_type;
 _Py_IDENTIFIER(attr);
@@ -408,24 +412,24 @@ static char *ExceptHandler_fields[]={
 static PyTypeObject *arguments_type;
 static PyObject* ast2obj_arguments(void*);
 _Py_IDENTIFIER(vararg);
-_Py_IDENTIFIER(varargannotation);
 _Py_IDENTIFIER(kwonlyargs);
-_Py_IDENTIFIER(kwarg);
-_Py_IDENTIFIER(kwargannotation);
-_Py_IDENTIFIER(defaults);
 _Py_IDENTIFIER(kw_defaults);
+_Py_IDENTIFIER(kwarg);
+_Py_IDENTIFIER(defaults);
 static char *arguments_fields[]={
     "args",
     "vararg",
-    "varargannotation",
     "kwonlyargs",
-    "kwarg",
-    "kwargannotation",
-    "defaults",
     "kw_defaults",
+    "kwarg",
+    "defaults",
 };
 static PyTypeObject *arg_type;
 static PyObject* ast2obj_arg(void*);
+static char *arg_attributes[] = {
+    "lineno",
+    "col_offset",
+};
 _Py_IDENTIFIER(arg);
 _Py_IDENTIFIER(annotation);
 static char *arg_fields[]={
@@ -673,6 +677,7 @@ static PyObject* ast2obj_object(void *o)
     Py_INCREF((PyObject*)o);
     return (PyObject*)o;
 }
+#define ast2obj_singleton ast2obj_object
 #define ast2obj_identifier ast2obj_object
 #define ast2obj_string ast2obj_object
 #define ast2obj_bytes ast2obj_object
@@ -683,6 +688,17 @@ static PyObject* ast2obj_int(long b)
 }
 
 /* Conversion Python -> AST */
+
+static int obj2ast_singleton(PyObject *obj, PyObject** out, PyArena* arena)
+{
+    if (obj != Py_None && obj != Py_True && obj != Py_False) {
+        PyErr_SetString(PyExc_ValueError,
+                        "AST singleton must be True, False, or None");
+        return 1;
+    }
+    *out = obj;
+    return 0;
+}
 
 static int obj2ast_object(PyObject* obj, PyObject** out, PyArena* arena)
 {
@@ -756,6 +772,19 @@ static int add_ast_fields(void)
     }
     Py_DECREF(empty_tuple);
     return 0;
+}
+
+static int exists_not_none(PyObject *obj, _Py_Identifier *id)
+{
+    int isnone;
+    PyObject *attr = _PyObject_GetAttrId(obj, id);
+    if (!attr) {
+        PyErr_Clear();
+        return 0;
+    }
+    isnone = attr == Py_None;
+    Py_DECREF(attr);
+    return !isnone;
 }
 
 
@@ -862,6 +891,9 @@ static int init_types(void)
     if (!Str_type) return 0;
     Bytes_type = make_type("Bytes", expr_type, Bytes_fields, 1);
     if (!Bytes_type) return 0;
+    NameConstant_type = make_type("NameConstant", expr_type,
+                                  NameConstant_fields, 1);
+    if (!NameConstant_type) return 0;
     Ellipsis_type = make_type("Ellipsis", expr_type, NULL, 0);
     if (!Ellipsis_type) return 0;
     Attribute_type = make_type("Attribute", expr_type, Attribute_fields, 3);
@@ -1039,6 +1071,7 @@ static int init_types(void)
     comprehension_type = make_type("comprehension", &AST_type,
                                    comprehension_fields, 3);
     if (!comprehension_type) return 0;
+    if (!add_attributes(comprehension_type, NULL, 0)) return 0;
     excepthandler_type = make_type("excepthandler", &AST_type, NULL, 0);
     if (!excepthandler_type) return 0;
     if (!add_attributes(excepthandler_type, excepthandler_attributes, 2))
@@ -1046,16 +1079,21 @@ static int init_types(void)
     ExceptHandler_type = make_type("ExceptHandler", excepthandler_type,
                                    ExceptHandler_fields, 3);
     if (!ExceptHandler_type) return 0;
-    arguments_type = make_type("arguments", &AST_type, arguments_fields, 8);
+    arguments_type = make_type("arguments", &AST_type, arguments_fields, 6);
     if (!arguments_type) return 0;
+    if (!add_attributes(arguments_type, NULL, 0)) return 0;
     arg_type = make_type("arg", &AST_type, arg_fields, 2);
     if (!arg_type) return 0;
+    if (!add_attributes(arg_type, arg_attributes, 2)) return 0;
     keyword_type = make_type("keyword", &AST_type, keyword_fields, 2);
     if (!keyword_type) return 0;
+    if (!add_attributes(keyword_type, NULL, 0)) return 0;
     alias_type = make_type("alias", &AST_type, alias_fields, 2);
     if (!alias_type) return 0;
+    if (!add_attributes(alias_type, NULL, 0)) return 0;
     withitem_type = make_type("withitem", &AST_type, withitem_fields, 2);
     if (!withitem_type) return 0;
+    if (!add_attributes(withitem_type, NULL, 0)) return 0;
     initialized = 1;
     return 1;
 }
@@ -1923,6 +1961,25 @@ Bytes(bytes s, int lineno, int col_offset, PyArena *arena)
 }
 
 expr_ty
+NameConstant(singleton value, int lineno, int col_offset, PyArena *arena)
+{
+    expr_ty p;
+    if (!value) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field value is required for NameConstant");
+        return NULL;
+    }
+    p = (expr_ty)PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = NameConstant_kind;
+    p->v.NameConstant.value = value;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    return p;
+}
+
+expr_ty
 Ellipsis(int lineno, int col_offset, PyArena *arena)
 {
     expr_ty p;
@@ -2177,9 +2234,8 @@ ExceptHandler(expr_ty type, identifier name, asdl_seq * body, int lineno, int
 }
 
 arguments_ty
-arguments(asdl_seq * args, identifier vararg, expr_ty varargannotation,
-          asdl_seq * kwonlyargs, identifier kwarg, expr_ty kwargannotation,
-          asdl_seq * defaults, asdl_seq * kw_defaults, PyArena *arena)
+arguments(asdl_seq * args, arg_ty vararg, asdl_seq * kwonlyargs, asdl_seq *
+          kw_defaults, arg_ty kwarg, asdl_seq * defaults, PyArena *arena)
 {
     arguments_ty p;
     p = (arguments_ty)PyArena_Malloc(arena, sizeof(*p));
@@ -2187,12 +2243,10 @@ arguments(asdl_seq * args, identifier vararg, expr_ty varargannotation,
         return NULL;
     p->args = args;
     p->vararg = vararg;
-    p->varargannotation = varargannotation;
     p->kwonlyargs = kwonlyargs;
-    p->kwarg = kwarg;
-    p->kwargannotation = kwargannotation;
-    p->defaults = defaults;
     p->kw_defaults = kw_defaults;
+    p->kwarg = kwarg;
+    p->defaults = defaults;
     return p;
 }
 
@@ -2943,6 +2997,15 @@ ast2obj_expr(void* _o)
             goto failed;
         Py_DECREF(value);
         break;
+    case NameConstant_kind:
+        result = PyType_GenericNew(NameConstant_type, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_singleton(o->v.NameConstant.value);
+        if (!value) goto failed;
+        if (_PyObject_SetAttrId(result, &PyId_value, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
     case Ellipsis_kind:
         result = PyType_GenericNew(Ellipsis_type, NULL, NULL);
         if (!result) goto failed;
@@ -3361,14 +3424,9 @@ ast2obj_arguments(void* _o)
     if (_PyObject_SetAttrId(result, &PyId_args, value) == -1)
         goto failed;
     Py_DECREF(value);
-    value = ast2obj_identifier(o->vararg);
+    value = ast2obj_arg(o->vararg);
     if (!value) goto failed;
     if (_PyObject_SetAttrId(result, &PyId_vararg, value) == -1)
-        goto failed;
-    Py_DECREF(value);
-    value = ast2obj_expr(o->varargannotation);
-    if (!value) goto failed;
-    if (_PyObject_SetAttrId(result, &PyId_varargannotation, value) == -1)
         goto failed;
     Py_DECREF(value);
     value = ast2obj_list(o->kwonlyargs, ast2obj_arg);
@@ -3376,24 +3434,19 @@ ast2obj_arguments(void* _o)
     if (_PyObject_SetAttrId(result, &PyId_kwonlyargs, value) == -1)
         goto failed;
     Py_DECREF(value);
-    value = ast2obj_identifier(o->kwarg);
+    value = ast2obj_list(o->kw_defaults, ast2obj_expr);
     if (!value) goto failed;
-    if (_PyObject_SetAttrId(result, &PyId_kwarg, value) == -1)
+    if (_PyObject_SetAttrId(result, &PyId_kw_defaults, value) == -1)
         goto failed;
     Py_DECREF(value);
-    value = ast2obj_expr(o->kwargannotation);
+    value = ast2obj_arg(o->kwarg);
     if (!value) goto failed;
-    if (_PyObject_SetAttrId(result, &PyId_kwargannotation, value) == -1)
+    if (_PyObject_SetAttrId(result, &PyId_kwarg, value) == -1)
         goto failed;
     Py_DECREF(value);
     value = ast2obj_list(o->defaults, ast2obj_expr);
     if (!value) goto failed;
     if (_PyObject_SetAttrId(result, &PyId_defaults, value) == -1)
-        goto failed;
-    Py_DECREF(value);
-    value = ast2obj_list(o->kw_defaults, ast2obj_expr);
-    if (!value) goto failed;
-    if (_PyObject_SetAttrId(result, &PyId_kw_defaults, value) == -1)
         goto failed;
     Py_DECREF(value);
     return result;
@@ -3423,6 +3476,16 @@ ast2obj_arg(void* _o)
     value = ast2obj_expr(o->annotation);
     if (!value) goto failed;
     if (_PyObject_SetAttrId(result, &PyId_annotation, value) == -1)
+        goto failed;
+    Py_DECREF(value);
+    value = ast2obj_int(o->lineno);
+    if (!value) goto failed;
+    if (_PyObject_SetAttrId(result, &PyId_lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = ast2obj_int(o->col_offset);
+    if (!value) goto failed;
+    if (_PyObject_SetAttrId(result, &PyId_col_offset, value) < 0)
         goto failed;
     Py_DECREF(value);
     return result;
@@ -3549,7 +3612,7 @@ obj2ast_mod(PyObject* obj, mod_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -3584,7 +3647,7 @@ obj2ast_mod(PyObject* obj, mod_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -3641,7 +3704,7 @@ obj2ast_mod(PyObject* obj, mod_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -3744,7 +3807,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -3768,7 +3831,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            decorator_list = asdl_seq_new(len, arena);
+            decorator_list = _Py_asdl_seq_new(len, arena);
             if (decorator_list == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -3781,7 +3844,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
             PyErr_SetString(PyExc_TypeError, "required field \"decorator_list\" missing from FunctionDef");
             return 1;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_returns)) {
+        if (exists_not_none(obj, &PyId_returns)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_returns);
             if (tmp == NULL) goto failed;
@@ -3831,7 +3894,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            bases = asdl_seq_new(len, arena);
+            bases = _Py_asdl_seq_new(len, arena);
             if (bases == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -3855,7 +3918,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            keywords = asdl_seq_new(len, arena);
+            keywords = _Py_asdl_seq_new(len, arena);
             if (keywords == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 keyword_ty value;
@@ -3868,7 +3931,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
             PyErr_SetString(PyExc_TypeError, "required field \"keywords\" missing from ClassDef");
             return 1;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_starargs)) {
+        if (exists_not_none(obj, &PyId_starargs)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_starargs);
             if (tmp == NULL) goto failed;
@@ -3878,7 +3941,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
         } else {
             starargs = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_kwargs)) {
+        if (exists_not_none(obj, &PyId_kwargs)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_kwargs);
             if (tmp == NULL) goto failed;
@@ -3899,7 +3962,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -3923,7 +3986,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            decorator_list = asdl_seq_new(len, arena);
+            decorator_list = _Py_asdl_seq_new(len, arena);
             if (decorator_list == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -3948,7 +4011,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
     if (isinstance) {
         expr_ty value;
 
-        if (_PyObject_HasAttrId(obj, &PyId_value)) {
+        if (exists_not_none(obj, &PyId_value)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_value);
             if (tmp == NULL) goto failed;
@@ -3980,7 +4043,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            targets = asdl_seq_new(len, arena);
+            targets = _Py_asdl_seq_new(len, arena);
             if (targets == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -4016,7 +4079,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            targets = asdl_seq_new(len, arena);
+            targets = _Py_asdl_seq_new(len, arena);
             if (targets == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -4133,7 +4196,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4157,7 +4220,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            orelse = asdl_seq_new(len, arena);
+            orelse = _Py_asdl_seq_new(len, arena);
             if (orelse == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4205,7 +4268,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4229,7 +4292,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            orelse = asdl_seq_new(len, arena);
+            orelse = _Py_asdl_seq_new(len, arena);
             if (orelse == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4277,7 +4340,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4301,7 +4364,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            orelse = asdl_seq_new(len, arena);
+            orelse = _Py_asdl_seq_new(len, arena);
             if (orelse == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4337,7 +4400,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            items = asdl_seq_new(len, arena);
+            items = _Py_asdl_seq_new(len, arena);
             if (items == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 withitem_ty value;
@@ -4361,7 +4424,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4386,7 +4449,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
         expr_ty exc;
         expr_ty cause;
 
-        if (_PyObject_HasAttrId(obj, &PyId_exc)) {
+        if (exists_not_none(obj, &PyId_exc)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_exc);
             if (tmp == NULL) goto failed;
@@ -4396,7 +4459,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
         } else {
             exc = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_cause)) {
+        if (exists_not_none(obj, &PyId_cause)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_cause);
             if (tmp == NULL) goto failed;
@@ -4431,7 +4494,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4455,7 +4518,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            handlers = asdl_seq_new(len, arena);
+            handlers = _Py_asdl_seq_new(len, arena);
             if (handlers == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 excepthandler_ty value;
@@ -4479,7 +4542,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            orelse = asdl_seq_new(len, arena);
+            orelse = _Py_asdl_seq_new(len, arena);
             if (orelse == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4503,7 +4566,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            finalbody = asdl_seq_new(len, arena);
+            finalbody = _Py_asdl_seq_new(len, arena);
             if (finalbody == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -4540,7 +4603,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
             PyErr_SetString(PyExc_TypeError, "required field \"test\" missing from Assert");
             return 1;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_msg)) {
+        if (exists_not_none(obj, &PyId_msg)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_msg);
             if (tmp == NULL) goto failed;
@@ -4572,7 +4635,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            names = asdl_seq_new(len, arena);
+            names = _Py_asdl_seq_new(len, arena);
             if (names == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 alias_ty value;
@@ -4598,7 +4661,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
         asdl_seq* names;
         int level;
 
-        if (_PyObject_HasAttrId(obj, &PyId_module)) {
+        if (exists_not_none(obj, &PyId_module)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_module);
             if (tmp == NULL) goto failed;
@@ -4619,7 +4682,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            names = asdl_seq_new(len, arena);
+            names = _Py_asdl_seq_new(len, arena);
             if (names == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 alias_ty value;
@@ -4632,7 +4695,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
             PyErr_SetString(PyExc_TypeError, "required field \"names\" missing from ImportFrom");
             return 1;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_level)) {
+        if (exists_not_none(obj, &PyId_level)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_level);
             if (tmp == NULL) goto failed;
@@ -4664,7 +4727,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            names = asdl_seq_new(len, arena);
+            names = _Py_asdl_seq_new(len, arena);
             if (names == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 identifier value;
@@ -4699,7 +4762,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            names = asdl_seq_new(len, arena);
+            names = _Py_asdl_seq_new(len, arena);
             if (names == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 identifier value;
@@ -4840,7 +4903,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            values = asdl_seq_new(len, arena);
+            values = _Py_asdl_seq_new(len, arena);
             if (values == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5036,7 +5099,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            keys = asdl_seq_new(len, arena);
+            keys = _Py_asdl_seq_new(len, arena);
             if (keys == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5060,7 +5123,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            values = asdl_seq_new(len, arena);
+            values = _Py_asdl_seq_new(len, arena);
             if (values == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5095,7 +5158,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            elts = asdl_seq_new(len, arena);
+            elts = _Py_asdl_seq_new(len, arena);
             if (elts == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5142,7 +5205,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            generators = asdl_seq_new(len, arena);
+            generators = _Py_asdl_seq_new(len, arena);
             if (generators == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 comprehension_ty value;
@@ -5189,7 +5252,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            generators = asdl_seq_new(len, arena);
+            generators = _Py_asdl_seq_new(len, arena);
             if (generators == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 comprehension_ty value;
@@ -5248,7 +5311,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            generators = asdl_seq_new(len, arena);
+            generators = _Py_asdl_seq_new(len, arena);
             if (generators == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 comprehension_ty value;
@@ -5295,7 +5358,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            generators = asdl_seq_new(len, arena);
+            generators = _Py_asdl_seq_new(len, arena);
             if (generators == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 comprehension_ty value;
@@ -5319,7 +5382,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
     if (isinstance) {
         expr_ty value;
 
-        if (_PyObject_HasAttrId(obj, &PyId_value)) {
+        if (exists_not_none(obj, &PyId_value)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_value);
             if (tmp == NULL) goto failed;
@@ -5386,7 +5449,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            ops = asdl_int_seq_new(len, arena);
+            ops = _Py_asdl_int_seq_new(len, arena);
             if (ops == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 cmpop_ty value;
@@ -5410,7 +5473,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            comparators = asdl_seq_new(len, arena);
+            comparators = _Py_asdl_seq_new(len, arena);
             if (comparators == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5460,7 +5523,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            args = asdl_seq_new(len, arena);
+            args = _Py_asdl_seq_new(len, arena);
             if (args == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5484,7 +5547,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            keywords = asdl_seq_new(len, arena);
+            keywords = _Py_asdl_seq_new(len, arena);
             if (keywords == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 keyword_ty value;
@@ -5497,7 +5560,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
             PyErr_SetString(PyExc_TypeError, "required field \"keywords\" missing from Call");
             return 1;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_starargs)) {
+        if (exists_not_none(obj, &PyId_starargs)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_starargs);
             if (tmp == NULL) goto failed;
@@ -5507,7 +5570,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
         } else {
             starargs = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_kwargs)) {
+        if (exists_not_none(obj, &PyId_kwargs)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_kwargs);
             if (tmp == NULL) goto failed;
@@ -5585,6 +5648,28 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
             return 1;
         }
         *out = Bytes(s, lineno, col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
+    isinstance = PyObject_IsInstance(obj, (PyObject*)NameConstant_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        singleton value;
+
+        if (_PyObject_HasAttrId(obj, &PyId_value)) {
+            int res;
+            tmp = _PyObject_GetAttrId(obj, &PyId_value);
+            if (tmp == NULL) goto failed;
+            res = obj2ast_singleton(tmp, &value, arena);
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        } else {
+            PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from NameConstant");
+            return 1;
+        }
+        *out = NameConstant(value, lineno, col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }
@@ -5777,7 +5862,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            elts = asdl_seq_new(len, arena);
+            elts = _Py_asdl_seq_new(len, arena);
             if (elts == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5824,7 +5909,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            elts = asdl_seq_new(len, arena);
+            elts = _Py_asdl_seq_new(len, arena);
             if (elts == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 expr_ty value;
@@ -5937,7 +6022,7 @@ obj2ast_slice(PyObject* obj, slice_ty* out, PyArena* arena)
         expr_ty upper;
         expr_ty step;
 
-        if (_PyObject_HasAttrId(obj, &PyId_lower)) {
+        if (exists_not_none(obj, &PyId_lower)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_lower);
             if (tmp == NULL) goto failed;
@@ -5947,7 +6032,7 @@ obj2ast_slice(PyObject* obj, slice_ty* out, PyArena* arena)
         } else {
             lower = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_upper)) {
+        if (exists_not_none(obj, &PyId_upper)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_upper);
             if (tmp == NULL) goto failed;
@@ -5957,7 +6042,7 @@ obj2ast_slice(PyObject* obj, slice_ty* out, PyArena* arena)
         } else {
             upper = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_step)) {
+        if (exists_not_none(obj, &PyId_step)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_step);
             if (tmp == NULL) goto failed;
@@ -5989,7 +6074,7 @@ obj2ast_slice(PyObject* obj, slice_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            dims = asdl_seq_new(len, arena);
+            dims = _Py_asdl_seq_new(len, arena);
             if (dims == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 slice_ty value;
@@ -6340,7 +6425,7 @@ obj2ast_comprehension(PyObject* obj, comprehension_ty* out, PyArena* arena)
             goto failed;
         }
         len = PyList_GET_SIZE(tmp);
-        ifs = asdl_seq_new(len, arena);
+        ifs = _Py_asdl_seq_new(len, arena);
         if (ifs == NULL) goto failed;
         for (i = 0; i < len; i++) {
             expr_ty value;
@@ -6404,7 +6489,7 @@ obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena* arena)
         identifier name;
         asdl_seq* body;
 
-        if (_PyObject_HasAttrId(obj, &PyId_type)) {
+        if (exists_not_none(obj, &PyId_type)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_type);
             if (tmp == NULL) goto failed;
@@ -6414,7 +6499,7 @@ obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena* arena)
         } else {
             type = NULL;
         }
-        if (_PyObject_HasAttrId(obj, &PyId_name)) {
+        if (exists_not_none(obj, &PyId_name)) {
             int res;
             tmp = _PyObject_GetAttrId(obj, &PyId_name);
             if (tmp == NULL) goto failed;
@@ -6435,7 +6520,7 @@ obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena* arena)
                 goto failed;
             }
             len = PyList_GET_SIZE(tmp);
-            body = asdl_seq_new(len, arena);
+            body = _Py_asdl_seq_new(len, arena);
             if (body == NULL) goto failed;
             for (i = 0; i < len; i++) {
                 stmt_ty value;
@@ -6464,13 +6549,11 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
 {
     PyObject* tmp = NULL;
     asdl_seq* args;
-    identifier vararg;
-    expr_ty varargannotation;
+    arg_ty vararg;
     asdl_seq* kwonlyargs;
-    identifier kwarg;
-    expr_ty kwargannotation;
-    asdl_seq* defaults;
     asdl_seq* kw_defaults;
+    arg_ty kwarg;
+    asdl_seq* defaults;
 
     if (_PyObject_HasAttrId(obj, &PyId_args)) {
         int res;
@@ -6483,7 +6566,7 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
             goto failed;
         }
         len = PyList_GET_SIZE(tmp);
-        args = asdl_seq_new(len, arena);
+        args = _Py_asdl_seq_new(len, arena);
         if (args == NULL) goto failed;
         for (i = 0; i < len; i++) {
             arg_ty value;
@@ -6496,25 +6579,15 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         PyErr_SetString(PyExc_TypeError, "required field \"args\" missing from arguments");
         return 1;
     }
-    if (_PyObject_HasAttrId(obj, &PyId_vararg)) {
+    if (exists_not_none(obj, &PyId_vararg)) {
         int res;
         tmp = _PyObject_GetAttrId(obj, &PyId_vararg);
         if (tmp == NULL) goto failed;
-        res = obj2ast_identifier(tmp, &vararg, arena);
+        res = obj2ast_arg(tmp, &vararg, arena);
         if (res != 0) goto failed;
         Py_CLEAR(tmp);
     } else {
         vararg = NULL;
-    }
-    if (_PyObject_HasAttrId(obj, &PyId_varargannotation)) {
-        int res;
-        tmp = _PyObject_GetAttrId(obj, &PyId_varargannotation);
-        if (tmp == NULL) goto failed;
-        res = obj2ast_expr(tmp, &varargannotation, arena);
-        if (res != 0) goto failed;
-        Py_CLEAR(tmp);
-    } else {
-        varargannotation = NULL;
     }
     if (_PyObject_HasAttrId(obj, &PyId_kwonlyargs)) {
         int res;
@@ -6527,7 +6600,7 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
             goto failed;
         }
         len = PyList_GET_SIZE(tmp);
-        kwonlyargs = asdl_seq_new(len, arena);
+        kwonlyargs = _Py_asdl_seq_new(len, arena);
         if (kwonlyargs == NULL) goto failed;
         for (i = 0; i < len; i++) {
             arg_ty value;
@@ -6538,50 +6611,6 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         Py_CLEAR(tmp);
     } else {
         PyErr_SetString(PyExc_TypeError, "required field \"kwonlyargs\" missing from arguments");
-        return 1;
-    }
-    if (_PyObject_HasAttrId(obj, &PyId_kwarg)) {
-        int res;
-        tmp = _PyObject_GetAttrId(obj, &PyId_kwarg);
-        if (tmp == NULL) goto failed;
-        res = obj2ast_identifier(tmp, &kwarg, arena);
-        if (res != 0) goto failed;
-        Py_CLEAR(tmp);
-    } else {
-        kwarg = NULL;
-    }
-    if (_PyObject_HasAttrId(obj, &PyId_kwargannotation)) {
-        int res;
-        tmp = _PyObject_GetAttrId(obj, &PyId_kwargannotation);
-        if (tmp == NULL) goto failed;
-        res = obj2ast_expr(tmp, &kwargannotation, arena);
-        if (res != 0) goto failed;
-        Py_CLEAR(tmp);
-    } else {
-        kwargannotation = NULL;
-    }
-    if (_PyObject_HasAttrId(obj, &PyId_defaults)) {
-        int res;
-        Py_ssize_t len;
-        Py_ssize_t i;
-        tmp = _PyObject_GetAttrId(obj, &PyId_defaults);
-        if (tmp == NULL) goto failed;
-        if (!PyList_Check(tmp)) {
-            PyErr_Format(PyExc_TypeError, "arguments field \"defaults\" must be a list, not a %.200s", tmp->ob_type->tp_name);
-            goto failed;
-        }
-        len = PyList_GET_SIZE(tmp);
-        defaults = asdl_seq_new(len, arena);
-        if (defaults == NULL) goto failed;
-        for (i = 0; i < len; i++) {
-            expr_ty value;
-            res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
-            if (res != 0) goto failed;
-            asdl_seq_SET(defaults, i, value);
-        }
-        Py_CLEAR(tmp);
-    } else {
-        PyErr_SetString(PyExc_TypeError, "required field \"defaults\" missing from arguments");
         return 1;
     }
     if (_PyObject_HasAttrId(obj, &PyId_kw_defaults)) {
@@ -6595,7 +6624,7 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
             goto failed;
         }
         len = PyList_GET_SIZE(tmp);
-        kw_defaults = asdl_seq_new(len, arena);
+        kw_defaults = _Py_asdl_seq_new(len, arena);
         if (kw_defaults == NULL) goto failed;
         for (i = 0; i < len; i++) {
             expr_ty value;
@@ -6608,8 +6637,42 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         PyErr_SetString(PyExc_TypeError, "required field \"kw_defaults\" missing from arguments");
         return 1;
     }
-    *out = arguments(args, vararg, varargannotation, kwonlyargs, kwarg,
-                     kwargannotation, defaults, kw_defaults, arena);
+    if (exists_not_none(obj, &PyId_kwarg)) {
+        int res;
+        tmp = _PyObject_GetAttrId(obj, &PyId_kwarg);
+        if (tmp == NULL) goto failed;
+        res = obj2ast_arg(tmp, &kwarg, arena);
+        if (res != 0) goto failed;
+        Py_CLEAR(tmp);
+    } else {
+        kwarg = NULL;
+    }
+    if (_PyObject_HasAttrId(obj, &PyId_defaults)) {
+        int res;
+        Py_ssize_t len;
+        Py_ssize_t i;
+        tmp = _PyObject_GetAttrId(obj, &PyId_defaults);
+        if (tmp == NULL) goto failed;
+        if (!PyList_Check(tmp)) {
+            PyErr_Format(PyExc_TypeError, "arguments field \"defaults\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+            goto failed;
+        }
+        len = PyList_GET_SIZE(tmp);
+        defaults = _Py_asdl_seq_new(len, arena);
+        if (defaults == NULL) goto failed;
+        for (i = 0; i < len; i++) {
+            expr_ty value;
+            res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+            if (res != 0) goto failed;
+            asdl_seq_SET(defaults, i, value);
+        }
+        Py_CLEAR(tmp);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "required field \"defaults\" missing from arguments");
+        return 1;
+    }
+    *out = arguments(args, vararg, kwonlyargs, kw_defaults, kwarg, defaults,
+                     arena);
     return 0;
 failed:
     Py_XDECREF(tmp);
@@ -6634,7 +6697,7 @@ obj2ast_arg(PyObject* obj, arg_ty* out, PyArena* arena)
         PyErr_SetString(PyExc_TypeError, "required field \"arg\" missing from arg");
         return 1;
     }
-    if (_PyObject_HasAttrId(obj, &PyId_annotation)) {
+    if (exists_not_none(obj, &PyId_annotation)) {
         int res;
         tmp = _PyObject_GetAttrId(obj, &PyId_annotation);
         if (tmp == NULL) goto failed;
@@ -6705,7 +6768,7 @@ obj2ast_alias(PyObject* obj, alias_ty* out, PyArena* arena)
         PyErr_SetString(PyExc_TypeError, "required field \"name\" missing from alias");
         return 1;
     }
-    if (_PyObject_HasAttrId(obj, &PyId_asname)) {
+    if (exists_not_none(obj, &PyId_asname)) {
         int res;
         tmp = _PyObject_GetAttrId(obj, &PyId_asname);
         if (tmp == NULL) goto failed;
@@ -6740,7 +6803,7 @@ obj2ast_withitem(PyObject* obj, withitem_ty* out, PyArena* arena)
         PyErr_SetString(PyExc_TypeError, "required field \"context_expr\" missing from withitem");
         return 1;
     }
-    if (_PyObject_HasAttrId(obj, &PyId_optional_vars)) {
+    if (exists_not_none(obj, &PyId_optional_vars)) {
         int res;
         tmp = _PyObject_GetAttrId(obj, &PyId_optional_vars);
         if (tmp == NULL) goto failed;
@@ -6770,7 +6833,7 @@ PyInit__ast(void)
     if (!m) return NULL;
     d = PyModule_GetDict(m);
     if (PyDict_SetItemString(d, "AST", (PyObject*)&AST_type) < 0) return NULL;
-    if (PyModule_AddIntConstant(m, "PyCF_ONLY_AST", PyCF_ONLY_AST) < 0)
+    if (PyModule_AddIntMacro(m, PyCF_ONLY_AST) < 0)
         return NULL;
     if (PyDict_SetItemString(d, "mod", (PyObject*)mod_type) < 0) return NULL;
     if (PyDict_SetItemString(d, "Module", (PyObject*)Module_type) < 0) return
@@ -6850,6 +6913,8 @@ PyInit__ast(void)
     if (PyDict_SetItemString(d, "Str", (PyObject*)Str_type) < 0) return NULL;
     if (PyDict_SetItemString(d, "Bytes", (PyObject*)Bytes_type) < 0) return
         NULL;
+    if (PyDict_SetItemString(d, "NameConstant", (PyObject*)NameConstant_type) <
+        0) return NULL;
     if (PyDict_SetItemString(d, "Ellipsis", (PyObject*)Ellipsis_type) < 0)
         return NULL;
     if (PyDict_SetItemString(d, "Attribute", (PyObject*)Attribute_type) < 0)
@@ -6949,7 +7014,8 @@ PyInit__ast(void)
 
 PyObject* PyAST_mod2obj(mod_ty t)
 {
-    init_types();
+    if (!init_types())
+        return NULL;
     return ast2obj_mod(t);
 }
 
@@ -6967,7 +7033,8 @@ mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode)
 
     assert(0 <= mode && mode <= 2);
 
-    init_types();
+    if (!init_types())
+        return NULL;
 
     isinstance = PyObject_IsInstance(ast, req_type[mode]);
     if (isinstance == -1)
@@ -6985,7 +7052,8 @@ mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode)
 
 int PyAST_Check(PyObject* obj)
 {
-    init_types();
+    if (!init_types())
+        return -1;
     return PyObject_IsInstance(obj, (PyObject*)&AST_type);
 }
 

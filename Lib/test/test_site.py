@@ -230,11 +230,7 @@ class HelperFunctionsTests(unittest.TestCase):
         site.PREFIXES = ['xoxo']
         dirs = site.getsitepackages()
 
-        if sys.platform in ('os2emx', 'riscos'):
-            self.assertEqual(len(dirs), 1)
-            wanted = os.path.join('xoxo', 'Lib', 'site-packages')
-            self.assertEqual(dirs[0], wanted)
-        elif (sys.platform == "darwin" and
+        if (sys.platform == "darwin" and
             sysconfig.get_config_var("PYTHONFRAMEWORK")):
             # OS X framework builds
             site.PREFIXES = ['Python.framework']
@@ -430,6 +426,39 @@ class ImportSideEffectTests(unittest.TestCase):
         except urllib.error.HTTPError as e:
             code = e.code
         self.assertEqual(code, 200, msg="Can't find " + url)
+
+
+class StartupImportTests(unittest.TestCase):
+
+    def test_startup_imports(self):
+        # This tests checks which modules are loaded by Python when it
+        # initially starts upon startup.
+        popen = subprocess.Popen([sys.executable, '-I', '-v', '-c',
+                                  'import sys; print(set(sys.modules))'],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        stdout, stderr = popen.communicate()
+        stdout = stdout.decode('utf-8')
+        stderr = stderr.decode('utf-8')
+        modules = eval(stdout)
+
+        self.assertIn('site', modules)
+
+        # http://bugs.python.org/issue19205
+        re_mods = {'re', '_sre', 'sre_compile', 'sre_constants', 'sre_parse'}
+        # _osx_support uses the re module in many placs
+        if sys.platform != 'darwin':
+            self.assertFalse(modules.intersection(re_mods), stderr)
+        # http://bugs.python.org/issue9548
+        self.assertNotIn('locale', modules, stderr)
+        if sys.platform != 'darwin':
+            # http://bugs.python.org/issue19209
+            self.assertNotIn('copyreg', modules, stderr)
+        # http://bugs.python.org/issue19218>
+        collection_mods = {'_collections', 'collections', 'functools',
+                           'heapq', 'itertools', 'keyword', 'operator',
+                           'reprlib', 'types', 'weakref'}
+        self.assertFalse(modules.intersection(collection_mods), stderr)
 
 
 if __name__ == "__main__":

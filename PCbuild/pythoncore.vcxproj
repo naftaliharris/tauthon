@@ -492,6 +492,7 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClInclude Include="..\Include\patchlevel.h" />
     <ClInclude Include="..\Include\pgen.h" />
     <ClInclude Include="..\Include\pgenheaders.h" />
+    <ClInclude Include="..\Include\pyhash.h" />
     <ClInclude Include="..\Include\py_curses.h" />
     <ClInclude Include="..\Include\pyarena.h" />
     <ClInclude Include="..\Include\pycapsule.h" />
@@ -528,7 +529,11 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClInclude Include="..\Include\unicodeobject.h" />
     <ClInclude Include="..\Include\weakrefobject.h" />
     <ClInclude Include="..\Modules\_math.h" />
+    <ClInclude Include="..\Modules\hashtable.h" />
     <ClInclude Include="..\Modules\rotatingtree.h" />
+    <ClInclude Include="..\Modules\sre.h" />
+    <ClInclude Include="..\Modules\sre_constants.h" />
+    <ClInclude Include="..\Modules\sre_lib.h" />
     <ClInclude Include="..\Modules\_io\_iomodule.h" />
     <ClInclude Include="..\Modules\zlib\crc32.h" />
     <ClInclude Include="..\Modules\zlib\deflate.h" />
@@ -555,6 +560,7 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClInclude Include="..\Objects\stringlib\fastsearch.h" />
     <ClInclude Include="..\Objects\stringlib\find.h" />
     <ClInclude Include="..\Objects\stringlib\partition.h" />
+    <ClInclude Include="..\Objects\stringlib\replace.h" />
     <ClInclude Include="..\Objects\stringlib\split.h" />
     <ClInclude Include="..\Objects\unicodetype_db.h" />
     <ClInclude Include="..\Parser\parser.h" />
@@ -580,6 +586,7 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClCompile Include="..\Modules\_pickle.c" />
     <ClCompile Include="..\Modules\_randommodule.c" />
     <ClCompile Include="..\Modules\_sre.c" />
+    <ClCompile Include="..\Modules\_stat.c" />
     <ClCompile Include="..\Modules\_struct.c" />
     <ClCompile Include="..\Modules\_weakref.c" />
     <ClCompile Include="..\Modules\arraymodule.c" />
@@ -591,12 +598,14 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClCompile Include="..\Modules\errnomodule.c" />
     <ClCompile Include="..\Modules\faulthandler.c" />
     <ClCompile Include="..\Modules\gcmodule.c" />
+    <ClCompile Include="..\Modules\hashtable.c" />
     <ClCompile Include="..\Modules\itertoolsmodule.c" />
     <ClCompile Include="..\Modules\main.c" />
     <ClCompile Include="..\Modules\mathmodule.c" />
     <ClCompile Include="..\Modules\md5module.c" />
     <ClCompile Include="..\Modules\mmapmodule.c" />
-    <ClCompile Include="..\Modules\operator.c" />
+    <ClCompile Include="..\Modules\_opcode.c" />
+    <ClCompile Include="..\Modules\_operator.c" />
     <ClCompile Include="..\Modules\parsermodule.c" />
     <ClCompile Include="..\Modules\posixmodule.c" />
     <ClCompile Include="..\Modules\rotatingtree.c" />
@@ -606,6 +615,7 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClCompile Include="..\Modules\signalmodule.c" />
     <ClCompile Include="..\Modules\symtablemodule.c" />
     <ClCompile Include="..\Modules\_threadmodule.c" />
+    <ClCompile Include="..\Modules\_tracemalloc.c" />
     <ClCompile Include="..\Modules\timemodule.c" />
     <ClCompile Include="..\Modules\xxsubtype.c" />
     <ClCompile Include="..\Modules\zipimport.c" />
@@ -691,6 +701,7 @@ IF %ERRORLEVEL% NEQ 0 (
     <ClCompile Include="..\PC\dl_nt.c" />
     <ClCompile Include="..\PC\getpathp.c" />
     <ClCompile Include="..\PC\msvcrtmodule.c" />
+    <ClCompile Include="..\Python\pyhash.c" />
     <ClCompile Include="..\Python\random.c" />
     <ClCompile Include="..\Python\_warnings.c" />
     <ClCompile Include="..\Python\asdl.c" />
