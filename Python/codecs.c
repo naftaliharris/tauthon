@@ -53,7 +53,7 @@ int PyCodec_Register(PyObject *search_function)
 static
 PyObject *normalizestring(const char *string)
 {
-    register size_t i;
+    size_t i;
     size_t len = strlen(string);
     char *p;
     PyObject *v;
@@ -65,9 +65,9 @@ PyObject *normalizestring(const char *string)
 
     p = PyMem_Malloc(len + 1);
     if (p == NULL)
-        return NULL;
+        return PyErr_NoMemory();
     for (i = 0; i < len; i++) {
-        register char ch = string[i];
+        char ch = string[i];
         if (ch == ' ')
             ch = '-';
         else
@@ -243,20 +243,15 @@ PyObject *codec_getitem(const char *encoding, int index)
     return v;
 }
 
-/* Helper function to create an incremental codec. */
-
+/* Helper functions to create an incremental codec. */
 static
-PyObject *codec_getincrementalcodec(const char *encoding,
-                                    const char *errors,
-                                    const char *attrname)
+PyObject *codec_makeincrementalcodec(PyObject *codec_info,
+                                     const char *errors,
+                                     const char *attrname)
 {
-    PyObject *codecs, *ret, *inccodec;
+    PyObject *ret, *inccodec;
 
-    codecs = _PyCodec_Lookup(encoding);
-    if (codecs == NULL)
-        return NULL;
-    inccodec = PyObject_GetAttrString(codecs, attrname);
-    Py_DECREF(codecs);
+    inccodec = PyObject_GetAttrString(codec_info, attrname);
     if (inccodec == NULL)
         return NULL;
     if (errors)
@@ -264,6 +259,21 @@ PyObject *codec_getincrementalcodec(const char *encoding,
     else
         ret = PyObject_CallFunction(inccodec, NULL);
     Py_DECREF(inccodec);
+    return ret;
+}
+
+static
+PyObject *codec_getincrementalcodec(const char *encoding,
+                                    const char *errors,
+                                    const char *attrname)
+{
+    PyObject *codec_info, *ret;
+
+    codec_info = _PyCodec_Lookup(encoding);
+    if (codec_info == NULL)
+        return NULL;
+    ret = codec_makeincrementalcodec(codec_info, errors, attrname);
+    Py_DECREF(codec_info);
     return ret;
 }
 
@@ -289,6 +299,24 @@ PyObject *codec_getstreamcodec(const char *encoding,
     Py_DECREF(codecs);
     return streamcodec;
 }
+
+/* Helpers to work with the result of _PyCodec_Lookup
+
+ */
+PyObject *_PyCodecInfo_GetIncrementalDecoder(PyObject *codec_info,
+                                             const char *errors)
+{
+    return codec_makeincrementalcodec(codec_info, errors,
+                                      "incrementaldecoder");
+}
+
+PyObject *_PyCodecInfo_GetIncrementalEncoder(PyObject *codec_info,
+                                             const char *errors)
+{
+    return codec_makeincrementalcodec(codec_info, errors,
+                                      "incrementalencoder");
+}
+
 
 /* Convenience APIs to query the Codec registry.
 
@@ -332,30 +360,45 @@ PyObject *PyCodec_StreamWriter(const char *encoding,
     return codec_getstreamcodec(encoding, stream, errors, 3);
 }
 
+/* Helper that tries to ensure the reported exception chain indicates the
+ * codec that was invoked to trigger the failure without changing the type
+ * of the exception raised.
+ */
+static void
+wrap_codec_error(const char *operation,
+                 const char *encoding)
+{
+    /* TrySetFromCause will replace the active exception with a suitably
+     * updated clone if it can, otherwise it will leave the original
+     * exception alone.
+     */
+    _PyErr_TrySetFromCause("%s with '%s' codec failed",
+                           operation, encoding);
+}
+
 /* Encode an object (e.g. an Unicode object) using the given encoding
    and return the resulting encoded object (usually a Python string).
 
    errors is passed to the encoder factory as argument if non-NULL. */
 
-PyObject *PyCodec_Encode(PyObject *object,
-                         const char *encoding,
-                         const char *errors)
+static PyObject *
+_PyCodec_EncodeInternal(PyObject *object,
+                        PyObject *encoder,
+                        const char *encoding,
+                        const char *errors)
 {
-    PyObject *encoder = NULL;
     PyObject *args = NULL, *result = NULL;
     PyObject *v = NULL;
-
-    encoder = PyCodec_Encoder(encoding);
-    if (encoder == NULL)
-        goto onError;
 
     args = args_tuple(object, errors);
     if (args == NULL)
         goto onError;
 
     result = PyEval_CallObject(encoder, args);
-    if (result == NULL)
+    if (result == NULL) {
+        wrap_codec_error("encoding", encoding);
         goto onError;
+    }
 
     if (!PyTuple_Check(result) ||
         PyTuple_GET_SIZE(result) != 2) {
@@ -384,25 +427,24 @@ PyObject *PyCodec_Encode(PyObject *object,
 
    errors is passed to the decoder factory as argument if non-NULL. */
 
-PyObject *PyCodec_Decode(PyObject *object,
-                         const char *encoding,
-                         const char *errors)
+static PyObject *
+_PyCodec_DecodeInternal(PyObject *object,
+                        PyObject *decoder,
+                        const char *encoding,
+                        const char *errors)
 {
-    PyObject *decoder = NULL;
     PyObject *args = NULL, *result = NULL;
     PyObject *v;
-
-    decoder = PyCodec_Decoder(encoding);
-    if (decoder == NULL)
-        goto onError;
 
     args = args_tuple(object, errors);
     if (args == NULL)
         goto onError;
 
     result = PyEval_CallObject(decoder,args);
-    if (result == NULL)
+    if (result == NULL) {
+        wrap_codec_error("decoding", encoding);
         goto onError;
+    }
     if (!PyTuple_Check(result) ||
         PyTuple_GET_SIZE(result) != 2) {
         PyErr_SetString(PyExc_TypeError,
@@ -425,6 +467,132 @@ PyObject *PyCodec_Decode(PyObject *object,
     return NULL;
 }
 
+/* Generic encoding/decoding API */
+PyObject *PyCodec_Encode(PyObject *object,
+                         const char *encoding,
+                         const char *errors)
+{
+    PyObject *encoder;
+
+    encoder = PyCodec_Encoder(encoding);
+    if (encoder == NULL)
+        return NULL;
+
+    return _PyCodec_EncodeInternal(object, encoder, encoding, errors);
+}
+
+PyObject *PyCodec_Decode(PyObject *object,
+                         const char *encoding,
+                         const char *errors)
+{
+    PyObject *decoder;
+
+    decoder = PyCodec_Decoder(encoding);
+    if (decoder == NULL)
+        return NULL;
+
+    return _PyCodec_DecodeInternal(object, decoder, encoding, errors);
+}
+
+/* Text encoding/decoding API */
+PyObject * _PyCodec_LookupTextEncoding(const char *encoding,
+                                       const char *alternate_command)
+{
+    _Py_IDENTIFIER(_is_text_encoding);
+    PyObject *codec;
+    PyObject *attr;
+    int is_text_codec;
+
+    codec = _PyCodec_Lookup(encoding);
+    if (codec == NULL)
+        return NULL;
+
+    /* Backwards compatibility: assume any raw tuple describes a text
+     * encoding, and the same for anything lacking the private
+     * attribute.
+     */
+    if (!PyTuple_CheckExact(codec)) {
+        attr = _PyObject_GetAttrId(codec, &PyId__is_text_encoding);
+        if (attr == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+                PyErr_Clear();
+            } else {
+                Py_DECREF(codec);
+                return NULL;
+            }
+        } else {
+            is_text_codec = PyObject_IsTrue(attr);
+            Py_DECREF(attr);
+            if (!is_text_codec) {
+                Py_DECREF(codec);
+                PyErr_Format(PyExc_LookupError,
+                             "'%.400s' is not a text encoding; "
+                             "use %s to handle arbitrary codecs",
+                             encoding, alternate_command);
+                return NULL;
+            }
+        }
+    }
+
+    /* This appears to be a valid text encoding */
+    return codec;
+}
+
+
+static
+PyObject *codec_getitem_checked(const char *encoding,
+                                const char *alternate_command,
+                                int index)
+{
+    PyObject *codec;
+    PyObject *v;
+
+    codec = _PyCodec_LookupTextEncoding(encoding, alternate_command);
+    if (codec == NULL)
+        return NULL;
+
+    v = PyTuple_GET_ITEM(codec, index);
+    Py_INCREF(v);
+    Py_DECREF(codec);
+    return v;
+}
+
+static PyObject * _PyCodec_TextEncoder(const char *encoding)
+{
+    return codec_getitem_checked(encoding, "codecs.encode()", 0);
+}
+
+static PyObject * _PyCodec_TextDecoder(const char *encoding)
+{
+    return codec_getitem_checked(encoding, "codecs.decode()", 1);
+}
+
+PyObject *_PyCodec_EncodeText(PyObject *object,
+                              const char *encoding,
+                              const char *errors)
+{
+    PyObject *encoder;
+
+    encoder = _PyCodec_TextEncoder(encoding);
+    if (encoder == NULL)
+        return NULL;
+
+    return _PyCodec_EncodeInternal(object, encoder, encoding, errors);
+}
+
+PyObject *_PyCodec_DecodeText(PyObject *object,
+                              const char *encoding,
+                              const char *errors)
+{
+    PyObject *decoder;
+
+    decoder = _PyCodec_TextDecoder(encoding);
+    if (decoder == NULL)
+        return NULL;
+
+    return _PyCodec_DecodeInternal(object, decoder, encoding, errors);
+}
+
 /* Register the error handling callback function error under the name
    name. This function will be called by the codec when it encounters
    an unencodable characters/undecodable bytes and doesn't know the
@@ -441,7 +609,7 @@ int PyCodec_RegisterError(const char *name, PyObject *error)
         return -1;
     }
     return PyDict_SetItemString(interp->codec_error_registry,
-                                (char *)name, error);
+                                name, error);
 }
 
 /* Lookup the error handling callback function registered under the
@@ -457,7 +625,7 @@ PyObject *PyCodec_LookupError(const char *name)
 
     if (name==NULL)
         name = "strict";
-    handler = PyDict_GetItemString(interp->codec_error_registry, (char *)name);
+    handler = PyDict_GetItemString(interp->codec_error_registry, name);
     if (!handler)
         PyErr_Format(PyExc_LookupError, "unknown error handler name '%.400s'", name);
     else
@@ -733,6 +901,65 @@ PyObject *PyCodec_BackslashReplaceErrors(PyObject *exc)
     }
 }
 
+#define ENC_UTF8        0
+#define ENC_UTF16BE     1
+#define ENC_UTF16LE     2
+#define ENC_UTF32BE     3
+#define ENC_UTF32LE     4
+
+static int
+get_standard_encoding(const char *encoding, int *bytelength)
+{
+    if (Py_TOLOWER(encoding[0]) == 'u' &&
+        Py_TOLOWER(encoding[1]) == 't' &&
+        Py_TOLOWER(encoding[2]) == 'f') {
+        encoding += 3;
+        if (*encoding == '-' || *encoding == '_' )
+            encoding++;
+        if (encoding[0] == '1' && encoding[1] == '6') {
+            encoding += 2;
+            *bytelength = 2;
+            if (*encoding == '\0') {
+#ifdef WORDS_BIGENDIAN
+                return ENC_UTF16BE;
+#else
+                return ENC_UTF16LE;
+#endif
+            }
+            if (*encoding == '-' || *encoding == '_' )
+                encoding++;
+            if (Py_TOLOWER(encoding[1]) == 'e' && encoding[2] == '\0') {
+                if (Py_TOLOWER(encoding[0]) == 'b')
+                    return ENC_UTF16BE;
+                if (Py_TOLOWER(encoding[0]) == 'l')
+                    return ENC_UTF16LE;
+            }
+        }
+        else if (encoding[0] == '3' && encoding[1] == '2') {
+            encoding += 2;
+            *bytelength = 4;
+            if (*encoding == '\0') {
+#ifdef WORDS_BIGENDIAN
+                return ENC_UTF32BE;
+#else
+                return ENC_UTF32LE;
+#endif
+            }
+            if (*encoding == '-' || *encoding == '_' )
+                encoding++;
+            if (Py_TOLOWER(encoding[1]) == 'e' && encoding[2] == '\0') {
+                if (Py_TOLOWER(encoding[0]) == 'b')
+                    return ENC_UTF32BE;
+                if (Py_TOLOWER(encoding[0]) == 'l')
+                    return ENC_UTF32LE;
+            }
+        }
+    }
+    /* utf-8 */
+    *bytelength = 3;
+    return ENC_UTF8;
+}
+
 /* This handler is declared static until someone demonstrates
    a need to call it directly. */
 static PyObject *
@@ -740,37 +967,77 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
 {
     PyObject *restuple;
     PyObject *object;
+    PyObject *encode;
+    char *encoding;
+    int code;
+    int bytelength;
     Py_ssize_t i;
     Py_ssize_t start;
     Py_ssize_t end;
     PyObject *res;
     if (PyObject_IsInstance(exc, PyExc_UnicodeEncodeError)) {
-        char *outp;
+        unsigned char *outp;
         if (PyUnicodeEncodeError_GetStart(exc, &start))
             return NULL;
         if (PyUnicodeEncodeError_GetEnd(exc, &end))
             return NULL;
         if (!(object = PyUnicodeEncodeError_GetObject(exc)))
             return NULL;
-        res = PyBytes_FromStringAndSize(NULL, 3*(end-start));
+        if (!(encode = PyUnicodeEncodeError_GetEncoding(exc))) {
+            Py_DECREF(object);
+            return NULL;
+        }
+        if (!(encoding = PyUnicode_AsUTF8(encode))) {
+            Py_DECREF(object);
+            Py_DECREF(encode);
+            return NULL;
+        }
+        code = get_standard_encoding(encoding, &bytelength);
+        Py_DECREF(encode);
+
+        res = PyBytes_FromStringAndSize(NULL, bytelength*(end-start));
         if (!res) {
             Py_DECREF(object);
             return NULL;
         }
-        outp = PyBytes_AsString(res);
+        outp = (unsigned char*)PyBytes_AsString(res);
         for (i = start; i < end; i++) {
             /* object is guaranteed to be "ready" */
             Py_UCS4 ch = PyUnicode_READ_CHAR(object, i);
-            if (ch < 0xd800 || ch > 0xdfff) {
+            if (!Py_UNICODE_IS_SURROGATE(ch)) {
                 /* Not a surrogate, fail with original exception */
                 PyErr_SetObject(PyExceptionInstance_Class(exc), exc);
                 Py_DECREF(res);
                 Py_DECREF(object);
                 return NULL;
             }
-            *outp++ = (char)(0xe0 | (ch >> 12));
-            *outp++ = (char)(0x80 | ((ch >> 6) & 0x3f));
-            *outp++ = (char)(0x80 | (ch & 0x3f));
+            switch (code) {
+            case ENC_UTF8:
+                *outp++ = (unsigned char)(0xe0 | (ch >> 12));
+                *outp++ = (unsigned char)(0x80 | ((ch >> 6) & 0x3f));
+                *outp++ = (unsigned char)(0x80 | (ch & 0x3f));
+                break;
+            case ENC_UTF16LE:
+                *outp++ = (unsigned char) ch;
+                *outp++ = (unsigned char)(ch >> 8);
+                break;
+            case ENC_UTF16BE:
+                *outp++ = (unsigned char)(ch >> 8);
+                *outp++ = (unsigned char) ch;
+                break;
+            case ENC_UTF32LE:
+                *outp++ = (unsigned char) ch;
+                *outp++ = (unsigned char)(ch >> 8);
+                *outp++ = (unsigned char)(ch >> 16);
+                *outp++ = (unsigned char)(ch >> 24);
+                break;
+            case ENC_UTF32BE:
+                *outp++ = (unsigned char)(ch >> 24);
+                *outp++ = (unsigned char)(ch >> 16);
+                *outp++ = (unsigned char)(ch >> 8);
+                *outp++ = (unsigned char) ch;
+                break;
+            }
         }
         restuple = Py_BuildValue("(On)", res, end);
         Py_DECREF(res);
@@ -782,34 +1049,64 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
         Py_UCS4 ch = 0;
         if (PyUnicodeDecodeError_GetStart(exc, &start))
             return NULL;
+        if (PyUnicodeDecodeError_GetEnd(exc, &end))
+            return NULL;
         if (!(object = PyUnicodeDecodeError_GetObject(exc)))
             return NULL;
         if (!(p = (unsigned char*)PyBytes_AsString(object))) {
             Py_DECREF(object);
             return NULL;
         }
+        if (!(encode = PyUnicodeDecodeError_GetEncoding(exc))) {
+            Py_DECREF(object);
+            return NULL;
+        }
+        if (!(encoding = PyUnicode_AsUTF8(encode))) {
+            Py_DECREF(object);
+            Py_DECREF(encode);
+            return NULL;
+        }
+        code = get_standard_encoding(encoding, &bytelength);
+        Py_DECREF(encode);
+
         /* Try decoding a single surrogate character. If
            there are more, let the codec call us again. */
         p += start;
-        if (PyBytes_GET_SIZE(object) - start >= 3 &&
-            (p[0] & 0xf0) == 0xe0 &&
-            (p[1] & 0xc0) == 0x80 &&
-            (p[2] & 0xc0) == 0x80) {
-            /* it's a three-byte code */
-            ch = ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6) + (p[2] & 0x3f);
-            if (ch < 0xd800 || ch > 0xdfff)
-                /* it's not a surrogate - fail */
-                ch = 0;
+        if (PyBytes_GET_SIZE(object) - start >= bytelength) {
+            switch (code) {
+            case ENC_UTF8:
+                if ((p[0] & 0xf0) == 0xe0 &&
+                    (p[1] & 0xc0) == 0x80 &&
+                    (p[2] & 0xc0) == 0x80) {
+                    /* it's a three-byte code */
+                    ch = ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6) + (p[2] & 0x3f);
+                }
+                break;
+            case ENC_UTF16LE:
+                ch = p[1] << 8 | p[0];
+                break;
+            case ENC_UTF16BE:
+                ch = p[0] << 8 | p[1];
+                break;
+            case ENC_UTF32LE:
+                ch = (p[3] << 24) | (p[2] << 16) | (p[1] << 8) | p[0];
+                break;
+            case ENC_UTF32BE:
+                ch = (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+                break;
+            }
         }
+
         Py_DECREF(object);
-        if (ch == 0) {
+        if (!Py_UNICODE_IS_SURROGATE(ch)) {
+            /* it's not a surrogate - fail */
             PyErr_SetObject(PyExceptionInstance_Class(exc), exc);
             return NULL;
         }
         res = PyUnicode_FromOrdinal(ch);
         if (res == NULL)
             return NULL;
-        return Py_BuildValue("(Nn)", res, start+3);
+        return Py_BuildValue("(Nn)", res, start + bytelength);
     }
     else {
         wrong_exception_type(exc);
@@ -1026,7 +1323,7 @@ static int _PyCodecRegistry_Init(void)
 
     if (interp->codec_error_registry) {
         for (i = 0; i < Py_ARRAY_LENGTH(methods); ++i) {
-            PyObject *func = PyCFunction_New(&methods[i].def, NULL);
+            PyObject *func = PyCFunction_NewEx(&methods[i].def, NULL, NULL);
             int res;
             if (!func)
                 Py_FatalError("can't initialize codec error registry");
