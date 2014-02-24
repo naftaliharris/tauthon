@@ -10,25 +10,23 @@
 #include "multiprocessing.h"
 
 
-PyObject *ProcessError, *BufferTooShort;
-
 /*
  * Function which raises exceptions based on error codes
  */
 
 PyObject *
-mp_SetError(PyObject *Type, int num)
+_PyMp_SetError(PyObject *Type, int num)
 {
     switch (num) {
 #ifdef MS_WINDOWS
     case MP_STANDARD_ERROR:
         if (Type == NULL)
-            Type = PyExc_WindowsError;
+            Type = PyExc_OSError;
         PyErr_SetExcFromWindowsErr(Type, 0);
         break;
     case MP_SOCKET_ERROR:
         if (Type == NULL)
-            Type = PyExc_WindowsError;
+            Type = PyExc_OSError;
         PyErr_SetExcFromWindowsErr(Type, WSAGetLastError());
         break;
 #else /* !MS_WINDOWS */
@@ -101,13 +99,15 @@ multiprocessing_send(PyObject *self, PyObject *args)
 {
     HANDLE handle;
     Py_buffer buf;
-    int ret;
+    int ret, length;
 
     if (!PyArg_ParseTuple(args, F_HANDLE "y*:send" , &handle, &buf))
         return NULL;
 
+    length = (int)Py_MIN(buf.len, INT_MAX);
+
     Py_BEGIN_ALLOW_THREADS
-    ret = send((SOCKET) handle, buf.buf, buf.len, 0);
+    ret = send((SOCKET) handle, buf.buf, length, 0);
     Py_END_ALLOW_THREADS
 
     PyBuffer_Release(&buf);
@@ -128,6 +128,7 @@ static PyMethodDef module_methods[] = {
     {"recv", multiprocessing_recv, METH_VARARGS, ""},
     {"send", multiprocessing_send, METH_VARARGS, ""},
 #endif
+    {"sem_unlink", _PyMp_sem_unlink, METH_VARARGS, ""},
     {NULL}
 };
 
@@ -159,19 +160,12 @@ PyInit__multiprocessing(void)
     if (!module)
         return NULL;
 
-    /* Get copy of BufferTooShort */
-    temp = PyImport_ImportModule("multiprocessing");
-    if (!temp)
-        return NULL;
-    BufferTooShort = PyObject_GetAttrString(temp, "BufferTooShort");
-    Py_XDECREF(temp);
-
 #if defined(MS_WINDOWS) ||                                              \
   (defined(HAVE_SEM_OPEN) && !defined(POSIX_SEMAPHORES_NOT_ENABLED))
-    /* Add SemLock type to module */
-    if (PyType_Ready(&SemLockType) < 0)
+    /* Add _PyMp_SemLock type to module */
+    if (PyType_Ready(&_PyMp_SemLockType) < 0)
         return NULL;
-    Py_INCREF(&SemLockType);
+    Py_INCREF(&_PyMp_SemLockType);
     {
         PyObject *py_sem_value_max;
         /* Some systems define SEM_VALUE_MAX as an unsigned value that
@@ -182,10 +176,10 @@ PyInit__multiprocessing(void)
             py_sem_value_max = PyLong_FromLong(SEM_VALUE_MAX);
         if (py_sem_value_max == NULL)
             return NULL;
-        PyDict_SetItemString(SemLockType.tp_dict, "SEM_VALUE_MAX",
+        PyDict_SetItemString(_PyMp_SemLockType.tp_dict, "SEM_VALUE_MAX",
                              py_sem_value_max);
     }
-    PyModule_AddObject(module, "SemLock", (PyObject*)&SemLockType);
+    PyModule_AddObject(module, "SemLock", (PyObject*)&_PyMp_SemLockType);
 #endif
 
     /* Add configuration macros */

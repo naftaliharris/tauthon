@@ -84,7 +84,7 @@ Dictionary Objects
    on failure.
 
 
-.. c:function:: int PyDict_DelItemString(PyObject *p, char *key)
+.. c:function:: int PyDict_DelItemString(PyObject *p, const char *key)
 
    Remove the entry in dictionary *p* which has a key specified by the string
    *key*.  Return ``0`` on success or ``-1`` on failure.
@@ -108,6 +108,15 @@ Dictionary Objects
 
    This is the same as :c:func:`PyDict_GetItem`, but *key* is specified as a
    :c:type:`char\*`, rather than a :c:type:`PyObject\*`.
+
+
+.. c:function:: PyObject* PyDict_SetDefault(PyObject *p, PyObject *key, PyObject *default)
+
+   This is the same as the Python-level :meth:`dict.setdefault`.  If present, it
+   returns the value corresponding to *key* from the dictionary *p*.  If the key
+   is not in the dict, it is inserted with value *defaultobj* and *defaultobj*
+   is returned.  This function evaluates the hash function of *key* only once,
+   instead of evaluating it independently for the lookup and the insertion.
 
 
 .. c:function:: PyObject* PyDict_Items(PyObject *p)
