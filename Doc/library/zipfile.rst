@@ -130,7 +130,7 @@ ZipFile Objects
 ---------------
 
 
-.. class:: ZipFile(file, mode='r', compression=ZIP_STORED, allowZip64=False)
+.. class:: ZipFile(file, mode='r', compression=ZIP_STORED, allowZip64=True)
 
    Open a ZIP file, where *file* can be either a path to a file (a string) or a
    file-like object.  The *mode* parameter should be ``'r'`` to read an existing
@@ -144,15 +144,12 @@ ZipFile Objects
    and should be :const:`ZIP_STORED`, :const:`ZIP_DEFLATED`,
    :const:`ZIP_BZIP2` or :const:`ZIP_LZMA`; unrecognized
    values will cause :exc:`RuntimeError` to be raised.  If :const:`ZIP_DEFLATED`,
-   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponded module
+   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponding module
    (:mod:`zlib`, :mod:`bz2` or :mod:`lzma`) is not available, :exc:`RuntimeError`
    is also raised. The default is :const:`ZIP_STORED`.  If *allowZip64* is
-   ``True`` zipfile will create ZIP files that use the ZIP64 extensions when
-   the zipfile is larger than 2 GiB. If it is  false (the default) :mod:`zipfile`
+   ``True`` (the default) zipfile will create ZIP files that use the ZIP64
+   extensions when the zipfile is larger than 2 GiB. If it is  false :mod:`zipfile`
    will raise an exception when the ZIP file would require ZIP64 extensions.
-   ZIP64 extensions are disabled by default because the default :program:`zip`
-   and :program:`unzip` commands on Unix (the InfoZIP utilities) don't support
-   these extensions.
 
    If the file is created with mode ``'a'`` or ``'w'`` and then
    :meth:`closed <close>` without adding any files to the archive, the appropriate
@@ -170,6 +167,9 @@ ZipFile Objects
 
    .. versionchanged:: 3.3
       Added support for :mod:`bzip2 <bz2>` and :mod:`lzma` compression.
+
+   .. versionchanged:: 3.4
+      ZIP64 extensions are enabled by default.
 
 
 .. method:: ZipFile.close()
@@ -234,6 +234,9 @@ ZipFile Objects
       or a :class:`ZipInfo` object.  You will appreciate this when trying to read a
       ZIP file that contains members with duplicate names.
 
+   .. deprecated-removed:: 3.4 3.6
+      The ``'U'`` or  ``'rU'`` mode.  Use :class:`io.TextIOWrapper` for reading
+      compressed text files in :term:`universal newlines` mode.
 
 .. method:: ZipFile.extract(member, path=None, pwd=None)
 
@@ -266,10 +269,8 @@ ZipFile Objects
       Never extract archives from untrusted sources without prior inspection.
       It is possible that files are created outside of *path*, e.g. members
       that have absolute filenames starting with ``"/"`` or filenames with two
-      dots ``".."``.
-
-   .. versionchanged:: 3.3.1
-      The zipfile module attempts to prevent that.  See :meth:`extract` note.
+      dots ``".."``.  This module attempts to prevent that.
+      See :meth:`extract` note.
 
 
 .. method:: ZipFile.printdir()
@@ -376,15 +377,18 @@ PyZipFile Objects
 The :class:`PyZipFile` constructor takes the same parameters as the
 :class:`ZipFile` constructor, and one additional parameter, *optimize*.
 
-.. class:: PyZipFile(file, mode='r', compression=ZIP_STORED, allowZip64=False, \
+.. class:: PyZipFile(file, mode='r', compression=ZIP_STORED, allowZip64=True, \
                      optimize=-1)
 
    .. versionadded:: 3.2
       The *optimize* parameter.
 
+   .. versionchanged:: 3.4
+      ZIP64 extensions are enabled by default.
+
    Instances have one method in addition to those of :class:`ZipFile` objects:
 
-   .. method:: PyZipFile.writepy(pathname, basename='')
+   .. method:: PyZipFile.writepy(pathname, basename='', filterfunc=None)
 
       Search for files :file:`\*.py` and add the corresponding file to the
       archive.
@@ -406,7 +410,10 @@ The :class:`PyZipFile` constructor takes the same parameters as the
       package directory, then all :file:`\*.py[co]` are added under the package
       name as a file path, and if any subdirectories are package directories,
       all of these are added recursively.  *basename* is intended for internal
-      use only.  The :meth:`writepy` method makes archives with file names like
+      use only.  When *filterfunc(pathname)* is given, it will be called for every
+      invocation. When it returns a false value, that path and its subpaths will
+      be ignored.
+      The :meth:`writepy` method makes archives with file names like
       this::
 
          string.pyc                   # Top level name
@@ -414,6 +421,9 @@ The :class:`PyZipFile` constructor takes the same parameters as the
          test/testall.pyc             # Module test.testall
          test/bogus/__init__.pyc      # Subpackage directory
          test/bogus/myfile.pyc        # Submodule test.bogus.myfile
+
+      .. versionadded:: 3.4
+         The *filterfunc* parameter.
 
 
 .. _zipinfo-objects:

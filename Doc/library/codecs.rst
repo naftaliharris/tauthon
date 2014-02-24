@@ -365,17 +365,22 @@ and implemented by all standard Python codecs:
 |                         | in :pep:`383`.                                |
 +-------------------------+-----------------------------------------------+
 
-In addition, the following error handlers are specific to a single codec:
+In addition, the following error handlers are specific to Unicode encoding
+schemes:
 
-+-------------------+---------+-------------------------------------------+
-| Value             | Codec   | Meaning                                   |
-+===================+=========+===========================================+
-|``'surrogatepass'``| utf-8   | Allow encoding and decoding of surrogate  |
-|                   |         | codes in UTF-8.                           |
-+-------------------+---------+-------------------------------------------+
++-------------------+------------------------+-------------------------------------------+
+| Value             | Codec                  | Meaning                                   |
++===================+========================+===========================================+
+|``'surrogatepass'``| utf-8, utf-16, utf-32, | Allow encoding and decoding of surrogate  |
+|                   | utf-16-be, utf-16-le,  | codes in all the Unicode encoding schemes.|
+|                   | utf-32-be, utf-32-le   |                                           |
++-------------------+------------------------+-------------------------------------------+
 
 .. versionadded:: 3.1
    The ``'surrogateescape'`` and ``'surrogatepass'`` error handlers.
+
+.. versionchanged:: 3.4
+   The ``'surrogatepass'`` error handlers now works with utf-16\* and utf-32\* codecs.
 
 The set of allowed values can be extended via :meth:`register_error`.
 
@@ -1022,6 +1027,10 @@ particular, the following variants typically exist:
 +-----------------+--------------------------------+--------------------------------+
 | cp1026          | ibm1026                        | Turkish                        |
 +-----------------+--------------------------------+--------------------------------+
+| cp1125          | 1125, ibm1125, cp866u, ruscii  | Ukrainian                      |
+|                 |                                |                                |
+|                 |                                | .. versionadded:: 3.4          |
++-----------------+--------------------------------+--------------------------------+
 | cp1140          | ibm1140                        | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | cp1250          | windows-1250                   | Central and Eastern Europe     |
@@ -1167,6 +1176,12 @@ particular, the following variants typically exist:
 | utf_8_sig       |                                | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
 
+.. versionchanged:: 3.4
+   The utf-16\* and utf-32\* encoders no longer allow surrogate code points
+   (U+D800--U+DFFF) to be encoded.  The utf-32\* decoders no longer decode
+   byte sequences that correspond to surrogate code points.
+
+
 Python Specific Encodings
 -------------------------
 
@@ -1176,6 +1191,9 @@ expected input and output types (note that while text encodings are the most
 common use case for codecs, the underlying codec infrastructure supports
 arbitrary data transforms rather than just text encodings).  For asymmetric
 codecs, the stated purpose describes the encoding direction.
+
+Text Encodings
+^^^^^^^^^^^^^^
 
 The following codecs provide :class:`str` to :class:`bytes` encoding and
 :term:`bytes-like object` to :class:`str` decoding, similar to the Unicode text
@@ -1223,57 +1241,83 @@ encodings.
 |                    |         | .. deprecated:: 3.3       |
 +--------------------+---------+---------------------------+
 
-The following codecs provide :term:`bytes-like object` to :class:`bytes`
-mappings.
+.. _binary-transforms:
+
+Binary Transforms
+^^^^^^^^^^^^^^^^^
+
+The following codecs provide binary transforms: :term:`bytes-like object`
+to :class:`bytes` mappings.
 
 
-.. tabularcolumns:: |l|L|L|
+.. tabularcolumns:: |l|L|L|L|
 
-+----------------------+---------------------------+------------------------------+
-| Codec                | Purpose                   | Encoder/decoder              |
-+======================+===========================+==============================+
-| base64_codec [#b64]_ | Convert operand to MIME   | :meth:`base64.b64encode`,    |
-|                      | base64 (the result always | :meth:`base64.b64decode`     |
-|                      | includes a trailing       |                              |
-|                      | ``'\n'``)                 |                              |
-+----------------------+---------------------------+------------------------------+
-| bz2_codec            | Compress the operand      | :meth:`bz2.compress`,        |
-|                      | using bz2                 | :meth:`bz2.decompress`       |
-+----------------------+---------------------------+------------------------------+
-| hex_codec            | Convert operand to        | :meth:`base64.b16encode`,    |
-|                      | hexadecimal               | :meth:`base64.b16decode`     |
-|                      | representation, with two  |                              |
-|                      | digits per byte           |                              |
-+----------------------+---------------------------+------------------------------+
-| quopri_codec         | Convert operand to MIME   | :meth:`quopri.encodestring`, |
-|                      | quoted printable          | :meth:`quopri.decodestring`  |
-+----------------------+---------------------------+------------------------------+
-| uu_codec             | Convert the operand using | :meth:`uu.encode`,           |
-|                      | uuencode                  | :meth:`uu.decode`            |
-+----------------------+---------------------------+------------------------------+
-| zlib_codec           | Compress the operand      | :meth:`zlib.compress`,       |
-|                      | using gzip                | :meth:`zlib.decompress`      |
-+----------------------+---------------------------+------------------------------+
++----------------------+------------------+------------------------------+------------------------------+
+| Codec                | Aliases          | Purpose                      | Encoder / decoder            |
++======================+==================+==============================+==============================+
+| base64_codec [#b64]_ | base64, base_64  | Convert operand to MIME      | :meth:`base64.b64encode` /   |
+|                      |                  | base64 (the result always    | :meth:`base64.b64decode`     |
+|                      |                  | includes a trailing          |                              |
+|                      |                  | ``'\n'``)                    |                              |
+|                      |                  |                              |                              |
+|                      |                  | .. versionchanged:: 3.4      |                              |
+|                      |                  |    accepts any               |                              |
+|                      |                  |    :term:`bytes-like object` |                              |
+|                      |                  |    as input for encoding and |                              |
+|                      |                  |    decoding                  |                              |
++----------------------+------------------+------------------------------+------------------------------+
+| bz2_codec            | bz2              | Compress the operand         | :meth:`bz2.compress` /       |
+|                      |                  | using bz2                    | :meth:`bz2.decompress`       |
++----------------------+------------------+------------------------------+------------------------------+
+| hex_codec            | hex              | Convert operand to           | :meth:`base64.b16encode` /   |
+|                      |                  | hexadecimal                  | :meth:`base64.b16decode`     |
+|                      |                  | representation, with two     |                              |
+|                      |                  | digits per byte              |                              |
++----------------------+------------------+------------------------------+------------------------------+
+| quopri_codec         | quopri,          | Convert operand to MIME      | :meth:`quopri.encodestring` /|
+|                      | quotedprintable, | quoted printable             | :meth:`quopri.decodestring`  |
+|                      | quoted_printable |                              |                              |
++----------------------+------------------+------------------------------+------------------------------+
+| uu_codec             | uu               | Convert the operand using    | :meth:`uu.encode` /          |
+|                      |                  | uuencode                     | :meth:`uu.decode`            |
++----------------------+------------------+------------------------------+------------------------------+
+| zlib_codec           | zip, zlib        | Compress the operand         | :meth:`zlib.compress` /      |
+|                      |                  | using gzip                   | :meth:`zlib.decompress`      |
++----------------------+------------------+------------------------------+------------------------------+
 
-.. [#b64] Rather than accepting any :term:`bytes-like object`,
-   ``'base64_codec'`` accepts only :class:`bytes` and :class:`bytearray` for
-   encoding and only :class:`bytes`, :class:`bytearray`, and ASCII-only
-   instances of :class:`str` for decoding
-
-
-The following codecs provide :class:`str` to :class:`str` mappings.
-
-.. tabularcolumns:: |l|L|
-
-+--------------------+---------------------------+
-| Codec              | Purpose                   |
-+====================+===========================+
-| rot_13             | Returns the Caesar-cypher |
-|                    | encryption of the operand |
-+--------------------+---------------------------+
+.. [#b64] In addition to :term:`bytes-like objects <bytes-like object>`,
+   ``'base64_codec'`` also accepts ASCII-only instances of :class:`str` for
+   decoding
 
 .. versionadded:: 3.2
-   bytes-to-bytes and str-to-str codecs.
+   Restoration of the binary transforms.
+
+.. versionchanged:: 3.4
+   Restoration of the aliases for the binary transforms.
+
+
+.. _text-transforms:
+
+Text Transforms
+^^^^^^^^^^^^^^^
+
+The following codec provides a text transform: a :class:`str` to :class:`str`
+mapping.
+
+.. tabularcolumns:: |l|l|L|
+
++--------------------+---------+---------------------------+
+| Codec              | Aliases | Purpose                   |
++====================+=========+===========================+
+| rot_13             | rot13   | Returns the Caesar-cypher |
+|                    |         | encryption of the operand |
++--------------------+---------+---------------------------+
+
+.. versionadded:: 3.2
+   Restoration of the ``rot_13`` text transform.
+
+.. versionchanged:: 3.4
+   Restoration of the ``rot13`` alias.
 
 
 :mod:`encodings.idna` --- Internationalized Domain Names in Applications
