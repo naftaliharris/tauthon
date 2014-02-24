@@ -559,8 +559,71 @@ The following decorators implement test skipping and expected failures:
    Usually you can use :meth:`TestCase.skipTest` or one of the skipping
    decorators instead of raising this directly.
 
-Skipped tests will not have :meth:`setUp` or :meth:`tearDown` run around them.
-Skipped classes will not have :meth:`setUpClass` or :meth:`tearDownClass` run.
+Skipped tests will not have :meth:`~TestCase.setUp` or :meth:`~TestCase.tearDown` run around them.
+Skipped classes will not have :meth:`~TestCase.setUpClass` or :meth:`~TestCase.tearDownClass` run.
+Skipped modules will not have :func:`setUpModule` or :func:`tearDownModule` run.
+
+
+.. _subtests:
+
+Distinguishing test iterations using subtests
+---------------------------------------------
+
+.. versionadded:: 3.4
+
+When some of your tests differ only by a some very small differences, for
+instance some parameters, unittest allows you to distinguish them inside
+the body of a test method using the :meth:`~TestCase.subTest` context manager.
+
+For example, the following test::
+
+   class NumbersTest(unittest.TestCase):
+
+       def test_even(self):
+           """
+           Test that numbers between 0 and 5 are all even.
+           """
+           for i in range(0, 6):
+               with self.subTest(i=i):
+                   self.assertEqual(i % 2, 0)
+
+will produce the following output::
+
+   ======================================================================
+   FAIL: test_even (__main__.NumbersTest) (i=1)
+   ----------------------------------------------------------------------
+   Traceback (most recent call last):
+     File "subtests.py", line 32, in test_even
+       self.assertEqual(i % 2, 0)
+   AssertionError: 1 != 0
+
+   ======================================================================
+   FAIL: test_even (__main__.NumbersTest) (i=3)
+   ----------------------------------------------------------------------
+   Traceback (most recent call last):
+     File "subtests.py", line 32, in test_even
+       self.assertEqual(i % 2, 0)
+   AssertionError: 1 != 0
+
+   ======================================================================
+   FAIL: test_even (__main__.NumbersTest) (i=5)
+   ----------------------------------------------------------------------
+   Traceback (most recent call last):
+     File "subtests.py", line 32, in test_even
+       self.assertEqual(i % 2, 0)
+   AssertionError: 1 != 0
+
+Without using a subtest, execution would stop after the first failure,
+and the error would be less easy to diagnose because the value of ``i``
+wouldn't be displayed::
+
+   ======================================================================
+   FAIL: test_even (__main__.NumbersTest)
+   ----------------------------------------------------------------------
+   Traceback (most recent call last):
+     File "subtests.py", line 32, in test_even
+       self.assertEqual(i % 2, 0)
+   AssertionError: 1 != 0
 
 
 .. _unittest-contents:
@@ -674,6 +737,21 @@ Test cases
       test.  See :ref:`unittest-skipping` for more information.
 
       .. versionadded:: 3.1
+
+
+   .. method:: subTest(msg=None, **params)
+
+      Return a context manager which executes the enclosed code block as a
+      subtest.  *msg* and *params* are optional, arbitrary values which are
+      displayed whenever a subtest fails, allowing you to identify them
+      clearly.
+
+      A test case can contain any number of subtest declarations, and
+      they can be arbitrarily nested.
+
+      See :ref:`subtests` for more information.
+
+      .. versionadded:: 3.4
 
 
    .. method:: debug()
@@ -806,8 +884,8 @@ Test cases
 
 
 
-   It is also possible to check that exceptions and warnings are raised using
-   the following methods:
+   It is also possible to check the production of exceptions, warnings and
+   log messages using the following methods:
 
    +---------------------------------------------------------+--------------------------------------+------------+
    | Method                                                  | Checks that                          | New in     |
@@ -823,6 +901,9 @@ Test cases
    +---------------------------------------------------------+--------------------------------------+------------+
    | :meth:`assertWarnsRegex(warn, r, fun, *args, **kwds)    | ``fun(*args, **kwds)`` raises *warn* | 3.2        |
    | <TestCase.assertWarnsRegex>`                            | and the message matches regex *r*    |            |
+   +---------------------------------------------------------+--------------------------------------+------------+
+   | :meth:`assertLogs(logger, level)                        | The ``with`` block logs on *logger*  | 3.4        |
+   | <TestCase.assertLogs>`                                  | with minimum *level*                 |            |
    +---------------------------------------------------------+--------------------------------------+------------+
 
    .. method:: assertRaises(exception, callable, *args, **kwds)
@@ -953,6 +1034,47 @@ Test cases
 
       .. versionchanged:: 3.3
          Added the *msg* keyword argument when used as a context manager.
+
+   .. method:: assertLogs(logger=None, level=None)
+
+      A context manager to test that at least one message is logged on
+      the *logger* or one of its children, with at least the given
+      *level*.
+
+      If given, *logger* should be a :class:`logging.Logger` object or a
+      :class:`str` giving the name of a logger.  The default is the root
+      logger, which will catch all messages.
+
+      If given, *level* should be either a numeric logging level or
+      its string equivalent (for example either ``"ERROR"`` or
+      :attr:`logging.ERROR`).  The default is :attr:`logging.INFO`.
+
+      The test passes if at least one message emitted inside the ``with``
+      block matches the *logger* and *level* conditions, otherwise it fails.
+
+      The object returned by the context manager is a recording helper
+      which keeps tracks of the matching log messages.  It has two
+      attributes:
+
+      .. attribute:: records
+
+         A list of :class:`logging.LogRecord` objects of the matching
+         log messages.
+
+      .. attribute:: output
+
+         A list of :class:`str` objects with the formatted output of
+         matching messages.
+
+      Example::
+
+         with self.assertLogs('foo', level='INFO') as cm:
+            logging.getLogger('foo').info('first message')
+            logging.getLogger('foo.bar').error('second message')
+         self.assertEqual(cm.output, ['INFO:foo:first message',
+                                      'ERROR:foo.bar:second message'])
+
+      .. versionadded:: 3.4
 
 
    There are also other methods used to perform more specific checks, such as:
@@ -1393,14 +1515,23 @@ Grouping tests
 
       Tests grouped by a :class:`TestSuite` are always accessed by iteration.
       Subclasses can lazily provide tests by overriding :meth:`__iter__`. Note
-      that this method maybe called several times on a single suite
-      (for example when counting tests or comparing for equality)
-      so the tests returned must be the same for repeated iterations.
+      that this method may be called several times on a single suite (for
+      example when counting tests or comparing for equality) so the tests
+      returned by repeated iterations before :meth:`TestSuite.run` must be the
+      same for each call iteration. After :meth:`TestSuite.run`, callers should
+      not rely on the tests returned by this method unless the caller uses a
+      subclass that overrides :meth:`TestSuite._removeTestAtIndex` to preserve
+      test references.
 
       .. versionchanged:: 3.2
          In earlier versions the :class:`TestSuite` accessed tests directly rather
          than through iteration, so overriding :meth:`__iter__` wasn't sufficient
          for providing tests.
+
+      .. versionchanged:: 3.4
+         In earlier versions the :class:`TestSuite` held references to each
+         :class:`TestCase` after :meth:`TestSuite.run`. Subclasses can restore
+         that behavior by overriding :meth:`TestSuite._removeTestAtIndex`.
 
    In the typical usage of a :class:`TestSuite` object, the :meth:`run` method
    is invoked by a :class:`TestRunner` rather than by the end-user test harness.
@@ -1500,7 +1631,9 @@ Loading and running tests
       directory must be specified separately.
 
       If importing a module fails, for example due to a syntax error, then this
-      will be recorded as a single error and discovery will continue.
+      will be recorded as a single error and discovery will continue.  If the
+      import failure is due to :exc:`SkipTest` being raised, it will be recorded
+      as a skip instead of an error.
 
       If a test package name (directory with :file:`__init__.py`) matches the
       pattern then the package will be checked for a ``load_tests``
@@ -1518,6 +1651,15 @@ Loading and running tests
       *start_dir* can be a dotted module name as well as a directory.
 
       .. versionadded:: 3.2
+
+      .. versionchanged:: 3.4
+         Modules that raise :exc:`SkipTest` on import are recorded as skips,
+         not errors.
+
+      .. versionchanged:: 3.4
+         Paths are sorted before being imported to ensure execution order for a
+         given test suite is the same even if the underlying file system's ordering
+         is not dependent on file name like in ext3/4.
 
 
    The following attributes of a :class:`TestLoader` can be configured either by
@@ -1630,6 +1772,10 @@ Loading and running tests
       Return ``True`` if all tests run so far have passed, otherwise returns
       ``False``.
 
+      .. versionchanged:: 3.4
+         Returns ``False`` if there were any :attr:`unexpectedSuccesses`
+         from tests marked with the :func:`expectedFailure` decorator.
+
 
    .. method:: stop()
 
@@ -1728,6 +1874,22 @@ Loading and running tests
       :attr:`unexpectedSuccesses` attribute.
 
 
+   .. method:: addSubTest(test, subtest, outcome)
+
+      Called when a subtest finishes.  *test* is the test case
+      corresponding to the test method.  *subtest* is a custom
+      :class:`TestCase` instance describing the subtest.
+
+      If *outcome* is :const:`None`, the subtest succeeded.  Otherwise,
+      it failed with an exception where *outcome* is a tuple of the form
+      returned by :func:`sys.exc_info`: ``(type, value, traceback)``.
+
+      The default implementation does nothing when the outcome is a
+      success, and records subtest failures as normal failures.
+
+      .. versionadded:: 3.4
+
+
 .. class:: TextTestResult(stream, descriptions, verbosity)
 
    A concrete implementation of :class:`TestResult` used by the
@@ -1783,6 +1945,14 @@ Loading and running tests
 
         stream, descriptions, verbosity
 
+   .. method:: run(test)
+
+      This method is the main public interface to the `TextTestRunner`. This
+      method takes a :class:`TestSuite` or :class:`TestCase` instance. A
+      :class:`TestResult` is created by calling
+      :func:`_makeResult` and the test(s) are run and the
+      results printed to stdout.
+
 
 .. function:: main(module='__main__', defaultTest=None, argv=None, testRunner=None, \
                    testLoader=unittest.defaultTestLoader, exit=True, verbosity=1, \
@@ -1802,9 +1972,10 @@ Loading and running tests
       if __name__ == '__main__':
           unittest.main(verbosity=2)
 
-   The *defaultTest* argument is the name of the test to run if no test names
-   are specified via *argv*.  If not specified or ``None`` and no test names are
-   provided via *argv*, all tests found in *module* are run.
+   The *defaultTest* argument is either the name of a single test or an
+   iterable of test names to run if no test names are specified via *argv*.  If
+   not specified or ``None`` and no test names are provided via *argv*, all
+   tests found in *module* are run.
 
    The *argv* argument can be a list of options passed to the program, with the
    first element being the program name.  If not specified or ``None``,
@@ -1841,6 +2012,10 @@ Loading and running tests
    .. versionchanged:: 3.2
       The *verbosity*, *failfast*, *catchbreak*, *buffer*
       and *warnings* parameters were added.
+
+   .. versionchanged:: 3.4
+      The *defaultTest* parameter was changed to also accept an iterable of
+      test names.
 
 
 load_tests Protocol
