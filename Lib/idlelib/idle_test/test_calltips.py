@@ -54,9 +54,9 @@ class Get_signatureTest(unittest.TestCase):
 
         gtest(List, List.__doc__)
         gtest(list.__new__,
-               'T.__new__(S, ...) -> a new object with type S, a subtype of T')
+               'Create and return a new object.  See help(type) for accurate signature.')
         gtest(list.__init__,
-               'x.__init__(...) initializes x; see help(type(x)) for signature')
+               'Initialize self.  See help(type(self)) for accurate signature.')
         append_doc =  "L.append(object) -> None -- append object to end"
         gtest(list.append, append_doc)
         gtest([].append, append_doc)
@@ -69,7 +69,8 @@ class Get_signatureTest(unittest.TestCase):
         self.assertEqual(signature(textwrap.TextWrapper), '''\
 (width=70, initial_indent='', subsequent_indent='', expand_tabs=True,
     replace_whitespace=True, fix_sentence_endings=False, break_long_words=True,
-    drop_whitespace=True, break_on_hyphens=True, tabsize=8)''')
+    drop_whitespace=True, break_on_hyphens=True, tabsize=8, *, max_lines=None,
+    placeholder=' [...]')''')
 
     def test_docline_truncation(self):
         def f(): pass

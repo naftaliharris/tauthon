@@ -3,10 +3,12 @@ from test.support import verbose, run_unittest, gc_collect, bigmemtest, _2G, \
 import io
 import re
 from re import Scanner
+import sre_compile
 import sre_constants
 import sys
 import string
 import traceback
+import unittest
 from weakref import proxy
 
 # Misc tests from Tim Peters' re.doc
@@ -15,9 +17,25 @@ from weakref import proxy
 # what you're doing. Some of these tests were carefully modeled to
 # cover most of the code.
 
-import unittest
+class S(str):
+    def __getitem__(self, index):
+        return S(super().__getitem__(index))
+
+class B(bytes):
+    def __getitem__(self, index):
+        return B(super().__getitem__(index))
 
 class ReTests(unittest.TestCase):
+
+    def assertTypedEqual(self, actual, expect, msg=None):
+        self.assertEqual(actual, expect, msg)
+        def recurse(actual, expect):
+            if isinstance(expect, (tuple, list)):
+                for x, y in zip(actual, expect):
+                    recurse(x, y)
+            else:
+                self.assertIs(type(actual), type(expect), msg)
+        recurse(actual, expect)
 
     def test_keep_buffer(self):
         # See bug 14212
@@ -53,6 +71,15 @@ class ReTests(unittest.TestCase):
         return str(int_value + 1)
 
     def test_basic_re_sub(self):
+        self.assertTypedEqual(re.sub('y', 'a', 'xyz'), 'xaz')
+        self.assertTypedEqual(re.sub('y', S('a'), S('xyz')), 'xaz')
+        self.assertTypedEqual(re.sub(b'y', b'a', b'xyz'), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', B(b'a'), B(b'xyz')), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', bytearray(b'a'), bytearray(b'xyz')), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', memoryview(b'a'), memoryview(b'xyz')), b'xaz')
+        for y in ("\xe0", "\u0430", "\U0001d49c"):
+            self.assertEqual(re.sub(y, 'a', 'x%sz' % y), 'xaz')
+
         self.assertEqual(re.sub("(?i)b+", "x", "bbbb BBBB"), 'x x')
         self.assertEqual(re.sub(r'\d+', self.bump_num, '08.2 -2 23x99y'),
                          '9.3 -3 24x100y')
@@ -210,10 +237,29 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.subn("b*", "x", "xyz", 2), ('xxxyz', 2))
 
     def test_re_split(self):
-        self.assertEqual(re.split(":", ":a:b::c"), ['', 'a', 'b', '', 'c'])
-        self.assertEqual(re.split(":*", ":a:b::c"), ['', 'a', 'b', 'c'])
-        self.assertEqual(re.split("(:*)", ":a:b::c"),
-                         ['', ':', 'a', ':', 'b', '::', 'c'])
+        for string in ":a:b::c", S(":a:b::c"):
+            self.assertTypedEqual(re.split(":", string),
+                                  ['', 'a', 'b', '', 'c'])
+            self.assertTypedEqual(re.split(":*", string),
+                                  ['', 'a', 'b', 'c'])
+            self.assertTypedEqual(re.split("(:*)", string),
+                                  ['', ':', 'a', ':', 'b', '::', 'c'])
+        for string in (b":a:b::c", B(b":a:b::c"), bytearray(b":a:b::c"),
+                       memoryview(b":a:b::c")):
+            self.assertTypedEqual(re.split(b":", string),
+                                  [b'', b'a', b'b', b'', b'c'])
+            self.assertTypedEqual(re.split(b":*", string),
+                                  [b'', b'a', b'b', b'c'])
+            self.assertTypedEqual(re.split(b"(:*)", string),
+                                  [b'', b':', b'a', b':', b'b', b'::', b'c'])
+        for a, b, c in ("\xe0\xdf\xe7", "\u0430\u0431\u0432",
+                        "\U0001d49c\U0001d49e\U0001d4b5"):
+            string = ":%s:%s::%s" % (a, b, c)
+            self.assertEqual(re.split(":", string), ['', a, b, '', c])
+            self.assertEqual(re.split(":*", string), ['', a, b, c])
+            self.assertEqual(re.split("(:*)", string),
+                             ['', ':', a, ':', b, '::', c])
+
         self.assertEqual(re.split("(?::*)", ":a:b::c"), ['', 'a', 'b', 'c'])
         self.assertEqual(re.split("(:)*", ":a:b::c"),
                          ['', ':', 'a', ':', 'b', ':', 'c'])
@@ -235,22 +281,53 @@ class ReTests(unittest.TestCase):
 
     def test_re_findall(self):
         self.assertEqual(re.findall(":+", "abc"), [])
-        self.assertEqual(re.findall(":+", "a:b::c:::d"), [":", "::", ":::"])
-        self.assertEqual(re.findall("(:+)", "a:b::c:::d"), [":", "::", ":::"])
-        self.assertEqual(re.findall("(:)(:*)", "a:b::c:::d"), [(":", ""),
-                                                               (":", ":"),
-                                                               (":", "::")])
+        for string in "a:b::c:::d", S("a:b::c:::d"):
+            self.assertTypedEqual(re.findall(":+", string),
+                                  [":", "::", ":::"])
+            self.assertTypedEqual(re.findall("(:+)", string),
+                                  [":", "::", ":::"])
+            self.assertTypedEqual(re.findall("(:)(:*)", string),
+                                  [(":", ""), (":", ":"), (":", "::")])
+        for string in (b"a:b::c:::d", B(b"a:b::c:::d"), bytearray(b"a:b::c:::d"),
+                       memoryview(b"a:b::c:::d")):
+            self.assertTypedEqual(re.findall(b":+", string),
+                                  [b":", b"::", b":::"])
+            self.assertTypedEqual(re.findall(b"(:+)", string),
+                                  [b":", b"::", b":::"])
+            self.assertTypedEqual(re.findall(b"(:)(:*)", string),
+                                  [(b":", b""), (b":", b":"), (b":", b"::")])
+        for x in ("\xe0", "\u0430", "\U0001d49c"):
+            xx = x * 2
+            xxx = x * 3
+            string = "a%sb%sc%sd" % (x, xx, xxx)
+            self.assertEqual(re.findall("%s+" % x, string), [x, xx, xxx])
+            self.assertEqual(re.findall("(%s+)" % x, string), [x, xx, xxx])
+            self.assertEqual(re.findall("(%s)(%s*)" % (x, x), string),
+                             [(x, ""), (x, x), (x, xx)])
 
     def test_bug_117612(self):
         self.assertEqual(re.findall(r"(a|(b))", "aba"),
                          [("a", ""),("b", "b"),("a", "")])
 
     def test_re_match(self):
-        self.assertEqual(re.match('a', 'a').groups(), ())
-        self.assertEqual(re.match('(a)', 'a').groups(), ('a',))
-        self.assertEqual(re.match(r'(a)', 'a').group(0), 'a')
-        self.assertEqual(re.match(r'(a)', 'a').group(1), 'a')
-        self.assertEqual(re.match(r'(a)', 'a').group(1, 1), ('a', 'a'))
+        for string in 'a', S('a'):
+            self.assertEqual(re.match('a', string).groups(), ())
+            self.assertEqual(re.match('(a)', string).groups(), ('a',))
+            self.assertEqual(re.match('(a)', string).group(0), 'a')
+            self.assertEqual(re.match('(a)', string).group(1), 'a')
+            self.assertEqual(re.match('(a)', string).group(1, 1), ('a', 'a'))
+        for string in b'a', B(b'a'), bytearray(b'a'), memoryview(b'a'):
+            self.assertEqual(re.match(b'a', string).groups(), ())
+            self.assertEqual(re.match(b'(a)', string).groups(), (b'a',))
+            self.assertEqual(re.match(b'(a)', string).group(0), b'a')
+            self.assertEqual(re.match(b'(a)', string).group(1), b'a')
+            self.assertEqual(re.match(b'(a)', string).group(1, 1), (b'a', b'a'))
+        for a in ("\xe0", "\u0430", "\U0001d49c"):
+            self.assertEqual(re.match(a, a).groups(), ())
+            self.assertEqual(re.match('(%s)' % a, a).groups(), (a,))
+            self.assertEqual(re.match('(%s)' % a, a).group(0), a)
+            self.assertEqual(re.match('(%s)' % a, a).group(1), a)
+            self.assertEqual(re.match('(%s)' % a, a).group(1, 1), (a, a))
 
         pat = re.compile('((a)|(b))(c)?')
         self.assertEqual(pat.match('a').groups(), ('a', 'a', None, None))
@@ -271,6 +348,36 @@ class ReTests(unittest.TestCase):
         self.assertEqual(pat.match('b').group('a1', 'b2', 'c3'),
                          (None, 'b', None))
         self.assertEqual(pat.match('ac').group(1, 'b2', 3), ('a', None, 'c'))
+
+    def test_re_fullmatch(self):
+        # Issue 16203: Proposal: add re.fullmatch() method.
+        self.assertEqual(re.fullmatch(r"a", "a").span(), (0, 1))
+        for string in "ab", S("ab"):
+            self.assertEqual(re.fullmatch(r"a|ab", string).span(), (0, 2))
+        for string in b"ab", B(b"ab"), bytearray(b"ab"), memoryview(b"ab"):
+            self.assertEqual(re.fullmatch(br"a|ab", string).span(), (0, 2))
+        for a, b in "\xe0\xdf", "\u0430\u0431", "\U0001d49c\U0001d49e":
+            r = r"%s|%s" % (a, a + b)
+            self.assertEqual(re.fullmatch(r, a + b).span(), (0, 2))
+        self.assertEqual(re.fullmatch(r".*?$", "abc").span(), (0, 3))
+        self.assertEqual(re.fullmatch(r".*?", "abc").span(), (0, 3))
+        self.assertEqual(re.fullmatch(r"a.*?b", "ab").span(), (0, 2))
+        self.assertEqual(re.fullmatch(r"a.*?b", "abb").span(), (0, 3))
+        self.assertEqual(re.fullmatch(r"a.*?b", "axxb").span(), (0, 4))
+        self.assertIsNone(re.fullmatch(r"a+", "ab"))
+        self.assertIsNone(re.fullmatch(r"abc$", "abc\n"))
+        self.assertIsNone(re.fullmatch(r"abc\Z", "abc\n"))
+        self.assertIsNone(re.fullmatch(r"(?m)abc$", "abc\n"))
+        self.assertEqual(re.fullmatch(r"ab(?=c)cd", "abcd").span(), (0, 4))
+        self.assertEqual(re.fullmatch(r"ab(?<=b)cd", "abcd").span(), (0, 4))
+        self.assertEqual(re.fullmatch(r"(?=a|ab)ab", "ab").span(), (0, 2))
+
+        self.assertEqual(
+            re.compile(r"bc").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
+        self.assertEqual(
+            re.compile(r".*?$").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
+        self.assertEqual(
+            re.compile(r".*?").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
 
     def test_re_groupref_exists(self):
         self.assertEqual(re.match('^(\()?([^()]+)(?(1)\))$', '(a)').groups(),
@@ -1053,6 +1160,28 @@ class ReTests(unittest.TestCase):
                 self.assertEqual(re.compile(pattern, re.S).findall(b'xyz'),
                                  [b'xyz'], msg=pattern)
 
+    def test_match_repr(self):
+        for string in '[abracadabra]', S('[abracadabra]'):
+            m = re.search(r'(.+)(.*?)\1', string)
+            self.assertEqual(repr(m), "<%s.%s object; "
+                             "span=(1, 12), match='abracadabra'>" %
+                             (type(m).__module__, type(m).__qualname__))
+        for string in (b'[abracadabra]', B(b'[abracadabra]'),
+                       bytearray(b'[abracadabra]'),
+                       memoryview(b'[abracadabra]')):
+            m = re.search(rb'(.+)(.*?)\1', string)
+            self.assertEqual(repr(m), "<%s.%s object; "
+                             "span=(1, 12), match=b'abracadabra'>" %
+                             (type(m).__module__, type(m).__qualname__))
+
+        first, second = list(re.finditer("(aa)|(bb)", "aa bb"))
+        self.assertEqual(repr(first), "<%s.%s object; "
+                         "span=(0, 2), match='aa'>" %
+                         (type(second).__module__, type(first).__qualname__))
+        self.assertEqual(repr(second), "<%s.%s object; "
+                         "span=(3, 5), match='bb'>" %
+                         (type(second).__module__, type(second).__qualname__))
+
 
     def test_bug_2537(self):
         # issue 2537: empty submatches
@@ -1075,6 +1204,83 @@ class ReTests(unittest.TestCase):
             re.compile('foo', re.DEBUG)
         self.assertEqual(out.getvalue().splitlines(),
                          ['literal 102 ', 'literal 111 ', 'literal 111 '])
+
+
+class PatternReprTests(unittest.TestCase):
+    def check(self, pattern, expected):
+        self.assertEqual(repr(re.compile(pattern)), expected)
+
+    def check_flags(self, pattern, flags, expected):
+        self.assertEqual(repr(re.compile(pattern, flags)), expected)
+
+    def test_without_flags(self):
+        self.check('random pattern',
+                   "re.compile('random pattern')")
+
+    def test_single_flag(self):
+        self.check_flags('random pattern', re.IGNORECASE,
+            "re.compile('random pattern', re.IGNORECASE)")
+
+    def test_multiple_flags(self):
+        self.check_flags('random pattern', re.I|re.S|re.X,
+            "re.compile('random pattern', "
+            "re.IGNORECASE|re.DOTALL|re.VERBOSE)")
+
+    def test_unicode_flag(self):
+        self.check_flags('random pattern', re.U,
+                         "re.compile('random pattern')")
+        self.check_flags('random pattern', re.I|re.S|re.U,
+                         "re.compile('random pattern', "
+                         "re.IGNORECASE|re.DOTALL)")
+
+    def test_inline_flags(self):
+        self.check('(?i)pattern',
+                   "re.compile('(?i)pattern', re.IGNORECASE)")
+
+    def test_unknown_flags(self):
+        self.check_flags('random pattern', 0x123000,
+                         "re.compile('random pattern', 0x123000)")
+        self.check_flags('random pattern', 0x123000|re.I,
+            "re.compile('random pattern', re.IGNORECASE|0x123000)")
+
+    def test_bytes(self):
+        self.check(b'bytes pattern',
+                   "re.compile(b'bytes pattern')")
+        self.check_flags(b'bytes pattern', re.A,
+                         "re.compile(b'bytes pattern', re.ASCII)")
+
+    def test_quotes(self):
+        self.check('random "double quoted" pattern',
+            '''re.compile('random "double quoted" pattern')''')
+        self.check("random 'single quoted' pattern",
+            '''re.compile("random 'single quoted' pattern")''')
+        self.check('''both 'single' and "double" quotes''',
+            '''re.compile('both \\'single\\' and "double" quotes')''')
+
+    def test_long_pattern(self):
+        pattern = 'Very %spattern' % ('long ' * 1000)
+        r = repr(re.compile(pattern))
+        self.assertLess(len(r), 300)
+        self.assertEqual(r[:30], "re.compile('Very long long lon")
+        r = repr(re.compile(pattern, re.I))
+        self.assertLess(len(r), 300)
+        self.assertEqual(r[:30], "re.compile('Very long long lon")
+        self.assertEqual(r[-16:], ", re.IGNORECASE)")
+
+
+class ImplementationTest(unittest.TestCase):
+    """
+    Test implementation details of the re module.
+    """
+
+    def test_overlap_table(self):
+        f = sre_compile._generate_overlap_table
+        self.assertEqual(f(""), [])
+        self.assertEqual(f("a"), [0])
+        self.assertEqual(f("abcd"), [0, 0, 0, 0])
+        self.assertEqual(f("aaaa"), [0, 1, 2, 3])
+        self.assertEqual(f("ababba"), [0, 0, 1, 2, 0, 1])
+        self.assertEqual(f("abcabdac"), [0, 0, 0, 1, 2, 0, 1, 0])
 
 
 def run_re_tests():
@@ -1206,7 +1412,7 @@ def run_re_tests():
 
 
 def test_main():
-    run_unittest(ReTests)
+    run_unittest(__name__)
     run_re_tests()
 
 if __name__ == "__main__":
