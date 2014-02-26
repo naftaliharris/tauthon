@@ -48,6 +48,7 @@ import _socket
 from _socket import *
 
 import os, sys, io
+from enum import IntEnum
 
 try:
     import errno
@@ -60,6 +61,30 @@ EWOULDBLOCK = getattr(errno, 'EWOULDBLOCK', 11)
 __all__ = ["getfqdn", "create_connection"]
 __all__.extend(os._get_exports_list(_socket))
 
+# Set up the socket.AF_* socket.SOCK_* constants as members of IntEnums for
+# nicer string representations.
+# Note that _socket only knows about the integer values. The public interface
+# in this module understands the enums and translates them back from integers
+# where needed (e.g. .family property of a socket object).
+AddressFamily = IntEnum('AddressFamily',
+                        {name: value for name, value in globals().items()
+                         if name.isupper() and name.startswith('AF_')})
+globals().update(AddressFamily.__members__)
+
+SocketType = IntEnum('SocketType',
+                     {name: value for name, value in globals().items()
+                      if name.isupper() and name.startswith('SOCK_')})
+globals().update(SocketType.__members__)
+
+def _intenum_converter(value, enum_klass):
+    """Convert a numeric family value to an IntEnum member.
+
+    If it's not a known member, return the numeric value itself.
+    """
+    try:
+        return enum_klass(value)
+    except ValueError:
+        return value
 
 _realsocket = socket
 
@@ -91,6 +116,10 @@ class socket(_socket.socket):
     __slots__ = ["__weakref__", "_io_refs", "_closed"]
 
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, fileno=None):
+        # For user code address family and type values are IntEnum members, but
+        # for the underlying _socket.socket they're just integers. The
+        # constructor of _socket.socket converts the given argument to an
+        # integer automatically.
         _socket.socket.__init__(self, family, type, proto, fileno)
         self._io_refs = 0
         self._closed = False
@@ -103,13 +132,32 @@ class socket(_socket.socket):
             self.close()
 
     def __repr__(self):
-        """Wrap __repr__() to reveal the real class name."""
-        s = _socket.socket.__repr__(self)
-        if s.startswith("<socket object"):
-            s = "<%s.%s%s%s" % (self.__class__.__module__,
-                                self.__class__.__name__,
-                                getattr(self, '_closed', False) and " [closed] " or "",
-                                s[7:])
+        """Wrap __repr__() to reveal the real class name and socket
+        address(es).
+        """
+        closed = getattr(self, '_closed', False)
+        s = "<%s.%s%s fd=%i, family=%s, type=%s, proto=%i" \
+            % (self.__class__.__module__,
+               self.__class__.__name__,
+               " [closed]" if closed else "",
+               self.fileno(),
+               self.family,
+               self.type,
+               self.proto)
+        if not closed:
+            try:
+                laddr = self.getsockname()
+                if laddr:
+                    s += ", laddr=%s" % str(laddr)
+            except error:
+                pass
+            try:
+                raddr = self.getpeername()
+                if raddr:
+                    s += ", raddr=%s" % str(raddr)
+            except error:
+                pass
+        s += '>'
         return s
 
     def __getstate__(self):
@@ -118,7 +166,8 @@ class socket(_socket.socket):
     def dup(self):
         """dup() -> socket object
 
-        Return a new socket object connected to the same system resource.
+        Duplicate the socket. Return a new socket object connected to the same
+        system resource. The new socket is non-inheritable.
         """
         fd = dup(self.fileno())
         sock = self.__class__(self.family, self.type, self.proto, fileno=fd)
@@ -210,6 +259,31 @@ class socket(_socket.socket):
         self._closed = True
         return super().detach()
 
+    @property
+    def family(self):
+        """Read-only access to the address family for this socket.
+        """
+        return _intenum_converter(super().family, AddressFamily)
+
+    @property
+    def type(self):
+        """Read-only access to the socket type.
+        """
+        return _intenum_converter(super().type, SocketType)
+
+    if os.name == 'nt':
+        def get_inheritable(self):
+            return os.get_handle_inheritable(self.fileno())
+        def set_inheritable(self, inheritable):
+            os.set_handle_inheritable(self.fileno(), inheritable)
+    else:
+        def get_inheritable(self):
+            return os.get_inheritable(self.fileno())
+        def set_inheritable(self, inheritable):
+            os.set_inheritable(self.fileno(), inheritable)
+    get_inheritable.__doc__ = "Get the inheritable flag of the socket"
+    set_inheritable.__doc__ = "Set the inheritable flag of the socket"
+
 def fromfd(fd, family, type, proto=0):
     """ fromfd(fd, family, type[, proto]) -> socket object
 
@@ -291,7 +365,7 @@ class SocketIO(io.RawIOBase):
         self._checkClosed()
         self._checkReadable()
         if self._timeout_occurred:
-            raise IOError("cannot read from timed out object")
+            raise OSError("cannot read from timed out object")
         while True:
             try:
                 return self._sock.recv_into(b)
@@ -435,3 +509,27 @@ def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT,
         raise err
     else:
         raise error("getaddrinfo returns an empty list")
+
+def getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    """Resolve host and port into list of address info entries.
+
+    Translate the host/port argument into a sequence of 5-tuples that contain
+    all the necessary arguments for creating a socket connected to that service.
+    host is a domain name, a string representation of an IPv4/v6 address or
+    None. port is a string service name such as 'http', a numeric port number or
+    None. By passing None as the value of host and port, you can pass NULL to
+    the underlying C API.
+
+    The family, type and proto arguments can be optionally specified in order to
+    narrow the list of addresses returned. Passing zero as a value for each of
+    these arguments selects the full range of results.
+    """
+    # We override this function since we want to translate the numeric family
+    # and socket type values to enum constants.
+    addrlist = []
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+        af, socktype, proto, canonname, sa = res
+        addrlist.append((_intenum_converter(af, AddressFamily),
+                         _intenum_converter(socktype, SocketType),
+                         proto, canonname, sa))
+    return addrlist

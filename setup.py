@@ -1,8 +1,10 @@
 # Autodetecting setup.py script for building the Python extensions
 #
 
-import sys, os, imp, re, optparse
+import sys, os, importlib.machinery, re, optparse
 from glob import glob
+import importlib._bootstrap
+import importlib.util
 import sysconfig
 
 from distutils import log
@@ -259,8 +261,9 @@ class PyBuildExt(build_ext):
 
         if missing:
             print()
-            print("Python build finished, but the necessary bits to build "
-                   "these modules were not found:")
+            print("Python build finished successfully!")
+            print("The necessary bits to build these optional modules were not "
+                  "found:")
             print_three_column(missing)
             print("To find the necessary bits, look in setup.py in"
                   " detect_modules() for the module's name.")
@@ -325,8 +328,11 @@ class PyBuildExt(build_ext):
         if cross_compiling:
             return
 
+        loader = importlib.machinery.ExtensionFileLoader(ext.name, ext_filename)
+        spec = importlib.util.spec_from_file_location(ext.name, ext_filename,
+                                                      loader=loader)
         try:
-            imp.load_dynamic(ext.name, ext_filename)
+            importlib._bootstrap._SpecMethods(spec).load()
         except ImportError as why:
             self.failed.append(ext.name)
             self.announce('*** WARNING: renaming "%s" since importing it'
@@ -588,10 +594,14 @@ class PyBuildExt(build_ext):
                                depends=['testcapi_long.h']) )
         # Python PEP-3118 (buffer protocol) test module
         exts.append( Extension('_testbuffer', ['_testbuffer.c']) )
+        # Test loading multiple modules from one compiled file (http://bugs.python.org/issue16421)
+        exts.append( Extension('_testimportmultiple', ['_testimportmultiple.c']) )
         # profiler (_lsprof is for cProfile.py)
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database
         exts.append( Extension('unicodedata', ['unicodedata.c']) )
+        # _opcode module
+        exts.append( Extension('_opcode', ['_opcode.c']) )
 
         # Modules with some UNIX dependencies -- on by default:
         # (If you have a really backward UNIX, select and socket may not be
@@ -784,10 +794,10 @@ class PyBuildExt(build_ext):
                     for line in incfile:
                         m = openssl_ver_re.match(line)
                         if m:
-                            openssl_ver = eval(m.group(1))
+                            openssl_ver = int(m.group(1), 16)
+                            break
             except IOError as msg:
                 print("IOError while reading opensshv.h:", msg)
-                pass
 
         #print('openssl_ver = 0x%08x' % openssl_ver)
         min_openssl_ver = 0x00907000
@@ -1509,10 +1519,6 @@ class PyBuildExt(build_ext):
 
         if host_platform == 'darwin':
             exts.append(
-                       Extension('_gestalt', ['_gestalt.c'],
-                       extra_link_args=['-framework', 'Carbon'])
-                       )
-            exts.append(
                        Extension('_scproxy', ['_scproxy.c'],
                        extra_link_args=[
                            '-framework', 'SystemConfiguration',
@@ -1533,7 +1539,7 @@ class PyBuildExt(build_ext):
 
         if 'd' not in sys.abiflags:
             ext = Extension('xxlimited', ['xxlimited.c'],
-                            define_macros=[('Py_LIMITED_API', 1)])
+                            define_macros=[('Py_LIMITED_API', '0x03040000')])
             self.extensions.append(ext)
 
         return missing
@@ -2156,7 +2162,7 @@ is also usable as an extension language for applications that need a
 programmable interface.
 
 The Python implementation is portable: it runs on many brands of UNIX,
-on Windows, DOS, OS/2, Mac, Amiga... If your favorite system isn't
+on Windows, DOS, Mac, Amiga... If your favorite system isn't
 listed here, it may still be supported, if there's a C compiler for
 it. Ask around on comp.lang.python -- or just try compiling Python
 yourself.
