@@ -278,6 +278,10 @@ strings are treated as if they were docstrings.  In output, a key ``K`` in
 Any classes found are recursively searched similarly, to test docstrings in
 their contained methods and nested classes.
 
+.. impl-detail::
+   Prior to version 3.4, extension modules written in C were not fully
+   searched by doctest.
+
 
 .. _doctest-finding-examples:
 
@@ -495,7 +499,10 @@ Option Flags
 A number of option flags control various aspects of doctest's behavior.
 Symbolic names for the flags are supplied as module constants, which can be
 or'ed together and passed to various functions.  The names can also be used in
-:ref:`doctest directives <doctest-directives>`.
+:ref:`doctest directives <doctest-directives>`, and may be passed to the
+doctest command line interface via the ``-o`` option.
+
+.. versionadded:: 3.4 the ``-o`` command line option
 
 The first group of options define test semantics, controlling aspects of how
 doctest decides whether actual output matches an example's expected output:
@@ -631,6 +638,19 @@ The second group of options controls how test failures are reported:
    :const:`REPORT_ONLY_FIRST_FAILURE` is specified, the remaining examples are
    still run, and still count towards the total number of failures reported; only
    the output is suppressed.
+
+
+.. data:: FAIL_FAST
+
+   When specified, exit after the first failing example and don't attempt to run
+   the remaining examples. Thus, the number of failures reported will be at most
+   1.  This flag may be useful during debugging, since examples after the first
+   failure won't even produce debugging output.
+
+   The doctest command line accepts the option ``-f`` as a shorthand for ``-o
+   FAIL_FAST``.
+
+   .. versionadded:: 3.4
 
 
 .. data:: REPORTING_FLAGS
@@ -1269,9 +1289,8 @@ DocTestFinder objects
 
    A processing class used to extract the :class:`DocTest`\ s that are relevant to
    a given object, from its docstring and the docstrings of its contained objects.
-   :class:`DocTest`\ s can currently be extracted from the following object types:
-   modules, functions, classes, methods, staticmethods, classmethods, and
-   properties.
+   :class:`DocTest`\ s can be extracted from modules, classes, functions,
+   methods, staticmethods, classmethods, and properties.
 
    The optional argument *verbose* can be used to display the objects searched by
    the finder.  It defaults to ``False`` (no output).

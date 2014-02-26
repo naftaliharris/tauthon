@@ -129,6 +129,13 @@ The module defines the following functions:
 
    A shorthand for ``format_list(extract_stack(f, limit))``.
 
+.. function:: clear_frames(tb)
+
+   Clears the local variables of all the stack frames in a traceback *tb*
+   by calling the :meth:`clear` method of each frame object.
+
+   .. versionadded:: 3.4
+
 
 .. _traceback-example:
 
@@ -146,7 +153,7 @@ module. ::
        source = input(">>> ")
        try:
            exec(source, envdir)
-       except:
+       except Exception:
            print("Exception in user code:")
            print("-"*60)
            traceback.print_exc(file=sys.stdout)
