@@ -15,6 +15,31 @@ gen_traverse(PyGenObject *gen, visitproc visit, void *arg)
     return 0;
 }
 
+void
+_PyGen_Finalize(PyObject *self)
+{
+    PyGenObject *gen = (PyGenObject *)self;
+    PyObject *res;
+    PyObject *error_type, *error_value, *error_traceback;
+
+    if (gen->gi_frame == NULL || gen->gi_frame->f_stacktop == NULL)
+        /* Generator isn't paused, so no need to close */
+        return;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    res = gen_close(gen, NULL);
+
+    if (res == NULL)
+        PyErr_WriteUnraisable(self);
+    else
+        Py_DECREF(res);
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+}
+
 static void
 gen_dealloc(PyGenObject *gen)
 {
@@ -27,19 +52,14 @@ gen_dealloc(PyGenObject *gen)
 
     _PyObject_GC_TRACK(self);
 
-    if (gen->gi_frame != NULL && gen->gi_frame->f_stacktop != NULL) {
-        /* Generator is paused, so we need to close */
-        Py_TYPE(gen)->tp_del(self);
-        if (self->ob_refcnt > 0)
-            return;                     /* resurrected.  :( */
-    }
+    if (PyObject_CallFinalizerFromDealloc(self))
+        return;                     /* resurrected.  :( */
 
     _PyObject_GC_UNTRACK(self);
     Py_CLEAR(gen->gi_frame);
     Py_CLEAR(gen->gi_code);
     PyObject_GC_Del(gen);
 }
-
 
 static PyObject *
 gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
@@ -76,7 +96,6 @@ gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
 
     /* Generators always return to their most recent caller, not
      * necessarily their creator. */
-    f->f_tstate = tstate;
     Py_XINCREF(tstate->frame);
     assert(f->f_back == NULL);
     f->f_back = tstate->frame;
@@ -90,8 +109,6 @@ gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
      * cycle. */
     assert(f->f_back == tstate->frame);
     Py_CLEAR(f->f_back);
-    /* Clear the borrowed reference to the thread state */
-    f->f_tstate = NULL;
 
     /* If the generator just returned (as opposed to yielding), signal
      * that the generator is exhausted. */
@@ -123,6 +140,7 @@ gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
         Py_XDECREF(t);
         Py_XDECREF(v);
         Py_XDECREF(tb);
+        gen->gi_frame->f_gen = NULL;
         gen->gi_frame = NULL;
         Py_DECREF(f);
     }
@@ -224,68 +242,6 @@ gen_close(PyGenObject *gen, PyObject *args)
     }
     return NULL;
 }
-
-static void
-gen_del(PyObject *self)
-{
-    PyObject *res;
-    PyObject *error_type, *error_value, *error_traceback;
-    PyGenObject *gen = (PyGenObject *)self;
-
-    if (gen->gi_frame == NULL || gen->gi_frame->f_stacktop == NULL)
-        /* Generator isn't paused, so no need to close */
-        return;
-
-    /* Temporarily resurrect the object. */
-    assert(self->ob_refcnt == 0);
-    self->ob_refcnt = 1;
-
-    /* Save the current exception, if any. */
-    PyErr_Fetch(&error_type, &error_value, &error_traceback);
-
-    res = gen_close(gen, NULL);
-
-    if (res == NULL)
-        PyErr_WriteUnraisable(self);
-    else
-        Py_DECREF(res);
-
-    /* Restore the saved exception. */
-    PyErr_Restore(error_type, error_value, error_traceback);
-
-    /* Undo the temporary resurrection; can't use DECREF here, it would
-     * cause a recursive call.
-     */
-    assert(self->ob_refcnt > 0);
-    if (--self->ob_refcnt == 0)
-        return; /* this is the normal path out */
-
-    /* close() resurrected it!  Make it look like the original Py_DECREF
-     * never happened.
-     */
-    {
-        Py_ssize_t refcnt = self->ob_refcnt;
-        _Py_NewReference(self);
-        self->ob_refcnt = refcnt;
-    }
-    assert(PyType_IS_GC(Py_TYPE(self)) &&
-           _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
-
-    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
-     * we need to undo that. */
-    _Py_DEC_REFTOTAL;
-    /* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
-     * chain, so no more to do there.
-     * If COUNT_ALLOCS, the original decref bumped tp_frees, and
-     * _Py_NewReference bumped tp_allocs:  both of those need to be
-     * undone.
-     */
-#ifdef COUNT_ALLOCS
-    --(Py_TYPE(self)->tp_frees);
-    --(Py_TYPE(self)->tp_allocs);
-#endif
-}
-
 
 
 PyDoc_STRVAR(throw_doc,
@@ -520,7 +476,8 @@ PyTypeObject PyGen_Type = {
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
+        Py_TPFLAGS_HAVE_FINALIZE,               /* tp_flags */
     0,                                          /* tp_doc */
     (traverseproc)gen_traverse,                 /* tp_traverse */
     0,                                          /* tp_clear */
@@ -547,7 +504,9 @@ PyTypeObject PyGen_Type = {
     0,                                          /* tp_cache */
     0,                                          /* tp_subclasses */
     0,                                          /* tp_weaklist */
-    gen_del,                                    /* tp_del */
+    0,                                          /* tp_del */
+    0,                                          /* tp_version_tag */
+    _PyGen_Finalize,                            /* tp_finalize */
 };
 
 PyObject *
@@ -559,6 +518,7 @@ PyGen_New(PyFrameObject *f)
         return NULL;
     }
     gen->gi_frame = f;
+    f->f_gen = (PyObject *) gen;
     Py_INCREF(f->f_code);
     gen->gi_code = (PyObject *)(f->f_code);
     gen->gi_running = 0;
