@@ -95,6 +95,83 @@ Functions and classes provided:
    ``page.close()`` will be called when the :keyword:`with` block is exited.
 
 
+.. function:: suppress(*exceptions)
+
+   Return a context manager that suppresses any of the specified exceptions
+   if they occur in the body of a with statement and then resumes execution
+   with the first statement following the end of the with statement.
+
+   As with any other mechanism that completely suppresses exceptions, this
+   context manager should be used only to cover very specific errors where
+   silently continuing with program execution is known to be the right
+   thing to do.
+
+   For example::
+
+       from contextlib import suppress
+
+       with suppress(FileNotFoundError):
+           os.remove('somefile.tmp')
+
+       with suppress(FileNotFoundError):
+           os.remove('someotherfile.tmp')
+
+   This code is equivalent to::
+
+       try:
+           os.remove('somefile.tmp')
+       except FileNotFoundError:
+           pass
+
+       try:
+           os.remove('someotherfile.tmp')
+       except FileNotFoundError:
+           pass
+
+   This context manager is :ref:`reentrant <reentrant-cms>`.
+
+   .. versionadded:: 3.4
+
+
+.. function:: redirect_stdout(new_target)
+
+   Context manager for temporarily redirecting :data:`sys.stdout` to
+   another file or file-like object.
+
+   This tool adds flexibility to existing functions or classes whose output
+   is hardwired to stdout.
+
+   For example, the output of :func:`help` normally is sent to *sys.stdout*.
+   You can capture that output in a string by redirecting the output to a
+   :class:`io.StringIO` object::
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            help(pow)
+        s = f.getvalue()
+
+   To send the output of :func:`help` to a file on disk, redirect the output
+   to a regular file::
+
+        with open('help.txt', 'w') as f:
+            with redirect_stdout(f):
+                help(pow)
+
+   To send the output of :func:`help` to *sys.stderr*::
+
+        with redirect_stdout(sys.stderr):
+            help(pow)
+
+   Note that the global side effect on :data:`sys.stdout` means that this
+   context manager is not suitable for use in library code and most threaded
+   applications. It also has no effect on the output of subprocesses.
+   However, it is still a useful approach for many utility scripts.
+
+   This context manager is :ref:`reusable but not reentrant <reusable-cms>`.
+
+   .. versionadded:: 3.4
+
+
 .. class:: ContextDecorator()
 
    A base class that enables a context manager to also be used as a decorator.
@@ -520,3 +597,153 @@ an explicit ``with`` statement.
       The specification, background, and examples for the Python :keyword:`with`
       statement.
 
+.. _single-use-reusable-and-reentrant-cms:
+
+Single use, reusable and reentrant context managers
+---------------------------------------------------
+
+Most context managers are written in a way that means they can only be
+used effectively in a :keyword:`with` statement once. These single use
+context managers must be created afresh each time they're used -
+attempting to use them a second time will trigger an exception or
+otherwise not work correctly.
+
+This common limitation means that it is generally advisable to create
+context managers directly in the header of the :keyword:`with` statement
+where they are used (as shown in all of the usage examples above).
+
+Files are an example of effectively single use context managers, since
+the first :keyword:`with` statement will close the file, preventing any
+further IO operations using that file object.
+
+Context managers created using :func:`contextmanager` are also single use
+context managers, and will complain about the underlying generator failing
+to yield if an attempt is made to use them a second time::
+
+    >>> from contextlib import contextmanager
+    >>> @contextmanager
+    ... def singleuse():
+    ...     print("Before")
+    ...     yield
+    ...     print("After")
+    ...
+    >>> cm = singleuse()
+    >>> with cm:
+    ...     pass
+    ...
+    Before
+    After
+    >>> with cm:
+    ...    pass
+    ...
+    Traceback (most recent call last):
+        ...
+    RuntimeError: generator didn't yield
+
+
+.. _reentrant-cms:
+
+Reentrant context managers
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+More sophisticated context managers may be "reentrant". These context
+managers can not only be used in multiple :keyword:`with` statements,
+but may also be used *inside* a :keyword:`with` statement that is already
+using the same context manager.
+
+:class:`threading.RLock` is an example of a reentrant context manager, as are
+:func:`suppress` and :func:`redirect_stdout`. Here's a very simple example of
+reentrant use::
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> stream = StringIO()
+    >>> write_to_stream = redirect_stdout(stream)
+    >>> with write_to_stream:
+    ...     print("This is written to the stream rather than stdout")
+    ...     with write_to_stream:
+    ...         print("This is also written to the stream")
+    ...
+    >>> print("This is written directly to stdout")
+    This is written directly to stdout
+    >>> print(stream.getvalue())
+    This is written to the stream rather than stdout
+    This is also written to the stream
+
+Real world examples of reentrancy are more likely to involve multiple
+functions calling each other and hence be far more complicated than this
+example.
+
+Note also that being reentrant is *not* the same thing as being thread safe.
+:func:`redirect_stdout`, for example, is definitely not thread safe, as it
+makes a global modification to the system state by binding :data:`sys.stdout`
+to a different stream.
+
+
+.. _reusable-cms:
+
+Reusable context managers
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Distinct from both single use and reentrant context managers are "reusable"
+context managers (or, to be completely explicit, "reusable, but not
+reentrant" context managers, since reentrant context managers are also
+reusable). These context managers support being used multiple times, but
+will fail (or otherwise not work correctly) if the specific context manager
+instance has already been used in a containing with statement.
+
+:class:`threading.Lock` is an example of a reusable, but not reentrant,
+context manager (for a reentrant lock, it is necessary to use
+:class:`threading.RLock` instead).
+
+Another example of a reusable, but not reentrant, context manager is
+:class:`ExitStack`, as it invokes *all* currently registered callbacks
+when leaving any with statement, regardless of where those callbacks
+were added::
+
+    >>> from contextlib import ExitStack
+    >>> stack = ExitStack()
+    >>> with stack:
+    ...     stack.callback(print, "Callback: from first context")
+    ...     print("Leaving first context")
+    ...
+    Leaving first context
+    Callback: from first context
+    >>> with stack:
+    ...     stack.callback(print, "Callback: from second context")
+    ...     print("Leaving second context")
+    ...
+    Leaving second context
+    Callback: from second context
+    >>> with stack:
+    ...     stack.callback(print, "Callback: from outer context")
+    ...     with stack:
+    ...         stack.callback(print, "Callback: from inner context")
+    ...         print("Leaving inner context")
+    ...     print("Leaving outer context")
+    ...
+    Leaving inner context
+    Callback: from inner context
+    Callback: from outer context
+    Leaving outer context
+
+As the output from the example shows, reusing a single stack object across
+multiple with statements works correctly, but attempting to nest them
+will cause the stack to be cleared at the end of the innermost with
+statement, which is unlikely to be desirable behaviour.
+
+Using separate :class:`ExitStack` instances instead of reusing a single
+instance avoids that problem::
+
+    >>> from contextlib import ExitStack
+    >>> with ExitStack() as outer_stack:
+    ...     outer_stack.callback(print, "Callback: from outer context")
+    ...     with ExitStack() as inner_stack:
+    ...         inner_stack.callback(print, "Callback: from inner context")
+    ...         print("Leaving inner context")
+    ...     print("Leaving outer context")
+    ...
+    Leaving inner context
+    Callback: from inner context
+    Leaving outer context
+    Callback: from outer context
