@@ -22,6 +22,11 @@ Functions such as :func:`expanduser` and :func:`expandvars` can be invoked
 explicitly when an application desires shell-like path expansion.  (See also
 the :mod:`glob` module.)
 
+
+.. seealso::
+   The :mod:`pathlib` module offers high-level path objects.
+
+
 .. note::
 
    All of these functions accept either only bytes or only string objects as
@@ -42,7 +47,6 @@ the :mod:`glob` module.)
    * :mod:`posixpath` for UNIX-style paths
    * :mod:`ntpath` for Windows paths
    * :mod:`macpath` for old-style MacOS paths
-   * :mod:`os2emxpath` for OS/2 EMX paths
 
 
 .. function:: abspath(path)
@@ -189,11 +193,17 @@ the :mod:`glob` module.)
 
 .. function:: ismount(path)
 
-   Return ``True`` if pathname *path* is a :dfn:`mount point`: a point in a file
-   system where a different file system has been mounted.  The function checks
-   whether *path*'s parent, :file:`path/..`, is on a different device than *path*,
-   or whether :file:`path/..` and *path* point to the same i-node on the same
-   device --- this should detect mount points for all Unix and POSIX variants.
+   Return ``True`` if pathname *path* is a :dfn:`mount point`: a point in a
+   file system where a different file system has been mounted.  On POSIX, the
+   function checks whether *path*'s parent, :file:`path/..`, is on a different
+   device than *path*, or whether :file:`path/..` and *path* point to the same
+   i-node on the same device --- this should detect mount points for all Unix
+   and POSIX variants.  On Windows, a drive letter root and a share UNC are
+   always mount points, and for any other path ``GetVolumePathName`` is called
+   to see if it is different from the input path.
+
+   .. versionadded:: 3.4
+      Support for detecting non-root mount points on Windows.
 
 
 .. function:: join(path1[, path2[, ...]])
@@ -247,17 +257,16 @@ the :mod:`glob` module.)
 .. function:: samefile(path1, path2)
 
    Return ``True`` if both pathname arguments refer to the same file or directory.
-   On Unix, this is determined by the device number and i-node number and raises an
+   This is determined by the device number and i-node number and raises an
    exception if a :func:`os.stat` call on either pathname fails.
-
-   On Windows, two files are the same if they resolve to the same final path
-   name using the Windows API call GetFinalPathNameByHandle. This function
-   raises an exception if handles cannot be obtained to either file.
 
    Availability: Unix, Windows.
 
    .. versionchanged:: 3.2
       Added Windows support.
+
+   .. versionchanged:: 3.4
+      Windows now uses the same implementation as all other platforms.
 
 
 .. function:: sameopenfile(fp1, fp2)
@@ -277,7 +286,10 @@ the :mod:`glob` module.)
    :func:`os.lstat`, or :func:`os.stat`.  This function implements the
    underlying comparison used by :func:`samefile` and :func:`sameopenfile`.
 
-   Availability: Unix.
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      Added Windows support.
 
 
 .. function:: split(path)

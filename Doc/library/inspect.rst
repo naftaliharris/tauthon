@@ -69,7 +69,12 @@ attributes:
 |           |                 | :term:`bytecode`          |
 +-----------+-----------------+---------------------------+
 |           | __defaults__    | tuple of any default      |
-|           |                 | values for arguments      |
+|           |                 | values for positional or  |
+|           |                 | keyword parameters        |
++-----------+-----------------+---------------------------+
+|           | __kwdefaults__  | mapping of any default    |
+|           |                 | values for keyword-only   |
+|           |                 | parameters                |
 +-----------+-----------------+---------------------------+
 |           | __globals__     | global namespace in which |
 |           |                 | this function was defined |
@@ -173,8 +178,9 @@ attributes:
 
    .. note::
 
-      :func:`getmembers` does not return metaclass attributes when the argument
-      is a class (this behavior is inherited from the :func:`dir` function).
+      :func:`getmembers` will only return class attributes defined in the
+      metaclass when the argument is a class and those attributes have been
+      listed in the metaclass' custom :meth:`__dir__`.
 
 
 .. function:: getmoduleinfo(path)
@@ -428,11 +434,14 @@ function.
    Accepts a wide range of python callables, from plain functions and classes to
    :func:`functools.partial` objects.
 
+   Raises :exc:`ValueError` if no signature can be provided, and
+   :exc:`TypeError` if that type of object is not supported.
+
    .. note::
 
       Some callables may not be introspectable in certain implementations of
-      Python.  For example, in CPython, built-in functions defined in C provide
-      no metadata about their arguments.
+      Python.  For example, in CPython, some built-in functions defined in
+      C provide no metadata about their arguments.
 
 
 .. class:: Signature(parameters=None, \*, return_annotation=Signature.empty)
@@ -510,9 +519,8 @@ function.
 
    .. attribute:: Parameter.name
 
-      The name of the parameter as a string.  Must be a valid python identifier
-      name (with the exception of ``POSITIONAL_ONLY`` parameters, which can have
-      it set to ``None``).
+      The name of the parameter as a string.  The name must be a valid
+      Python identifier.
 
    .. attribute:: Parameter.default
 
@@ -596,6 +604,10 @@ function.
          >>> str(param.replace(default=Parameter.empty, annotation='spam'))
          "foo:'spam'"
 
+    .. versionchanged:: 3.4
+        In Python 3.3 Parameter objects were allowed to have ``name`` set
+        to ``None`` if their ``kind`` was set to ``POSITIONAL_ONLY``.
+        This is no longer permitted.
 
 .. class:: BoundArguments
 
@@ -806,6 +818,23 @@ Classes and functions
    .. versionadded:: 3.3
 
 
+.. function:: unwrap(func, *, stop=None)
+
+   Get the object wrapped by *func*. It follows the chain of :attr:`__wrapped__`
+   attributes returning the last object in the chain.
+
+   *stop* is an optional callback accepting an object in the wrapper chain
+   as its sole argument that allows the unwrapping to be terminated early if
+   the callback returns a true value. If the callback never returns a true
+   value, the last object in the chain is returned as usual. For example,
+   :func:`signature` uses this to stop unwrapping if any object in the
+   chain has a ``__signature__`` attribute defined.
+
+   :exc:`ValueError` is raised if a cycle is encountered.
+
+   .. versionadded:: 3.4
+
+
 .. _inspect-stack:
 
 The interpreter stack
@@ -837,6 +866,10 @@ index of the current line within that list.
               # do something with the frame
           finally:
               del frame
+
+   If you want to keep the frame around (for example to print a traceback
+   later), you can also break reference cycles by using the
+   :meth:`frame.clear` method.
 
 The optional *context* argument supported by most of these functions specifies
 the number of lines of context to return, which are centered around the current
@@ -994,3 +1027,22 @@ updated as expected:
       return an empty dictionary.
 
    .. versionadded:: 3.3
+
+
+.. _inspect-module-cli:
+
+Command Line Interface
+----------------------
+
+The :mod:`inspect` module also provides a basic introspection capability
+from the command line.
+
+.. program:: inspect
+
+By default, accepts the name of a module and prints the source of that
+module. A class or function within the module can be printed instead by
+appended a colon and the qualified name of the target object.
+
+.. cmdoption:: --details
+
+   Print information about the specified object rather than the source code
