@@ -3,11 +3,11 @@
   Nick Mathewson
 """
 
-import imp
 import sys
 import os
 import shutil
 import importlib
+import importlib.util
 import unittest
 
 from test.support import run_unittest, create_empty_file, verbose
@@ -248,7 +248,8 @@ class LongReprTest(unittest.TestCase):
         source_path_len += 2 * (len(self.longname) + 1)
         # a path separator + `module_name` + ".py"
         source_path_len += len(module_name) + 1 + len(".py")
-        cached_path_len = source_path_len + len(imp.cache_from_source("x.py")) - len("x.py")
+        cached_path_len = (source_path_len +
+            len(importlib.util.cache_from_source("x.py")) - len("x.py"))
         if os.name == 'nt' and cached_path_len >= 258:
             # Under Windows, the max path len is 260 including C's terminating
             # NUL character.
@@ -259,6 +260,7 @@ class LongReprTest(unittest.TestCase):
             print("cached_path_len =", cached_path_len)
 
     def test_module(self):
+        self.maxDiff = None
         self._check_path_limitations(self.pkgname)
         create_empty_file(os.path.join(self.subpkgname, self.pkgname + '.py'))
         importlib.invalidate_caches()

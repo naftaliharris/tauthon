@@ -77,7 +77,7 @@ extern int _PyIO_trap_eintr(void);
    long with "%lld" even when both long and long long have the same
    precision. */
 
-#if defined(MS_WIN64) || defined(MS_WINDOWS)
+#ifdef MS_WINDOWS
 
 /* Windows uses long long for offsets */
 typedef PY_LONG_LONG Py_off_t;
@@ -135,7 +135,10 @@ typedef struct {
 } _PyIO_State;
 
 #define IO_MOD_STATE(mod) ((_PyIO_State *)PyModule_GetState(mod))
-#define IO_STATE IO_MOD_STATE(PyState_FindModule(&_PyIO_Module))
+#define IO_STATE() _PyIO_get_module_state()
+
+extern _PyIO_State *_PyIO_get_module_state(void);
+extern PyObject *_PyIO_get_locale_module(_PyIO_State *);
 
 extern PyObject *_PyIO_str_close;
 extern PyObject *_PyIO_str_closed;

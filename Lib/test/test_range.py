@@ -313,7 +313,7 @@ class RangeTest(unittest.TestCase):
         self.assertRaises(TypeError, range, IN())
 
         # Test use of user-defined classes in slice indices.
-        self.assertEqual(list(range(10)[:I(5)]), list(range(5)))
+        self.assertEqual(range(10)[:I(5)], range(5))
 
         with self.assertRaises(RuntimeError):
             range(0, 10)[:IX()]
@@ -353,9 +353,10 @@ class RangeTest(unittest.TestCase):
                      (13, 21, 3), (-2, 2, 2), (2**65, 2**65+2)]
         for proto in range(pickle.HIGHEST_PROTOCOL + 1):
             for t in testcases:
-                r = range(*t)
-                self.assertEqual(list(pickle.loads(pickle.dumps(r, proto))),
-                                 list(r))
+                with self.subTest(proto=proto, test=t):
+                    r = range(*t)
+                    self.assertEqual(list(pickle.loads(pickle.dumps(r, proto))),
+                                     list(r))
 
     def test_iterator_pickling(self):
         testcases = [(13,), (0, 11), (-22, 10), (20, 3, -1),

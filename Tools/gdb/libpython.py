@@ -939,21 +939,26 @@ class PyFrameObjectPtr(PyObjectPtr):
 class PySetObjectPtr(PyObjectPtr):
     _typename = 'PySetObject'
 
+    @classmethod
+    def _dummy_key(self):
+        return gdb.lookup_global_symbol('_PySet_Dummy').value()
+
+    def __iter__(self):
+        dummy_ptr = self._dummy_key()
+        table = self.field('table')
+        for i in safe_range(self.field('mask') + 1):
+            setentry = table[i]
+            key = setentry['key']
+            if key != 0 and key != dummy_ptr:
+                yield PyObjectPtr.from_pyobject_ptr(key)
+
     def proxyval(self, visited):
         # Guard against infinite loops:
         if self.as_address() in visited:
             return ProxyAlreadyVisited('%s(...)' % self.safe_tp_name())
         visited.add(self.as_address())
 
-        members = []
-        table = self.field('table')
-        for i in safe_range(self.field('mask')+1):
-            setentry = table[i]
-            key = setentry['key']
-            if key != 0:
-                key_proxy = PyObjectPtr.from_pyobject_ptr(key).proxyval(visited)
-                if key_proxy != '<dummy key>':
-                    members.append(key_proxy)
+        members = (key.proxyval(visited) for key in self)
         if self.safe_tp_name() == 'frozenset':
             return frozenset(members)
         else:
@@ -982,18 +987,11 @@ class PySetObjectPtr(PyObjectPtr):
 
         out.write('{')
         first = True
-        table = self.field('table')
-        for i in safe_range(self.field('mask')+1):
-            setentry = table[i]
-            key = setentry['key']
-            if key != 0:
-                pyop_key = PyObjectPtr.from_pyobject_ptr(key)
-                key_proxy = pyop_key.proxyval(visited) # FIXME!
-                if key_proxy != '<dummy key>':
-                    if not first:
-                        out.write(', ')
-                    first = False
-                    pyop_key.write_repr(out, visited)
+        for key in self:
+            if not first:
+                out.write(', ')
+            first = False
+            key.write_repr(out, visited)
         out.write('}')
 
         if tp_name != 'set':
@@ -1177,7 +1175,9 @@ class PyUnicodeObjectPtr(PyObjectPtr):
         # Convert the int code points to unicode characters, and generate a
         # local unicode instance.
         # This splits surrogate pairs if sizeof(Py_UNICODE) is 2 here (in gdb).
-        result = u''.join([_unichr(ucs) for ucs in Py_UNICODEs])
+        result = u''.join([
+            (_unichr(ucs) if ucs <= 0x10ffff else '\ufffd')
+            for ucs in Py_UNICODEs])
         return result
 
     def write_repr(self, out, visited):
