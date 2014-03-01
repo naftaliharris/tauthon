@@ -25,13 +25,14 @@ typedef struct _is {
     PyObject *modules_by_index;
     PyObject *sysdict;
     PyObject *builtins;
-    PyObject *modules_reloading;
+    PyObject *importlib;
 
     PyObject *codec_search_path;
     PyObject *codec_search_cache;
     PyObject *codec_error_registry;
     int codecs_initialized;
     int fscodec_initialized;
+
 
 #ifdef HAVE_DLOPEN
     int dlopenflags;
@@ -74,9 +75,9 @@ typedef struct _ts {
     struct _frame *frame;
     int recursion_depth;
     char overflowed; /* The stack has overflowed. Allow 50 more calls
-		        to handle the runtime error. */
-    char recursion_critical; /* The current calls must not cause 
-				a stack overflow. */
+                        to handle the runtime error. */
+    char recursion_critical; /* The current calls must not cause
+                                a stack overflow. */
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
        the trace/profile. */
@@ -126,6 +127,11 @@ PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void);
 PyAPI_FUNC(void) PyInterpreterState_Clear(PyInterpreterState *);
 PyAPI_FUNC(void) PyInterpreterState_Delete(PyInterpreterState *);
 PyAPI_FUNC(int) _PyState_AddModule(PyObject*, struct PyModuleDef*);
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03030000
+/* New in 3.3 */
+PyAPI_FUNC(int) PyState_AddModule(PyObject*, struct PyModuleDef*);
+PyAPI_FUNC(int) PyState_RemoveModule(struct PyModuleDef*);
+#endif
 PyAPI_FUNC(PyObject*) PyState_FindModule(struct PyModuleDef*);
 
 PyAPI_FUNC(PyThreadState *) PyThreadState_New(PyInterpreterState *);
@@ -162,6 +168,8 @@ PyAPI_DATA(_Py_atomic_address) _PyThreadState_Current;
 typedef
     enum {PyGILState_LOCKED, PyGILState_UNLOCKED}
         PyGILState_STATE;
+
+#ifdef WITH_THREAD
 
 /* Ensure that the current thread is ready to call the Python
    C API, regardless of the current state of Python, or of its
@@ -203,6 +211,8 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
    on the main thread.
 */
 PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
+
+#endif   /* #ifdef WITH_THREAD */
 
 /* The implementation of sys._current_frames()  Returns a dict mapping
    thread id to that thread's current frame.
