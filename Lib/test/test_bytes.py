@@ -288,8 +288,22 @@ class BaseBytesTest:
             self.assertEqual(self.type2test(b"").join(lst), b"abc")
             self.assertEqual(self.type2test(b"").join(tuple(lst)), b"abc")
             self.assertEqual(self.type2test(b"").join(iter(lst)), b"abc")
-        self.assertEqual(self.type2test(b".").join([b"ab", b"cd"]), b"ab.cd")
-        # XXX more...
+        dot_join = self.type2test(b".:").join
+        self.assertEqual(dot_join([b"ab", b"cd"]), b"ab.:cd")
+        self.assertEqual(dot_join([memoryview(b"ab"), b"cd"]), b"ab.:cd")
+        self.assertEqual(dot_join([b"ab", memoryview(b"cd")]), b"ab.:cd")
+        self.assertEqual(dot_join([bytearray(b"ab"), b"cd"]), b"ab.:cd")
+        self.assertEqual(dot_join([b"ab", bytearray(b"cd")]), b"ab.:cd")
+        # Stress it with many items
+        seq = [b"abc"] * 1000
+        expected = b"abc" + b".:abc" * 999
+        self.assertEqual(dot_join(seq), expected)
+        # Error handling and cleanup when some item in the middle of the
+        # sequence has the wrong type.
+        with self.assertRaises(TypeError):
+            dot_join([bytearray(b"ab"), "cd", b"ef"])
+        with self.assertRaises(TypeError):
+            dot_join([memoryview(b"ab"), "cd", b"ef"])
 
     def test_count(self):
         b = self.type2test(b'mississippi')
@@ -765,7 +779,7 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         finally:
             try:
                 os.remove(tfn)
-            except os.error:
+            except OSError:
                 pass
 
     def test_reverse(self):
@@ -900,6 +914,15 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         for elem in [[254, 255, 256], [-256, 9000]]:
             with self.assertRaises(ValueError):
                 b[3:4] = elem
+
+    def test_setslice_extend(self):
+        # Exercise the resizing logic (see issue #19087)
+        b = bytearray(range(100))
+        self.assertEqual(list(b), list(range(100)))
+        del b[:10]
+        self.assertEqual(list(b), list(range(10, 100)))
+        b.extend(range(100, 110))
+        self.assertEqual(list(b), list(range(10, 110)))
 
     def test_extended_set_del_slice(self):
         indices = (0, None, 1, 3, 19, 300, 1<<333, -1, -2, -31, -300)
@@ -1280,6 +1303,11 @@ class BytearrayPEP3137Test(unittest.TestCase,
             self.assertEqual(val, newval)
             self.assertTrue(val is not newval,
                             expr+' returned val on a mutable object')
+        sep = self.marshal(b'')
+        newval = sep.join([val])
+        self.assertEqual(val, newval)
+        self.assertIsNot(val, newval)
+
 
 class FixedStringTest(test.string_tests.BaseTest):
 

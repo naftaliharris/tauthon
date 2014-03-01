@@ -13,19 +13,19 @@ PyMODINIT_FUNC PyInit_imp(void);
 PyAPI_FUNC(long) PyImport_GetMagicNumber(void);
 PyAPI_FUNC(const char *) PyImport_GetMagicTag(void);
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModule(
-    char *name,                 /* UTF-8 encoded string */
+    const char *name,           /* UTF-8 encoded string */
     PyObject *co
     );
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleEx(
-    char *name,                 /* UTF-8 encoded string */
+    const char *name,           /* UTF-8 encoded string */
     PyObject *co,
-    char *pathname              /* decoded from the filesystem encoding */
+    const char *pathname        /* decoded from the filesystem encoding */
     );
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleWithPathnames(
-    char *name,                 /* UTF-8 encoded string */
+    const char *name,           /* UTF-8 encoded string */
     PyObject *co,
-    char *pathname,             /* decoded from the filesystem encoding */
-    char *cpathname             /* decoded from the filesystem encoding */
+    const char *pathname,       /* decoded from the filesystem encoding */
+    const char *cpathname       /* decoded from the filesystem encoding */
     );
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleObject(
     PyObject *name,
@@ -72,7 +72,7 @@ PyAPI_FUNC(int) PyImport_ImportFrozenModuleObject(
     PyObject *name
     );
 PyAPI_FUNC(int) PyImport_ImportFrozenModule(
-    char *name                  /* UTF-8 encoded string */
+    const char *name            /* UTF-8 encoded string */
     );
 
 #ifndef Py_LIMITED_API
@@ -92,12 +92,12 @@ PyAPI_FUNC(PyObject *) _PyImport_FindBuiltin(
 PyAPI_FUNC(PyObject *) _PyImport_FindExtensionObject(PyObject *, PyObject *);
 PyAPI_FUNC(int) _PyImport_FixupBuiltin(
     PyObject *mod,
-    char *name                  /* UTF-8 encoded string */
+    const char *name            /* UTF-8 encoded string */
     );
 PyAPI_FUNC(int) _PyImport_FixupExtensionObject(PyObject*, PyObject *, PyObject *);
 
 struct _inittab {
-    char *name;                 /* ASCII encoded string */
+    const char *name;           /* ASCII encoded string */
     PyObject* (*initfunc)(void);
 };
 PyAPI_DATA(struct _inittab *) PyImport_Inittab;
@@ -113,15 +113,15 @@ PyAPI_FUNC(int) PyImport_AppendInittab(
 
 #ifndef Py_LIMITED_API
 struct _frozen {
-    char *name;                 /* ASCII encoded string */
-    unsigned char *code;
+    const char *name;                 /* ASCII encoded string */
+    const unsigned char *code;
     int size;
 };
 
 /* Embedding apps may change this pointer to point to their favorite
    collection of frozen modules: */
 
-PyAPI_DATA(struct _frozen *) PyImport_FrozenModules;
+PyAPI_DATA(const struct _frozen *) PyImport_FrozenModules;
 #endif
 
 #ifdef __cplusplus
