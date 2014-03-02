@@ -16,19 +16,32 @@ This module implements the HMAC algorithm as described by :rfc:`2104`.
 
 .. function:: new(key, msg=None, digestmod=None)
 
-   Return a new hmac object.  *key* is a bytes object giving the secret key.  If
-   *msg* is present, the method call ``update(msg)`` is made.  *digestmod* is
-   the digest constructor or module for the HMAC object to use. It defaults to
-   the :data:`hashlib.md5` constructor.
+   Return a new hmac object.  *key* is a bytes or bytearray object giving the
+   secret key.  If *msg* is present, the method call ``update(msg)`` is made.
+   *digestmod* is the digest name, digest constructor or module for the HMAC
+   object to use. It supports any name suitable to :func:`hashlib.new` and
+   defaults to the :data:`hashlib.md5` constructor.
+
+   .. versionchanged:: 3.4
+      Parameter *key* can be a bytes or bytearray object. Parameter *msg* can
+      be of any type supported by :mod:`hashlib`.
+
+      Paramter *digestmod* can be the name of a hash algorithm.
+
+   .. deprecated:: 3.4
+      MD5 as implicit default digest for *digestmod* is deprecated.
 
 
 An HMAC object has the following methods:
 
 .. method:: HMAC.update(msg)
 
-   Update the hmac object with the bytes object *msg*.  Repeated calls are
-   equivalent to a single call with the concatenation of all the arguments:
+   Update the hmac object with *msg*.  Repeated calls are equivalent to a
+   single call with the concatenation of all the arguments:
    ``m.update(a); m.update(b)`` is equivalent to ``m.update(a + b)``.
+
+   .. versionchanged:: 3.4
+      Parameter *msg* can be of any type supported by :mod:`hashlib`.
 
 
 .. method:: HMAC.digest()
@@ -64,6 +77,25 @@ An HMAC object has the following methods:
 
    Return a copy ("clone") of the hmac object.  This can be used to efficiently
    compute the digests of strings that share a common initial substring.
+
+
+A hash object has the following attributes:
+
+.. attribute:: HMAC.digest_size
+
+   The size of the resulting HMAC digest in bytes.
+
+.. attribute:: HMAC.block_size
+
+   The internal block size of the hash algorithm in bytes.
+
+   .. versionadded:: 3.4
+
+.. attribute:: HMAC.name
+
+   The canonical name of this HMAC, always lowercase, e.g. ``hmac-md5``.
+
+   .. versionadded:: 3.4
 
 
 This module also provides the following helper function:

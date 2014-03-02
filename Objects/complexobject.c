@@ -211,13 +211,13 @@ complex_subtype_from_c_complex(PyTypeObject *type, Py_complex cval)
 PyObject *
 PyComplex_FromCComplex(Py_complex cval)
 {
-    register PyComplexObject *op;
+    PyComplexObject *op;
 
     /* Inline PyObject_New */
     op = (PyComplexObject *) PyObject_MALLOC(sizeof(PyComplexObject));
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT(op, &PyComplex_Type);
+    (void)PyObject_INIT(op, &PyComplex_Type);
     op->cval = cval;
     return (PyObject *) op;
 }
@@ -271,6 +271,12 @@ try_complex_special_method(PyObject *op) {
     if (f) {
         PyObject *res = PyObject_CallFunctionObjArgs(f, NULL);
         Py_DECREF(f);
+        if (res != NULL && !PyComplex_Check(res)) {
+            PyErr_SetString(PyExc_TypeError,
+                "__complex__ should return a complex object");
+            Py_DECREF(res);
+            return NULL;
+        }
         return res;
     }
     return NULL;
@@ -296,12 +302,6 @@ PyComplex_AsCComplex(PyObject *op)
     newop = try_complex_special_method(op);
 
     if (newop) {
-        if (!PyComplex_Check(newop)) {
-            PyErr_SetString(PyExc_TypeError,
-                "__complex__ should return a complex object");
-            Py_DECREF(newop);
-            return cv;
-        }
         cv = ((PyComplexObject *)newop)->cval;
         Py_DECREF(newop);
         return cv;
@@ -705,7 +705,7 @@ complex__format__(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
 
-    _PyUnicodeWriter_Init(&writer, 0);
+    _PyUnicodeWriter_Init(&writer);
     ret = _PyComplex_FormatAdvancedWriter(
         &writer,
         self,
@@ -773,8 +773,9 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
             goto error;
     }
     else if (PyObject_AsCharBuffer(v, &s, &len)) {
-        PyErr_SetString(PyExc_TypeError,
-                        "complex() argument must be a string or a number");
+        PyErr_Format(PyExc_TypeError,
+            "complex() argument must be a string or a number, not '%.200s'",
+            Py_TYPE(v)->tp_name);
         return NULL;
     }
 
@@ -953,8 +954,9 @@ complex_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         nbi = i->ob_type->tp_as_number;
     if (nbr == NULL || nbr->nb_float == NULL ||
         ((i != NULL) && (nbi == NULL || nbi->nb_float == NULL))) {
-        PyErr_SetString(PyExc_TypeError,
-                   "complex() argument must be a string or a number");
+        PyErr_Format(PyExc_TypeError,
+            "complex() argument must be a string or a number, not '%.200s'",
+            Py_TYPE(r)->tp_name);
         if (own_r) {
             Py_DECREF(r);
         }

@@ -37,16 +37,6 @@
 #endif /* MS_WINDOWS */
 #endif /* !__WATCOMC__ || __QNX__ */
 
-#if defined(PYOS_OS2)
-#define INCL_DOS
-#define INCL_ERRORS
-#include <os2.h>
-#endif
-
-#if defined(PYCC_VACPP)
-#include <sys/time.h>
-#endif
-
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
 #endif
@@ -203,7 +193,7 @@ time_clock_settime(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "iO:clock_settime", &clk_id, &obj))
         return NULL;
 
-    if (_PyTime_ObjectToTimespec(obj, &tv_sec, &tv_nsec) == -1)
+    if (_PyTime_ObjectToTimespec(obj, &tv_sec, &tv_nsec, _PyTime_ROUND_DOWN) == -1)
         return NULL;
     tp.tv_sec = tv_sec;
     tp.tv_nsec = tv_nsec;
@@ -351,7 +341,7 @@ parse_time_t_args(PyObject *args, char *format, time_t *pwhen)
         whent = time(NULL);
     }
     else {
-        if (_PyTime_ObjectToTime_t(ot, &whent) == -1)
+        if (_PyTime_ObjectToTime_t(ot, &whent, _PyTime_ROUND_DOWN) == -1)
             return 0;
     }
     *pwhen = whent;
@@ -543,6 +533,26 @@ checktm(struct tm* buf)
    /* wcsftime() doesn't format correctly time zones, see issue #10653 */
 #  undef HAVE_WCSFTIME
 #endif
+#define STRFTIME_FORMAT_CODES \
+"Commonly used format codes:\n\
+\n\
+%Y  Year with century as a decimal number.\n\
+%m  Month as a decimal number [01,12].\n\
+%d  Day of the month as a decimal number [01,31].\n\
+%H  Hour (24-hour clock) as a decimal number [00,23].\n\
+%M  Minute as a decimal number [00,59].\n\
+%S  Second as a decimal number [00,61].\n\
+%z  Time zone offset from UTC.\n\
+%a  Locale's abbreviated weekday name.\n\
+%A  Locale's full weekday name.\n\
+%b  Locale's abbreviated month name.\n\
+%B  Locale's full month name.\n\
+%c  Locale's appropriate date and time representation.\n\
+%I  Hour (12-hour clock) as a decimal number [01,12].\n\
+%p  Locale's equivalent of either AM or PM.\n\
+\n\
+Other codes may be available on your platform.  See documentation for\n\
+the C library strftime function.\n"
 
 #ifdef HAVE_STRFTIME
 #ifdef HAVE_WCSFTIME
@@ -640,6 +650,19 @@ time_strftime(PyObject *self, PyObject *args)
             return NULL;
         }
     }
+#elif (defined(_AIX) || defined(sun)) && defined(HAVE_WCSFTIME)
+    for(outbuf = wcschr(fmt, '%');
+        outbuf != NULL;
+        outbuf = wcschr(outbuf+2, '%'))
+    {
+        /* Issue #19634: On AIX, wcsftime("y", (1899, 1, 1, 0, 0, 0, 0, 0, 0))
+           returns "0/" instead of "99" */
+        if (outbuf[1] == L'y' && buf.tm_year < 0) {
+            PyErr_SetString(PyExc_ValueError,
+                            "format %y requires year >= 1900 on AIX");
+            return NULL;
+        }
+    }
 #endif
 
     fmtlen = time_strlen(fmt);
@@ -694,13 +717,13 @@ time_strftime(PyObject *self, PyObject *args)
 
 #undef time_char
 #undef format_time
-
 PyDoc_STRVAR(strftime_doc,
 "strftime(format[, tuple]) -> string\n\
 \n\
 Convert a time tuple to a string according to a format specification.\n\
 See the library reference manual for formatting codes. When the time tuple\n\
-is not present, current time as returned by localtime() is used.");
+is not present, current time as returned by localtime() is used.\n\
+\n" STRFTIME_FORMAT_CODES);
 #endif /* HAVE_STRFTIME */
 
 static PyObject *
@@ -723,7 +746,9 @@ PyDoc_STRVAR(strptime_doc,
 "strptime(string, format) -> struct_time\n\
 \n\
 Parse a string to a time tuple according to a format specification.\n\
-See the library reference manual for formatting codes (same as strftime()).");
+See the library reference manual for formatting codes (same as\n\
+strftime()).\n\
+\n" STRFTIME_FORMAT_CODES);
 
 static PyObject *
 _asctime(struct tm *timeptr)
@@ -798,11 +823,31 @@ time_mktime(PyObject *self, PyObject *tup)
     time_t tt;
     if (!gettmarg(tup, &buf))
         return NULL;
+#ifdef _AIX
+    /* year < 1902 or year > 2037 */
+    if (buf.tm_year < 2 || buf.tm_year > 137) {
+        /* Issue #19748: On AIX, mktime() doesn't report overflow error for
+         * timestamp < -2^31 or timestamp > 2**31-1. */
+        PyErr_SetString(PyExc_OverflowError,
+                        "mktime argument out of range");
+        return NULL;
+    }
+#else
     buf.tm_wday = -1;  /* sentinel; original value ignored */
+#endif
     tt = mktime(&buf);
     /* Return value of -1 does not necessarily mean an error, but tm_wday
      * cannot remain set to -1 if mktime succeeded. */
-    if (tt == (time_t)(-1) && buf.tm_wday == -1) {
+    if (tt == (time_t)(-1)
+#ifndef _AIX
+        /* Return value of -1 does not necessarily mean an error, but
+         * tm_wday cannot remain set to -1 if mktime succeeded. */
+        && buf.tm_wday == -1
+#else
+        /* on AIX, tm_wday is always sets, even on error */
+#endif
+       )
+    {
         PyErr_SetString(PyExc_OverflowError,
                         "mktime argument out of range");
         return NULL;
@@ -837,6 +882,8 @@ time_tzset(PyObject *self, PyObject *unused)
     /* Reset timezone, altzone, daylight and tzname */
     PyInit_timezone(m);
     Py_DECREF(m);
+    if (PyErr_Occurred())
+        return NULL;
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -1273,19 +1320,11 @@ PyInit_timezone(PyObject *m) {
 #if defined(HAVE_TZNAME) && !defined(__GLIBC__) && !defined(__CYGWIN__)
     PyObject *otz0, *otz1;
     tzset();
-#ifdef PYOS_OS2
-    PyModule_AddIntConstant(m, "timezone", _timezone);
-#else /* !PYOS_OS2 */
     PyModule_AddIntConstant(m, "timezone", timezone);
-#endif /* PYOS_OS2 */
 #ifdef HAVE_ALTZONE
     PyModule_AddIntConstant(m, "altzone", altzone);
 #else
-#ifdef PYOS_OS2
-    PyModule_AddIntConstant(m, "altzone", _timezone-3600);
-#else /* !PYOS_OS2 */
     PyModule_AddIntConstant(m, "altzone", timezone-3600);
-#endif /* PYOS_OS2 */
 #endif
     PyModule_AddIntConstant(m, "daylight", daylight);
     otz0 = PyUnicode_DecodeLocale(tzname[0], "surrogateescape");
@@ -1468,8 +1507,9 @@ PyInit_time(void)
     PyInit_timezone(m);
 
     if (!initialized) {
-        PyStructSequence_InitType(&StructTimeType,
-                                  &struct_time_type_desc);
+        if (PyStructSequence_InitType2(&StructTimeType,
+                                       &struct_time_type_desc) < 0)
+            return NULL;
 
 #ifdef MS_WINDOWS
         winver.dwOSVersionInfoSize = sizeof(winver);
@@ -1581,7 +1621,7 @@ floatsleep(double secs)
             DWORD rc;
             HANDLE hInterruptEvent = _PyOS_SigintEvent();
             ResetEvent(hInterruptEvent);
-            rc = WaitForSingleObject(hInterruptEvent, ul_millis);
+            rc = WaitForSingleObjectEx(hInterruptEvent, ul_millis, FALSE);
             if (rc == WAIT_OBJECT_0) {
                 Py_BLOCK_THREADS
                 errno = EINTR;
@@ -1591,15 +1631,6 @@ floatsleep(double secs)
         }
         Py_END_ALLOW_THREADS
     }
-#elif defined(PYOS_OS2)
-    /* This Sleep *IS* Interruptable by Exceptions */
-    Py_BEGIN_ALLOW_THREADS
-    if (DosSleep(secs * 1000) != NO_ERROR) {
-        Py_BLOCK_THREADS
-        PyErr_SetFromErrno(PyExc_IOError);
-        return -1;
-    }
-    Py_END_ALLOW_THREADS
 #else
     /* XXX Can't interrupt this sleep */
     Py_BEGIN_ALLOW_THREADS
