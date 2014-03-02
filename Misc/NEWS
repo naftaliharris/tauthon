@@ -10,6 +10,15 @@ What's New in Python 3.3.5 release candidate 1?
 Core and Builtins
 -----------------
 
+- Issue #20731: Properly position in source code files even if they
+  are opened in text mode. Patch by Serhiy Storchaka.
+
+- Issue #19619: str.encode, bytes.decode and bytearray.decode now use an
+  internal API to throw LookupError for known non-text encodings, rather
+  than attempting the encoding or decoding operation and then throwing a
+  TypeError for an unexpected output type. (The latter mechanism remains
+  in place for third party non-text encodings)
+
 - Issue #20588: Make Python-ast.c C89 compliant.
 
 - Issue #20437: Fixed 21 potential bugs when deleting objects references.
@@ -19,6 +28,15 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #20778: Fix modulefinder to work with bytecode-only modules.
+
+- Issue #20791: copy.copy() now doesn't make a copy when the input is
+  a bytes object.  Initial patch by Peter Otten.
+
+- Issue #20621: Fixes a zipimport bug introduced in 3.3.4 that could cause
+  spurious crashes or SystemErrors when importing modules or packages from a
+  zip file.  The change causing the problem was reverted.
 
 - Issue #20635: Fixed grid_columnconfigure() and grid_rowconfigure() methods of
   Tkinter widgets to work in wantobjects=True mode.
@@ -117,6 +135,8 @@ IDLE
 Tests
 -----
 
+- Issue #20743: Fix a reference leak in test_tcl.
+
 - Issue #20510: Rewrote test_exit in test_sys to match existing comments,
   use modern unittest features, and use helpers from test.script_helper
   instead of using subprocess directly.  Patch by Gareth Rees.
@@ -146,6 +166,12 @@ Build
 
 - Issue #20609: Restored the ability to build 64-bit Windows binaries on
   32-bit Windows, which was broken by the change in issue #19788.
+
+Tools/Demos
+-----------
+
+- Issue #20535: PYTHONWARNING no longer affects the run_tests.py script.
+  Patch by Arfrever Frehtes Taifersar Arahesis.
 
 
 What's New in Python 3.3.4?
