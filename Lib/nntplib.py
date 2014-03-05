@@ -279,7 +279,7 @@ def _unparse_datetime(dt, legacy=False):
 
 if _have_ssl:
 
-    def _encrypt_on(sock, context):
+    def _encrypt_on(sock, context, hostname):
         """Wrap a socket in SSL/TLS. Arguments:
         - sock: Socket to wrap
         - context: SSL context to use for the encrypted connection
@@ -288,10 +288,9 @@ if _have_ssl:
         """
         # Generate a default SSL context if none was passed.
         if context is None:
-            context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            # SSLv2 considered harmful.
-            context.options |= ssl.OP_NO_SSLv2
-        return context.wrap_socket(sock)
+            context = ssl._create_stdlib_context()
+        server_hostname = hostname if ssl.HAS_SNI else None
+        return context.wrap_socket(sock, server_hostname=server_hostname)
 
 
 # The classes themselves
@@ -366,7 +365,7 @@ class _NNTPBase:
         if is_connected():
             try:
                 self.quit()
-            except (socket.error, EOFError):
+            except (OSError, EOFError):
                 pass
             finally:
                 if is_connected():
@@ -956,7 +955,7 @@ class _NNTPBase:
                 if auth:
                     user = auth[0]
                     password = auth[2]
-        except IOError:
+        except OSError:
             pass
         # Perform NNTP authentication if needed.
         if not user:
@@ -1007,7 +1006,7 @@ class _NNTPBase:
             resp = self._shortcmd('STARTTLS')
             if resp.startswith('382'):
                 self.file.close()
-                self.sock = _encrypt_on(self.sock, context)
+                self.sock = _encrypt_on(self.sock, context, self.host)
                 self.file = self.sock.makefile("rwb")
                 self.tls_on = True
                 # Capabilities may change after TLS starts up, so ask for them
@@ -1067,7 +1066,7 @@ if _have_ssl:
             in default port and the `ssl_context` argument for SSL connections.
             """
             self.sock = socket.create_connection((host, port), timeout)
-            self.sock = _encrypt_on(self.sock, ssl_context)
+            self.sock = _encrypt_on(self.sock, ssl_context, host)
             file = self.sock.makefile("rwb")
             _NNTPBase.__init__(self, file, host,
                                readermode=readermode, timeout=timeout)

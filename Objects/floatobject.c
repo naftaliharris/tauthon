@@ -9,11 +9,6 @@
 #include <ctype.h>
 #include <float.h>
 
-#undef MAX
-#undef MIN
-#define MAX(x, y) ((x) < (y) ? (y) : (x))
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
 
 /* Special free list
    free_list is a singly-linked list of available PyFloatObjects, linked
@@ -114,7 +109,7 @@ PyFloat_GetInfo(void)
 PyObject *
 PyFloat_FromDouble(double fval)
 {
-    register PyFloatObject *op = free_list;
+    PyFloatObject *op = free_list;
     if (op != NULL) {
         free_list = (PyFloatObject *) Py_TYPE(op);
         numfree--;
@@ -124,7 +119,7 @@ PyFloat_FromDouble(double fval)
             return PyErr_NoMemory();
     }
     /* Inline PyObject_New */
-    PyObject_INIT(op, &PyFloat_Type);
+    (void)PyObject_INIT(op, &PyFloat_Type);
     op->ob_fval = fval;
     return (PyObject *) op;
 }
@@ -149,8 +144,9 @@ PyFloat_FromString(PyObject *v)
         }
     }
     else if (PyObject_AsCharBuffer(v, &s, &len)) {
-        PyErr_SetString(PyExc_TypeError,
-            "float() argument must be a string or a number");
+        PyErr_Format(PyExc_TypeError,
+            "float() argument must be a string or a number, not '%.200s'",
+            Py_TYPE(v)->tp_name);
         return NULL;
     }
     last = s + len;
@@ -246,7 +242,7 @@ PyFloat_AsDouble(PyObject *op)
 static int
 convert_to_double(PyObject **v, double *dbl)
 {
-    register PyObject *obj = *v;
+    PyObject *obj = *v;
 
     if (PyLong_Check(obj)) {
         *dbl = PyLong_AsDouble(obj);
@@ -1131,7 +1127,7 @@ float_hex(PyObject *v)
     }
 
     m = frexp(fabs(x), &e);
-    shift = 1 - MAX(DBL_MIN_EXP - e, 0);
+    shift = 1 - Py_MAX(DBL_MIN_EXP - e, 0);
     m = ldexp(m, shift);
     e -= shift;
 
@@ -1285,8 +1281,8 @@ float_fromhex(PyObject *cls, PyObject *arg)
     fdigits = coeff_end - s_store;
     if (ndigits == 0)
         goto parse_error;
-    if (ndigits > MIN(DBL_MIN_EXP - DBL_MANT_DIG - LONG_MIN/2,
-                      LONG_MAX/2 + 1 - DBL_MAX_EXP)/4)
+    if (ndigits > Py_MIN(DBL_MIN_EXP - DBL_MANT_DIG - LONG_MIN/2,
+                         LONG_MAX/2 + 1 - DBL_MAX_EXP)/4)
         goto insane_length_error;
 
     /* [p <exponent>] */
@@ -1342,7 +1338,7 @@ float_fromhex(PyObject *cls, PyObject *arg)
 
     /* lsb = exponent of least significant bit of the *rounded* value.
        This is top_exp - DBL_MANT_DIG unless result is subnormal. */
-    lsb = MAX(top_exp, (long)DBL_MIN_EXP) - DBL_MANT_DIG;
+    lsb = Py_MAX(top_exp, (long)DBL_MIN_EXP) - DBL_MANT_DIG;
 
     x = 0.0;
     if (exp >= lsb) {
@@ -1421,7 +1417,7 @@ Create a floating-point number from a hexadecimal string.\n\
 >>> float.fromhex('0x1.ffffp10')\n\
 2047.984375\n\
 >>> float.fromhex('-0x1p-1074')\n\
--4.9406564584124654e-324");
+-5e-324");
 
 
 static PyObject *
@@ -1711,7 +1707,7 @@ float__format__(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
 
-    _PyUnicodeWriter_Init(&writer, 0);
+    _PyUnicodeWriter_Init(&writer);
     ret = _PyFloat_FormatAdvancedWriter(
         &writer,
         self,
@@ -1858,7 +1854,7 @@ PyTypeObject PyFloat_Type = {
     float_new,                                  /* tp_new */
 };
 
-void
+int
 _PyFloat_Init(void)
 {
     /* We attempt to determine if this machine is using IEEE
@@ -1908,8 +1904,11 @@ _PyFloat_Init(void)
     float_format = detected_float_format;
 
     /* Init float info */
-    if (FloatInfoType.tp_name == 0)
-        PyStructSequence_InitType(&FloatInfoType, &floatinfo_desc);
+    if (FloatInfoType.tp_name == NULL) {
+        if (PyStructSequence_InitType2(&FloatInfoType, &floatinfo_desc) < 0)
+            return 0;
+    }
+    return 1;
 }
 
 int
