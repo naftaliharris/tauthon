@@ -19,26 +19,32 @@ The :mod:`wave` module defines the following function and exception:
 .. function:: open(file, mode=None)
 
    If *file* is a string, open the file by that name, otherwise treat it as a
-   seekable file-like object.  *mode* can be any of
+   file-like object.  *mode* can be:
 
-   ``'r'``, ``'rb'``
+   ``'rb'``
       Read only mode.
 
-   ``'w'``, ``'wb'``
+   ``'wb'``
       Write only mode.
 
    Note that it does not allow read/write WAV files.
 
-   A *mode* of ``'r'`` or ``'rb'`` returns a :class:`Wave_read` object, while a
-   *mode* of ``'w'`` or ``'wb'`` returns a :class:`Wave_write` object.  If
-   *mode* is omitted and a file-like object is passed as *file*, ``file.mode``
-   is used as the default value for *mode* (the ``'b'`` flag is still added if
-   necessary).
+   A *mode* of ``'rb'`` returns a :class:`Wave_read` object, while a *mode* of
+   ``'wb'`` returns a :class:`Wave_write` object.  If *mode* is omitted and a
+   file-like object is passed as *file*, ``file.mode`` is used as the default
+   value for *mode*.
 
    If you pass in a file-like object, the wave object will not close it when its
    :meth:`close` method is called; it is the caller's responsibility to close
    the file object.
 
+   The :func:`.open` function may be used in a :keyword:`with` statement.  When
+   the :keyword:`with` block completes, the :meth:`Wave_read.close()
+   <wave.Wave_read.close>` or :meth:`Wave_write.close()
+   <wave.Wave_write.close()>` method is called.
+
+   .. versionchanged:: 3.4
+      Added support for unseekable files.
 
 .. function:: openfp(file, mode)
 
@@ -98,8 +104,9 @@ Wave_read objects, as returned by :func:`.open`, have the following methods:
 
 .. method:: Wave_read.getparams()
 
-   Returns a tuple ``(nchannels, sampwidth, framerate, nframes, comptype,
-   compname)``, equivalent to output of the :meth:`get\*` methods.
+   Returns a :func:`~collections.namedtuple` ``(nchannels, sampwidth,
+   framerate, nframes, comptype, compname)``, equivalent to output of the
+   :meth:`get\*` methods.
 
 
 .. method:: Wave_read.readframes(n)
@@ -149,7 +156,8 @@ Wave_write objects, as returned by :func:`.open`, have the following methods:
 .. method:: Wave_write.close()
 
    Make sure *nframes* is correct, and close the file if it was opened by
-   :mod:`wave`.  This method is called upon object collection.
+   :mod:`wave`.  This method is called upon object collection. Can raise an
+   exception if *nframes* is not correct and a file is not seekable.
 
 
 .. method:: Wave_write.setnchannels(n)
@@ -200,10 +208,17 @@ Wave_write objects, as returned by :func:`.open`, have the following methods:
 
    Write audio frames, without correcting *nframes*.
 
+   .. versionchanged:: 3.4
+      Any :term:`bytes-like object`\ s are now accepted.
+
 
 .. method:: Wave_write.writeframes(data)
 
-   Write audio frames and make sure *nframes* is correct.
+   Write audio frames and make sure *nframes* is correct. Can raise an
+   exception if a file is not seekable.
+
+   .. versionchanged:: 3.4
+      Any :term:`bytes-like object`\ s are now accepted.
 
 
 Note that it is invalid to set any parameters after calling :meth:`writeframes`

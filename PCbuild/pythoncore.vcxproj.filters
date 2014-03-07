@@ -300,6 +300,15 @@
     <ClInclude Include="..\Modules\rotatingtree.h">
       <Filter>Modules</Filter>
     </ClInclude>
+    <ClInclude Include="..\Modules\sre.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Modules\sre_constants.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Modules\sre_lib.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
     <ClInclude Include="..\Modules\_io\_iomodule.h">
       <Filter>Modules\_io</Filter>
     </ClInclude>
@@ -378,6 +387,9 @@
     <ClInclude Include="..\Objects\stringlib\partition.h">
       <Filter>Objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\Objects\stringlib\replace.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\Objects\stringlib\split.h">
       <Filter>Objects</Filter>
     </ClInclude>
@@ -408,8 +420,14 @@
     <ClInclude Include="..\Python\ceval_gil.h">
       <Filter>Python</Filter>
     </ClInclude>
+    <ClInclude Include="..\Include\pyhash.h">
+      <Filter>Include</Filter>
+    </ClInclude>
     <ClInclude Include="..\Include\namespaceobject.h">
       <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Modules\hashtable.h">
+      <Filter>Modules</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -500,7 +518,7 @@
     <ClCompile Include="..\Modules\mmapmodule.c">
       <Filter>Modules</Filter>
     </ClCompile>
-    <ClCompile Include="..\Modules\operator.c">
+    <ClCompile Include="..\Modules\_operator.c">
       <Filter>Modules</Filter>
     </ClCompile>
     <ClCompile Include="..\Modules\parsermodule.c">
@@ -917,8 +935,23 @@
     <ClCompile Include="..\Modules\_winapi.c">
       <Filter>PC</Filter>
     </ClCompile>
+    <ClCompile Include="..\Modules\_stat.c">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Python\pyhash.c">
+      <Filter>Python</Filter>
+    </ClCompile>
     <ClCompile Include="..\Objects\namespaceobject.c">
       <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Modules\_opcode.c">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Modules\_tracemalloc.c">
+      <Filter>Modules</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Modules\hashtable.c">
+      <Filter>Modules</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
