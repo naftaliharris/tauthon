@@ -1,22 +1,27 @@
-import imp
+from importlib import _bootstrap
 import sys
 from test import support
 import unittest
-from importlib import _bootstrap
+
 from .. import util
 from . import util as ext_util
 
+frozen_machinery, source_machinery = util.import_importlib('importlib.machinery')
 
+
+# XXX find_spec tests
+
+@unittest.skipIf(ext_util.FILENAME is None, '_testcapi not available')
 @util.case_insensitive_tests
-class ExtensionModuleCaseSensitivityTest(unittest.TestCase):
+class ExtensionModuleCaseSensitivityTest:
 
     def find_module(self):
         good_name = ext_util.NAME
         bad_name = good_name.upper()
         assert good_name != bad_name
-        finder = _bootstrap.FileFinder(ext_util.PATH,
-                                        (_bootstrap.ExtensionFileLoader,
-                                         _bootstrap.EXTENSION_SUFFIXES))
+        finder = self.machinery.FileFinder(ext_util.PATH,
+                                          (self.machinery.ExtensionFileLoader,
+                                           self.machinery.EXTENSION_SUFFIXES))
         return finder.find_module(bad_name)
 
     def test_case_sensitive(self):
@@ -37,14 +42,10 @@ class ExtensionModuleCaseSensitivityTest(unittest.TestCase):
             loader = self.find_module()
             self.assertTrue(hasattr(loader, 'load_module'))
 
-
-
-
-def test_main():
-    if ext_util.FILENAME is None:
-        return
-    support.run_unittest(ExtensionModuleCaseSensitivityTest)
+Frozen_ExtensionCaseSensitivity, Source_ExtensionCaseSensitivity = util.test_both(
+        ExtensionModuleCaseSensitivityTest,
+        machinery=[frozen_machinery, source_machinery])
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()

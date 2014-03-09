@@ -117,7 +117,7 @@ insert_lop(PyCursesPanelObject *po)
 {
     list_of_panels *new;
 
-    if ((new = (list_of_panels *)malloc(sizeof(list_of_panels))) == NULL) {
+    if ((new = (list_of_panels *)PyMem_Malloc(sizeof(list_of_panels))) == NULL) {
         PyErr_NoMemory();
         return -1;
     }
@@ -136,7 +136,7 @@ remove_lop(PyCursesPanelObject *po)
     temp = lop;
     if (temp->po == po) {
         lop = temp->next;
-        free(temp);
+        PyMem_Free(temp);
         return;
     }
     while (temp->next == NULL || temp->next->po != po) {
@@ -148,7 +148,7 @@ remove_lop(PyCursesPanelObject *po)
         temp = temp->next;
     }
     n = temp->next->next;
-    free(temp->next);
+    PyMem_Free(temp->next);
     temp->next = n;
     return;
 }
@@ -513,6 +513,8 @@ PyInit__curses_panel(void)
         goto fail;
 
     import_curses();
+    if (PyErr_Occurred())
+        goto fail;
 
     /* For exception _curses_panel.error */
     _curses_panelstate(m)->PyCursesError = PyErr_NewException("_curses_panel.error", NULL, NULL);

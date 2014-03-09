@@ -8,7 +8,7 @@
 #   include <sys/socket.h>
 # endif
 # include <netinet/in.h>
-# if !(defined(__CYGWIN__) || (defined(PYOS_OS2) && defined(PYCC_VACPP)))
+# if !defined(__CYGWIN__)
 #  include <netinet/tcp.h>
 # endif
 
@@ -78,6 +78,10 @@ typedef int socklen_t;
 
 #ifdef HAVE_LINUX_CAN_RAW_H
 #include <linux/can/raw.h>
+#endif
+
+#ifdef HAVE_LINUX_CAN_BCM_H
+#include <linux/can/bcm.h>
 #endif
 
 #ifdef HAVE_SYS_SYS_DOMAIN_H
