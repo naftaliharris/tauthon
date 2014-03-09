@@ -40,6 +40,20 @@ Core and Builtins
 Library
 -------
 
+- Issue #20283: RE pattern methods now accept the string keyword parameters
+  as documented.  The pattern and source keyword parameters are left as
+  deprecated aliases.
+
+- Improve the random module's default seeding to use 256 bits of entropy
+  from os.urandom().  This was already done for Python 3, mildly improving
+  security with a bigger seed space.
+
+- Issue #15618: Make turtle.py compatible with 'from __future__ import
+  unicode_literals'.  Initial patch by Juancarlo Añez.
+
+- Issue #20501: fileinput module no longer reads whole file into memory when using
+  fileinput.hook_encoded.
+
 - Issue #6815: os.path.expandvars() now supports non-ASCII Unicode environment
   variables names and values.
 
@@ -50,7 +64,7 @@ Library
   Based on patch by Stephen Tu.
 
 - Issue #8478: Untokenizer.compat processes first token from iterator input.
-  Patch based on lines from Georg Brandl, Eric Snow, and Gareth Rees.  
+  Patch based on lines from Georg Brandl, Eric Snow, and Gareth Rees.
 
 - Issue #20594: Avoid name clash with the libc function posix_close.
 
