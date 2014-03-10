@@ -361,7 +361,7 @@ def init(files=None):
 def read_mime_types(file):
     try:
         f = open(file)
-    except IOError:
+    except OSError:
         return None
     with f:
         db = MimeTypes()
