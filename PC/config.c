@@ -13,11 +13,12 @@ extern PyObject* PyInit_binascii(void);
 extern PyObject* PyInit_cmath(void);
 extern PyObject* PyInit_errno(void);
 extern PyObject* PyInit_faulthandler(void);
+extern PyObject* PyInit__tracemalloc(void);
 extern PyObject* PyInit_gc(void);
 extern PyObject* PyInit_math(void);
 extern PyObject* PyInit__md5(void);
 extern PyObject* PyInit_nt(void);
-extern PyObject* PyInit_operator(void);
+extern PyObject* PyInit__operator(void);
 extern PyObject* PyInit_signal(void);
 extern PyObject* PyInit__sha1(void);
 extern PyObject* PyInit__sha256(void);
@@ -64,6 +65,8 @@ extern PyObject* PyInit__pickle(void);
 extern PyObject* PyInit_atexit(void);
 extern PyObject* _PyWarnings_Init(void);
 extern PyObject* PyInit__string(void);
+extern PyObject* PyInit__stat(void);
+extern PyObject* PyInit__opcode(void);
 
 /* tools/freeze/makeconfig.py marker for additional "extern" */
 /* -- ADDMODULE MARKER 1 -- */
@@ -87,7 +90,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"gc", PyInit_gc},
     {"math", PyInit_math},
     {"nt", PyInit_nt}, /* Use the NT os functions, not posix */
-    {"operator", PyInit_operator},
+    {"_operator", PyInit__operator},
     {"signal", PyInit_signal},
     {"_md5", PyInit__md5},
     {"_sha1", PyInit__sha1},
@@ -101,6 +104,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"msvcrt", PyInit_msvcrt},
     {"_locale", PyInit__locale},
 #endif
+    {"_tracemalloc", PyInit__tracemalloc},
     /* XXX Should _winapi go in a WIN32 block?  not WIN64? */
     {"_winapi", PyInit__winapi},
 
@@ -154,6 +158,8 @@ struct _inittab _PyImport_Inittab[] = {
     {"_io", PyInit__io},
     {"_pickle", PyInit__pickle},
     {"atexit", PyInit_atexit},
+    {"_stat", PyInit__stat},
+    {"_opcode", PyInit__opcode},
 
     /* Sentinel */
     {0, 0}
