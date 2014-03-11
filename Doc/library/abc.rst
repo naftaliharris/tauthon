@@ -12,9 +12,9 @@
 --------------
 
 This module provides the infrastructure for defining :term:`abstract base
-classes <abstract base class>` (ABCs) in Python, as outlined in :pep:`3119`; see the PEP for why this
-was added to Python. (See also :pep:`3141` and the :mod:`numbers` module
-regarding a type hierarchy for numbers based on ABCs.)
+classes <abstract base class>` (ABCs) in Python, as outlined in :pep:`3119`;
+see the PEP for why this was added to Python. (See also :pep:`3141` and the
+:mod:`numbers` module regarding a type hierarchy for numbers based on ABCs.)
 
 The :mod:`collections` module has some concrete classes that derive from
 ABCs; these can, of course, be further derived. In addition the
@@ -23,7 +23,7 @@ a class or instance provides a particular interface, for example, is it
 hashable or a mapping.
 
 
-This module provides the following class:
+This module provides the following classes:
 
 .. class:: ABCMeta
 
@@ -57,6 +57,10 @@ This module provides the following class:
 
       .. versionchanged:: 3.3
          Returns the registered subclass, to allow usage as a class decorator.
+
+      .. versionchanged:: 3.4
+         To detect calls to :meth:`register`, you can use the
+         :func:`get_cache_token` function.
 
    You can also override this method in an abstract base class:
 
@@ -125,6 +129,19 @@ This module provides the following class:
    the old-style iterable protocol, defined in terms of :meth:`__len__` and
    :meth:`__getitem__`).  Note that this will not make ``get_iterator``
    available as a method of ``Foo``, so it is provided separately.
+
+
+.. class:: ABC
+
+   A helper class that has :class:`ABCMeta` as its metaclass.  With this class,
+   an abstract base class can be created by simply deriving from :class:`ABC`,
+   avoiding sometimes confusing metaclass usage.
+
+   Note that the type of :class:`ABC` is still :class:`ABCMeta`, therefore
+   inheriting from :class:`ABC` requires the usual precautions regarding metaclass
+   usage, as multiple inheritance may lead to metaclass conflicts.
+
+   .. versionadded:: 3.4
 
 
 The :mod:`abc` module also provides the following decorators:
@@ -293,6 +310,19 @@ The :mod:`abc` module also provides the following decorators:
        It is now possible to use :class:`property`, :meth:`property.getter`,
        :meth:`property.setter` and :meth:`property.deleter` with
        :func:`abstractmethod`, making this decorator redundant.
+
+
+The :mod:`abc` module also provides the following functions:
+
+.. function:: get_cache_token()
+
+   Returns the current abstract base class cache token.
+
+   The token is an opaque object (that supports equality testing) identifying
+   the current version of the abstract base class cache for virtual subclasses.
+   The token changes with every call to :meth:`ABCMeta.register` on any ABC.
+
+   .. versionadded:: 3.4
 
 
 .. rubric:: Footnotes
