@@ -271,8 +271,10 @@ class IdleConf:
             except OSError:
                 pass
         return default
+
     def SetOption(self, configType, section, option, value):
         """In user's config file, set section's option to value.
+
         """
         self.userCfg[configType].SetOption(section, option, value)
 
@@ -638,8 +640,10 @@ class IdleConf:
                     except OSError:
                         pass
         return keyBindings
+
     def GetExtraHelpSourceList(self,configSet):
         """Fetch list of extra help sources from a given configSet.
+
         Valid configSets are 'user' or 'default'.  Return a list of tuples of
         the form (menu_item , path_to_help_file , option), or return the empty
         list.  'option' is the sequence number of the help resource.  'option'
