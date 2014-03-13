@@ -3,34 +3,31 @@ Python Documentation README
 
 This directory contains the reStructuredText (reST) sources to the Python
 documentation.  You don't need to build them yourself, prebuilt versions are
-available at http://docs.python.org/download/.
+available at <http://docs.python.org/download/>.
 
 Documentation on the authoring Python documentation, including information about
 both style and markup, is available in the "Documenting Python" chapter of the
-documentation.
+developers guide <http://docs.python.org/devguide/documenting.html>.
 
 
 Building the docs
 =================
 
-You need to have Python 2 installed; the toolset used to build the
-docs is written in Python.  It is called *Sphinx*, it is not included in this
-tree, but maintained separately.  Also needed are the docutils, supplying the
-base markup that Sphinx uses, Jinja, a templating engine, and optionally
-Pygments, a code highlighter.
+You need to have Sphinx <http://sphinx-doc.org/> installed; it is the toolset
+used to build the docs.  It is not included in this tree, but maintained
+separately and available from PyPI <http://pypi.python.org/pypi/Sphinx>.
 
 
 Using make
 ----------
 
-Luckily, a Makefile has been prepared so that on Unix, provided you have
-installed Python and Subversion, you can just run ::
+A Makefile has been prepared so that on Unix, provided you have installed
+Sphinx, you can just run ::
 
    make html
 
-to check out the necessary toolset in the `tools/` subdirectory and build the
-HTML output files.  To view the generated HTML, point your favorite browser at
-the top-level index `build/html/index.html` after running "make".
+to build the HTML output files.  To view the generated HTML, point your favorite
+browser at the top-level index `build/html/index.html` after running "make".
 
 On Windows, we try to emulate the Makefile as closely as possible with a
 ``make.bat`` file.
@@ -77,8 +74,6 @@ Available make targets are:
 
  * "suspicious", which checks the parsed markup for text that looks like
    malformed and thus unconverted reST.
-
-A "make update" updates the Subversion checkouts in `tools/`.
 
 
 Without make
