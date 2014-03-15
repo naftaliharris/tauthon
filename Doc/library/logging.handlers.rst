@@ -300,7 +300,7 @@ The :class:`TimedRotatingFileHandler` class, located in the
 timed intervals.
 
 
-.. class:: TimedRotatingFileHandler(filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False)
+.. class:: TimedRotatingFileHandler(filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None)
 
    Returns a new instance of the :class:`TimedRotatingFileHandler` class. The
    specified file is opened and used as the stream for logging. On rotating it also
@@ -350,6 +350,12 @@ timed intervals.
    If *delay* is true, then file opening is deferred until the first call to
    :meth:`emit`.
 
+   If *atTime* is not ``None``, it must be a ``datetime.time`` instance which
+   specifies the time of day when rollover occurs, for the cases where rollover
+   is set to happen "at midnight" or "on a particular weekday".
+
+   .. versionchanged:: 3.4
+      *atTime* parameter was added.
 
    .. method:: doRollover()
 
@@ -375,6 +381,9 @@ sends logging output to a network socket. The base class uses a TCP socket.
    Returns a new instance of the :class:`SocketHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: close()
 
@@ -460,6 +469,9 @@ over UDP sockets.
    Returns a new instance of the :class:`DatagramHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: emit()
 
