@@ -26,8 +26,8 @@ extern "C" {
 /* External C interface */
 
 PyObject *
-PyFile_FromFd(int fd, char *name, char *mode, int buffering, char *encoding,
-              char *errors, char *newline, int closefd)
+PyFile_FromFd(int fd, const char *name, const char *mode, int buffering, const char *encoding,
+              const char *errors, const char *newline, int closefd)
 {
     PyObject *io, *stream;
     _Py_IDENTIFIER(open);
@@ -390,7 +390,7 @@ stdprinter_write(PyStdPrinter_Object *self, PyObject *args)
 
     Py_BEGIN_ALLOW_THREADS
     errno = 0;
-#if defined(MS_WIN64) || defined(MS_WINDOWS)
+#ifdef MS_WINDOWS
     if (n > INT_MAX)
         n = INT_MAX;
     n = write(self->fd, c, (int)n);

@@ -90,6 +90,16 @@ in various ways.  There is a separate error indicator for each thread.
    the class in that case.  If the values are already normalized, nothing happens.
    The delayed normalization is implemented to improve performance.
 
+   .. note::
+
+      This function *does not* implicitly set the ``__traceback__``
+      attribute on the exception value. If setting the traceback
+      appropriately is desired, the following additional snippet is needed::
+
+         if (tb != NULL) {
+           PyException_SetTraceback(val, tb);
+         }
+
 
 .. c:function:: void PyErr_Clear()
 
@@ -231,11 +241,20 @@ in various ways.  There is a separate error indicator for each thread.
    exception instance.
 
 
+.. c:function:: PyObject* PyErr_SetFromErrnoWithFilenameObjects(PyObject *type, PyObject *filenameObject, PyObject *filenameObject2)
+
+   Similar to :c:func:`PyErr_SetFromErrnoWithFilenameObject`, but takes a second
+   filename object, for raising errors when a function that takes two filenames
+   fails.
+
+.. versionadded:: 3.4
+
+
 .. c:function:: PyObject* PyErr_SetFromErrnoWithFilename(PyObject *type, const char *filename)
 
    Similar to :c:func:`PyErr_SetFromErrnoWithFilenameObject`, but the filename
    is given as a C string.  *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
+   (:func:`os.fsdecode`).
 
 
 .. c:function:: PyObject* PyErr_SetFromWindowsErr(int ierr)
@@ -256,18 +275,11 @@ in various ways.  There is a separate error indicator for each thread.
    specifying the exception type to be raised. Availability: Windows.
 
 
-.. c:function:: PyObject* PyErr_SetFromWindowsErrWithFilenameObject(int ierr, PyObject *filenameObject)
-
-   Similar to :c:func:`PyErr_SetFromWindowsErr`, with the additional behavior
-   that if *filenameObject* is not *NULL*, it is passed to the constructor of
-   :exc:`WindowsError` as a third parameter.  Availability: Windows.
-
-
 .. c:function:: PyObject* PyErr_SetFromWindowsErrWithFilename(int ierr, const char *filename)
 
    Similar to :c:func:`PyErr_SetFromWindowsErrWithFilenameObject`, but the
    filename is given as a C string.  *filename* is decoded from the filesystem
-   encoding (:func:`sys.getfilesystemencoding`).  Availability: Windows.
+   encoding (:func:`os.fsdecode`).  Availability: Windows.
 
 
 .. c:function:: PyObject* PyErr_SetExcFromWindowsErrWithFilenameObject(PyObject *type, int ierr, PyObject *filename)
@@ -275,6 +287,15 @@ in various ways.  There is a separate error indicator for each thread.
    Similar to :c:func:`PyErr_SetFromWindowsErrWithFilenameObject`, with an
    additional parameter specifying the exception type to be raised.
    Availability: Windows.
+
+
+.. c:function:: PyObject* PyErr_SetExcFromWindowsErrWithFilenameObjects(PyObject *type, int ierr, PyObject *filename, PyObject *filename2)
+
+   Similar to :c:func:`PyErr_SetExcFromWindowsErrWithFilenameObject`,
+   but accepts a second filename object.
+   Availability: Windows.
+
+.. versionadded:: 3.4
 
 
 .. c:function:: PyObject* PyErr_SetExcFromWindowsErrWithFilename(PyObject *type, int ierr, const char *filename)
@@ -293,15 +314,22 @@ in various ways.  There is a separate error indicator for each thread.
    .. versionadded:: 3.3
 
 
-.. c:function:: void PyErr_SyntaxLocationEx(char *filename, int lineno, int col_offset)
+.. c:function:: void PyErr_SyntaxLocationObject(PyObject *filename, int lineno, int col_offset)
 
    Set file, line, and offset information for the current exception.  If the
    current exception is not a :exc:`SyntaxError`, then it sets additional
    attributes, which make the exception printing subsystem think the exception
-   is a :exc:`SyntaxError`. *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
+   is a :exc:`SyntaxError`.
 
-   .. versionadded:: 3.2
+.. versionadded:: 3.4
+
+
+.. c:function:: void PyErr_SyntaxLocationEx(char *filename, int lineno, int col_offset)
+
+   Like :c:func:`PyErr_SyntaxLocationObject`, but *filename* is a byte string
+   decoded from the filesystem encoding (:func:`os.fsdecode`).
+
+.. versionadded:: 3.2
 
 
 .. c:function:: void PyErr_SyntaxLocation(char *filename, int lineno)
@@ -355,15 +383,22 @@ in various ways.  There is a separate error indicator for each thread.
    documentation.  There is no C API for warning control.
 
 
-.. c:function:: int PyErr_WarnExplicit(PyObject *category, const char *message, const char *filename, int lineno, const char *module, PyObject *registry)
+.. c:function:: int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno, PyObject *module, PyObject *registry)
 
    Issue a warning message with explicit control over all warning attributes.  This
    is a straightforward wrapper around the Python function
    :func:`warnings.warn_explicit`, see there for more information.  The *module*
    and *registry* arguments may be set to *NULL* to get the default effect
-   described there. *message* and *module* are UTF-8 encoded strings,
-   *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
+   described there.
+
+   .. versionadded:: 3.4
+
+
+.. c:function:: int PyErr_WarnExplicit(PyObject *category, const char *message, const char *filename, int lineno, const char *module, PyObject *registry)
+
+   Similar to :c:func:`PyErr_WarnExplicitObject` except that *message* and
+   *module* are UTF-8 encoded strings, and *filename* is decoded from the
+   filesystem encoding (:func:`os.fsdecode`).
 
 
 .. c:function:: int PyErr_WarnFormat(PyObject *category, Py_ssize_t stack_level, const char *format, ...)
