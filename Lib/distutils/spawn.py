@@ -82,30 +82,6 @@ def _spawn_nt(cmd, search_path=1, verbose=0, dry_run=0):
             raise DistutilsExecError(
                   "command %r failed with exit status %d" % (cmd, rc))
 
-def _spawn_os2(cmd, search_path=1, verbose=0, dry_run=0):
-    executable = cmd[0]
-    if search_path:
-        # either we find one or it stays the same
-        executable = find_executable(executable) or executable
-    log.info(' '.join([executable] + cmd[1:]))
-    if not dry_run:
-        # spawnv for OS/2 EMX requires a full path to the .exe
-        try:
-            rc = os.spawnv(os.P_WAIT, executable, cmd)
-        except OSError as exc:
-            # this seems to happen when the command isn't found
-            if not DEBUG:
-                cmd = executable
-            raise DistutilsExecError(
-                  "command %r failed: %s" % (cmd, exc.args[-1]))
-        if rc != 0:
-            # and this reflects the command running but failing
-            if not DEBUG:
-                cmd = executable
-            log.debug("command %r failed with exit status %d" % (cmd, rc))
-            raise DistutilsExecError(
-                  "command %r failed with exit status %d" % (cmd, rc))
-
 if sys.platform == 'darwin':
     from distutils import sysconfig
     _cfg_target = None
@@ -207,7 +183,7 @@ def find_executable(executable, path=None):
     paths = path.split(os.pathsep)
     base, ext = os.path.splitext(executable)
 
-    if (sys.platform == 'win32' or os.name == 'os2') and (ext != '.exe'):
+    if (sys.platform == 'win32') and (ext != '.exe'):
         executable = executable + '.exe'
 
     if not os.path.isfile(executable):

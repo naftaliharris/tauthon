@@ -24,7 +24,6 @@
 #include "cursor.h"
 #include "module.h"
 #include "util.h"
-#include "sqlitecompat.h"
 
 PyObject* pysqlite_cursor_iternext(pysqlite_Cursor* self);
 
@@ -338,6 +337,11 @@ PyObject* _pysqlite_fetch_one_row(pysqlite_Cursor* self)
                 if (self->connection->text_factory == (PyObject*)&PyUnicode_Type) {
                     converted = PyUnicode_FromStringAndSize(val_str, nbytes);
                     if (!converted) {
+#ifdef Py_DEBUG
+                        /* in debug mode, type_call() fails with an assertion
+                           error if an exception is set when it is called */
+                        PyErr_Clear();
+#endif
                         colname = sqlite3_column_name(self->statement->st, i);
                         if (!colname) {
                             colname = "<unknown column name>";
@@ -864,10 +868,15 @@ PyObject* pysqlite_cursor_iternext(pysqlite_Cursor *self)
     }
 
     next_row_tuple = self->next_row;
+    assert(next_row_tuple != NULL);
     self->next_row = NULL;
 
     if (self->row_factory != Py_None) {
         next_row = PyObject_CallFunction(self->row_factory, "OO", self, next_row_tuple);
+        if (next_row == NULL) {
+            self->next_row = next_row_tuple;
+            return NULL;
+        }
         Py_DECREF(next_row_tuple);
     } else {
         next_row = next_row_tuple;
@@ -884,6 +893,12 @@ PyObject* pysqlite_cursor_iternext(pysqlite_Cursor *self)
 
         if (rc == SQLITE_ROW) {
             self->next_row = _pysqlite_fetch_one_row(self);
+            if (self->next_row == NULL) {
+                (void)pysqlite_statement_reset(self->statement);
+                Py_DECREF(next_row);
+                _pysqlite_seterror(self->connection->db, NULL);
+                return NULL;
+            }
         }
     }
 
