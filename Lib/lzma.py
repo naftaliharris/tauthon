@@ -54,9 +54,9 @@ class LZMAFile(io.BufferedIOBase):
         bytes object), in which case the named file is opened, or it can
         be an existing file object to read from or write to.
 
-        mode can be "r" for reading (default), "w" for (over)writing, or
-        "a" for appending. These can equivalently be given as "rb", "wb",
-        and "ab" respectively.
+        mode can be "r" for reading (default), "w" for (over)writing,
+        "x" for creating exclusively, or "a" for appending. These can
+        equivalently be given as "rb", "wb", "xb" and "ab" respectively.
 
         format specifies the container format to use for the file.
         If mode is "r", this defaults to FORMAT_AUTO. Otherwise, the
@@ -110,8 +110,9 @@ class LZMAFile(io.BufferedIOBase):
             # stream will need a separate decompressor object.
             self._init_args = {"format":format, "filters":filters}
             self._decompressor = LZMADecompressor(**self._init_args)
-            self._buffer = None
-        elif mode in ("w", "wb", "a", "ab"):
+            self._buffer = b""
+            self._buffer_offset = 0
+        elif mode in ("w", "wb", "a", "ab", "x", "xb"):
             if format is None:
                 format = FORMAT_XZ
             mode_code = _MODE_WRITE
@@ -143,7 +144,7 @@ class LZMAFile(io.BufferedIOBase):
         try:
             if self._mode in (_MODE_READ, _MODE_READ_EOF):
                 self._decompressor = None
-                self._buffer = None
+                self._buffer = b""
             elif self._mode == _MODE_WRITE:
                 self._fp.write(self._compressor.flush())
                 self._compressor = None
@@ -187,15 +188,18 @@ class LZMAFile(io.BufferedIOBase):
             raise ValueError("I/O operation on closed file")
 
     def _check_can_read(self):
-        if not self.readable():
+        if self._mode not in (_MODE_READ, _MODE_READ_EOF):
+            self._check_not_closed()
             raise io.UnsupportedOperation("File not open for reading")
 
     def _check_can_write(self):
-        if not self.writable():
+        if self._mode != _MODE_WRITE:
+            self._check_not_closed()
             raise io.UnsupportedOperation("File not open for writing")
 
     def _check_can_seek(self):
-        if not self.readable():
+        if self._mode not in (_MODE_READ, _MODE_READ_EOF):
+            self._check_not_closed()
             raise io.UnsupportedOperation("Seeking is only supported "
                                           "on files open for reading")
         if not self._fp.seekable():
@@ -204,16 +208,13 @@ class LZMAFile(io.BufferedIOBase):
 
     # Fill the readahead buffer if it is empty. Returns False on EOF.
     def _fill_buffer(self):
+        if self._mode == _MODE_READ_EOF:
+            return False
         # Depending on the input data, our call to the decompressor may not
         # return any data. In this case, try again after reading another block.
-        while True:
-            if self._buffer:
-                return True
-
-            if self._decompressor.unused_data:
-                rawblock = self._decompressor.unused_data
-            else:
-                rawblock = self._fp.read(_BUFFER_SIZE)
+        while self._buffer_offset == len(self._buffer):
+            rawblock = (self._decompressor.unused_data or
+                        self._fp.read(_BUFFER_SIZE))
 
             if not rawblock:
                 if self._decompressor.eof:
@@ -236,30 +237,48 @@ class LZMAFile(io.BufferedIOBase):
                     return False
             else:
                 self._buffer = self._decompressor.decompress(rawblock)
+            self._buffer_offset = 0
+        return True
 
     # Read data until EOF.
     # If return_data is false, consume the data without returning it.
     def _read_all(self, return_data=True):
+        # The loop assumes that _buffer_offset is 0. Ensure that this is true.
+        self._buffer = self._buffer[self._buffer_offset:]
+        self._buffer_offset = 0
+
         blocks = []
         while self._fill_buffer():
             if return_data:
                 blocks.append(self._buffer)
             self._pos += len(self._buffer)
-            self._buffer = None
+            self._buffer = b""
         if return_data:
             return b"".join(blocks)
 
     # Read a block of up to n bytes.
     # If return_data is false, consume the data without returning it.
     def _read_block(self, n, return_data=True):
+        # If we have enough data buffered, return immediately.
+        end = self._buffer_offset + n
+        if end <= len(self._buffer):
+            data = self._buffer[self._buffer_offset : end]
+            self._buffer_offset = end
+            self._pos += len(data)
+            return data if return_data else None
+
+        # The loop assumes that _buffer_offset is 0. Ensure that this is true.
+        self._buffer = self._buffer[self._buffer_offset:]
+        self._buffer_offset = 0
+
         blocks = []
         while n > 0 and self._fill_buffer():
             if n < len(self._buffer):
                 data = self._buffer[:n]
-                self._buffer = self._buffer[n:]
+                self._buffer_offset = n
             else:
                 data = self._buffer
-                self._buffer = None
+                self._buffer = b""
             if return_data:
                 blocks.append(data)
             self._pos += len(data)
@@ -274,9 +293,9 @@ class LZMAFile(io.BufferedIOBase):
         The exact number of bytes returned is unspecified.
         """
         self._check_can_read()
-        if self._mode == _MODE_READ_EOF or not self._fill_buffer():
+        if not self._fill_buffer():
             return b""
-        return self._buffer
+        return self._buffer[self._buffer_offset:]
 
     def read(self, size=-1):
         """Read up to size uncompressed bytes from the file.
@@ -285,7 +304,7 @@ class LZMAFile(io.BufferedIOBase):
         Returns b"" if the file is already at EOF.
         """
         self._check_can_read()
-        if self._mode == _MODE_READ_EOF or size == 0:
+        if size == 0:
             return b""
         elif size < 0:
             return self._read_all()
@@ -302,17 +321,39 @@ class LZMAFile(io.BufferedIOBase):
         # this does not give enough data for the decompressor to make progress.
         # In this case we make multiple reads, to avoid returning b"".
         self._check_can_read()
-        if (size == 0 or self._mode == _MODE_READ_EOF or
-            not self._fill_buffer()):
+        if (size == 0 or
+            # Only call _fill_buffer() if the buffer is actually empty.
+            # This gives a significant speedup if *size* is small.
+            (self._buffer_offset == len(self._buffer) and not self._fill_buffer())):
             return b""
-        if 0 < size < len(self._buffer):
-            data = self._buffer[:size]
-            self._buffer = self._buffer[size:]
+        if size > 0:
+            data = self._buffer[self._buffer_offset :
+                                self._buffer_offset + size]
+            self._buffer_offset += len(data)
         else:
-            data = self._buffer
-            self._buffer = None
+            data = self._buffer[self._buffer_offset:]
+            self._buffer = b""
+            self._buffer_offset = 0
         self._pos += len(data)
         return data
+
+    def readline(self, size=-1):
+        """Read a line of uncompressed bytes from the file.
+
+        The terminating newline (if present) is retained. If size is
+        non-negative, no more than size bytes will be read (in which
+        case the line may be incomplete). Returns b'' if already at EOF.
+        """
+        self._check_can_read()
+        # Shortcut for the common case - the whole line is in the buffer.
+        if size < 0:
+            end = self._buffer.find(b"\n", self._buffer_offset) + 1
+            if end > 0:
+                line = self._buffer[self._buffer_offset : end]
+                self._buffer_offset = end
+                self._pos += len(line)
+                return line
+        return io.BufferedIOBase.readline(self, size)
 
     def write(self, data):
         """Write a bytes object to the file.
@@ -333,7 +374,8 @@ class LZMAFile(io.BufferedIOBase):
         self._mode = _MODE_READ
         self._pos = 0
         self._decompressor = LZMADecompressor(**self._init_args)
-        self._buffer = None
+        self._buffer = b""
+        self._buffer_offset = 0
 
     def seek(self, offset, whence=0):
         """Change the file position.
@@ -372,8 +414,7 @@ class LZMAFile(io.BufferedIOBase):
             offset -= self._pos
 
         # Read and discard data until we reach the desired position.
-        if self._mode != _MODE_READ_EOF:
-            self._read_block(offset, return_data=False)
+        self._read_block(offset, return_data=False)
 
         return self._pos
 
@@ -388,23 +429,25 @@ def open(filename, mode="rb", *,
          encoding=None, errors=None, newline=None):
     """Open an LZMA-compressed file in binary or text mode.
 
-    filename can be either an actual file name (given as a str or bytes object),
-    in which case the named file is opened, or it can be an existing file object
-    to read from or write to.
+    filename can be either an actual file name (given as a str or bytes
+    object), in which case the named file is opened, or it can be an
+    existing file object to read from or write to.
 
-    The mode argument can be "r", "rb" (default), "w", "wb", "a", or "ab" for
-    binary mode, or "rt", "wt" or "at" for text mode.
+    The mode argument can be "r", "rb" (default), "w", "wb", "x", "xb",
+    "a", or "ab" for binary mode, or "rt", "wt", "xt", or "at" for text
+    mode.
 
-    The format, check, preset and filters arguments specify the compression
-    settings, as for LZMACompressor, LZMADecompressor and LZMAFile.
+    The format, check, preset and filters arguments specify the
+    compression settings, as for LZMACompressor, LZMADecompressor and
+    LZMAFile.
 
-    For binary mode, this function is equivalent to the LZMAFile constructor:
-    LZMAFile(filename, mode, ...). In this case, the encoding, errors and
-    newline arguments must not be provided.
+    For binary mode, this function is equivalent to the LZMAFile
+    constructor: LZMAFile(filename, mode, ...). In this case, the
+    encoding, errors and newline arguments must not be provided.
 
     For text mode, a LZMAFile object is created, and wrapped in an
-    io.TextIOWrapper instance with the specified encoding, error handling
-    behavior, and line ending(s).
+    io.TextIOWrapper instance with the specified encoding, error
+    handling behavior, and line ending(s).
 
     """
     if "t" in mode:
@@ -434,7 +477,7 @@ def compress(data, format=FORMAT_XZ, check=-1, preset=None, filters=None):
     Refer to LZMACompressor's docstring for a description of the
     optional arguments *format*, *check*, *preset* and *filters*.
 
-    For incremental compression, use an LZMACompressor object instead.
+    For incremental compression, use an LZMACompressor instead.
     """
     comp = LZMACompressor(format, check, preset, filters)
     return comp.compress(data) + comp.flush()
@@ -446,7 +489,7 @@ def decompress(data, format=FORMAT_AUTO, memlimit=None, filters=None):
     Refer to LZMADecompressor's docstring for a description of the
     optional arguments *format*, *check* and *filters*.
 
-    For incremental decompression, use a LZMADecompressor object instead.
+    For incremental decompression, use an LZMADecompressor instead.
     """
     results = []
     while True:

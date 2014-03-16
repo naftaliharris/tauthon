@@ -98,24 +98,15 @@ class BufferedSubFile(object):
         """Push some new data into this object."""
         # Handle any previous leftovers
         data, self._partial = self._partial + data, ''
-        # Crack into lines, but preserve the newlines on the end of each
-        parts = NLCRE_crack.split(data)
-        # The *ahem* interesting behaviour of re.split when supplied grouping
-        # parentheses is that the last element of the resulting list is the
-        # data after the final RE.  In the case of a NL/CR terminated string,
-        # this is the empty string.
-        self._partial = parts.pop()
-        #GAN 29Mar09  bugs 1555570, 1721862  Confusion at 8K boundary ending with \r:
-        # is there a \n to follow later?
-        if not self._partial and parts and parts[-1].endswith('\r'):
-            self._partial = parts.pop(-2)+parts.pop()
-        # parts is a list of strings, alternating between the line contents
-        # and the eol character(s).  Gather up a list of lines after
-        # re-attaching the newlines.
-        lines = []
-        for i in range(len(parts) // 2):
-            lines.append(parts[i*2] + parts[i*2+1])
-        self.pushlines(lines)
+        # Crack into lines, but preserve the linesep characters on the end of each
+        parts = data.splitlines(True)
+        # If the last element of the list does not end in a newline, then treat
+        # it as a partial line.  We only check for '\n' here because a line
+        # ending with '\r' might be a line that was split in the middle of a
+        # '\r\n' sequence (see bugs 1555570 and 1721862).
+        if parts and not parts[-1].endswith('\n'):
+            self._partial = parts.pop()
+        self.pushlines(parts)
 
     def pushlines(self, lines):
         # Reverse and insert at the front of the lines.
@@ -135,7 +126,7 @@ class BufferedSubFile(object):
 class FeedParser:
     """A feed-style parser of email."""
 
-    def __init__(self, _factory=message.Message, *, policy=compat32):
+    def __init__(self, _factory=None, *, policy=compat32):
         """_factory is called with no arguments to create a new message obj
 
         The policy keyword specifies a policy object that controls a number of
@@ -143,14 +134,23 @@ class FeedParser:
         backward compatibility.
 
         """
-        self._factory = _factory
         self.policy = policy
-        try:
-            _factory(policy=self.policy)
-            self._factory_kwds = lambda: {'policy': self.policy}
-        except TypeError:
-            # Assume this is an old-style factory
-            self._factory_kwds = lambda: {}
+        self._factory_kwds = lambda: {'policy': self.policy}
+        if _factory is None:
+            # What this should be:
+            #self._factory = policy.default_message_factory
+            # but, because we are post 3.4 feature freeze, fix with temp hack:
+            if self.policy is compat32:
+                self._factory = message.Message
+            else:
+                self._factory = message.EmailMessage
+        else:
+            self._factory = _factory
+            try:
+                _factory(policy=self.policy)
+            except TypeError:
+                # Assume this is an old-style factory
+                self._factory_kwds = lambda: {}
         self._input = BufferedSubFile()
         self._msgstack = []
         self._parse = self._parsegen().__next__
