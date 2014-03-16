@@ -127,8 +127,9 @@ def setup (**attrs):
     if _setup_stop_after == "config":
         return dist
 
-    # Parse the command line; any command-line errors are the end user's
-    # fault, so turn them into SystemExit to suppress tracebacks.
+    # Parse the command line and override config files; any
+    # command-line errors are the end user's fault, so turn them into
+    # SystemExit to suppress tracebacks.
     try:
         ok = dist.parse_command_line()
     except DistutilsArgError as msg:
@@ -147,7 +148,7 @@ def setup (**attrs):
             dist.run_commands()
         except KeyboardInterrupt:
             raise SystemExit("interrupted")
-        except (IOError, os.error) as exc:
+        except OSError as exc:
             if DEBUG:
                 sys.stderr.write("error: %s\n" % (exc,))
                 raise
