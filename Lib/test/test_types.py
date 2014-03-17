@@ -1,7 +1,8 @@
 # Python test set -- part 6, built-in types
 
-from test.support import run_unittest, run_with_locale
+from test.support import run_unittest, run_with_locale, cpython_only
 import collections
+import pickle
 import locale
 import sys
 import types
@@ -1077,9 +1078,19 @@ class SimpleNamespaceTests(unittest.TestCase):
         ns2 = types.SimpleNamespace()
         ns2.x = "spam"
         ns2._y = 5
+        name = "namespace"
 
-        self.assertEqual(repr(ns1), "namespace(w=3, x=1, y=2)")
-        self.assertEqual(repr(ns2), "namespace(_y=5, x='spam')")
+        self.assertEqual(repr(ns1), "{name}(w=3, x=1, y=2)".format(name=name))
+        self.assertEqual(repr(ns2), "{name}(_y=5, x='spam')".format(name=name))
+
+    def test_equal(self):
+        ns1 = types.SimpleNamespace(x=1)
+        ns2 = types.SimpleNamespace()
+        ns2.x = 1
+
+        self.assertEqual(types.SimpleNamespace(), types.SimpleNamespace())
+        self.assertEqual(ns1, ns2)
+        self.assertNotEqual(ns2, types.SimpleNamespace())
 
     def test_nested(self):
         ns1 = types.SimpleNamespace(a=1, b=2)
@@ -1117,11 +1128,12 @@ class SimpleNamespaceTests(unittest.TestCase):
         ns1.spam = ns1
         ns2.spam = ns3
         ns3.spam = ns2
+        name = "namespace"
+        repr1 = "{name}(c='cookie', spam={name}(...))".format(name=name)
+        repr2 = "{name}(spam={name}(spam={name}(...), x=1))".format(name=name)
 
-        self.assertEqual(repr(ns1),
-                         "namespace(c='cookie', spam=namespace(...))")
-        self.assertEqual(repr(ns2),
-                         "namespace(spam=namespace(spam=namespace(...), x=1))")
+        self.assertEqual(repr(ns1), repr1)
+        self.assertEqual(repr(ns2), repr2)
 
     def test_as_dict(self):
         ns = types.SimpleNamespace(spam='spamspamspam')
@@ -1144,10 +1156,45 @@ class SimpleNamespaceTests(unittest.TestCase):
         self.assertIs(type(spam), Spam)
         self.assertEqual(vars(spam), {'ham': 8, 'eggs': 9})
 
+    def test_pickle(self):
+        ns = types.SimpleNamespace(breakfast="spam", lunch="spam")
+
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+            pname = "protocol {}".format(protocol)
+            try:
+                ns_pickled = pickle.dumps(ns, protocol)
+            except TypeError as e:
+                raise TypeError(pname) from e
+            ns_roundtrip = pickle.loads(ns_pickled)
+
+            self.assertEqual(ns, ns_roundtrip, pname)
+
+
+class SharedKeyTests(unittest.TestCase):
+
+    @cpython_only
+    def test_subclasses(self):
+        # Verify that subclasses can share keys (per PEP 412)
+        class A:
+            pass
+        class B(A):
+            pass
+
+        a, b = A(), B()
+        self.assertEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(b)))
+        self.assertLess(sys.getsizeof(vars(a)), sys.getsizeof({}))
+        a.x, a.y, a.z, a.w = range(4)
+        self.assertNotEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(b)))
+        a2 = A()
+        self.assertEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(a2)))
+        self.assertLess(sys.getsizeof(vars(a)), sys.getsizeof({}))
+        b.u, b.v, b.w, b.t = range(4)
+        self.assertLess(sys.getsizeof(vars(b)), sys.getsizeof({}))
+
 
 def test_main():
     run_unittest(TypesTests, MappingProxyTests, ClassCreationTests,
-                 SimpleNamespaceTests)
+                 SimpleNamespaceTests, SharedKeyTests)
 
 if __name__ == '__main__':
     test_main()

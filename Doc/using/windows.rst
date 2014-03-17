@@ -11,6 +11,10 @@
 This document aims to give an overview of Windows-specific behaviour you should
 know about when using Python on Microsoft Windows.
 
+.. XXX (ncoghlan)
+
+   This looks rather stale to me...
+
 
 Installing Python
 =================
@@ -560,12 +564,6 @@ View the :file:`readme.txt` in their respective directories:
 +--------------------+--------------+-----------------------+
 | Directory          | MSVC version | Visual Studio version |
 +====================+==============+=======================+
-| :file:`PC/VC6/`    | 6.0          | 97                    |
-+--------------------+--------------+-----------------------+
-| :file:`PC/VS7.1/`  | 7.1          | 2003                  |
-+--------------------+--------------+-----------------------+
-| :file:`PC/VS8.0/`  | 8.0          | 2005                  |
-+--------------------+--------------+-----------------------+
 | :file:`PC/VS9.0/`  | 9.0          | 2008                  |
 +--------------------+--------------+-----------------------+
 | :file:`PCbuild/`   | 10.0         | 2010                  |
