@@ -46,10 +46,9 @@ Constants
 
 .. data:: asyncio.subprocess.DEVNULL
 
-   Special value that can be used as the *stderr* argument to
-   :func:`create_subprocess_shell` and :func:`create_subprocess_exec` and
-   indicates that standard error should go into the same handle as standard
-   output.
+   Special value that can be used as the *stdin*, *stdout* or *stderr* argument
+   to :func:`create_subprocess_shell` and :func:`create_subprocess_exec` and
+   indicates that the special file :data:`os.devnull` will be used.
 
 
 Process
@@ -147,6 +146,7 @@ it does not use a shell. Get the output of the "python -m platform" command and
 display the output::
 
     import asyncio
+    import os
     import sys
     from asyncio import subprocess
 
@@ -165,7 +165,11 @@ display the output::
         exitcode = yield from proc.wait()
         return (exitcode, stdout)
 
-    loop = asyncio.get_event_loop()
+    if os.name == 'nt':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
     coro = getstatusoutput(sys.executable, '-m', 'platform')
     exitcode, stdout = loop.run_until_complete(coro)
     if not exitcode:
