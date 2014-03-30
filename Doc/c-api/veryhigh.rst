@@ -95,12 +95,6 @@ the same library that the Python runtime is using.
    leaving *closeit* set to ``0`` and *flags* set to *NULL*.
 
 
-.. c:function:: int PyRun_SimpleFileFlags(FILE *fp, const char *filename, PyCompilerFlags *flags)
-
-   This is a simplified interface to :c:func:`PyRun_SimpleFileExFlags` below,
-   leaving *closeit* set to ``0``.
-
-
 .. c:function:: int PyRun_SimpleFileEx(FILE *fp, const char *filename, int closeit)
 
    This is a simplified interface to :c:func:`PyRun_SimpleFileExFlags` below,
@@ -289,7 +283,7 @@ the same library that the Python runtime is using.
    frame *f* is executed, interpreting bytecode and executing calls as needed.
    The additional *throwflag* parameter can mostly be ignored - if true, then
    it causes an exception to immediately be thrown; this is used for the
-   :meth:`throw` methods of generator objects.
+   :meth:`~generator.throw` methods of generator objects.
 
 
 .. c:function:: int PyEval_MergeCompilerFlags(PyCompilerFlags *cf)
