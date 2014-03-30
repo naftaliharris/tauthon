@@ -20,6 +20,7 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include "structmember.h"
 
 #ifndef MS_WINDOWS
 #define UNIX
@@ -108,6 +109,7 @@ typedef struct {
     int fd;
 #endif
 
+    PyObject *weakreflist;
     access_mode access;
 } mmap_object;
 
@@ -134,6 +136,8 @@ mmap_object_dealloc(mmap_object *m_obj)
     }
 #endif /* UNIX */
 
+    if (m_obj->weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) m_obj);
     Py_TYPE(m_obj)->tp_free((PyObject*)m_obj);
 }
 
@@ -1032,7 +1036,7 @@ static PyTypeObject mmap_object_type = {
     0,                                          /* tp_traverse */
     0,                                          /* tp_clear */
     0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
+    offsetof(mmap_object, weakreflist),         /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     mmap_object_methods,                        /* tp_methods */
@@ -1154,12 +1158,6 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         (void)fcntl(fd, F_FULLFSYNC);
 #endif
 #ifdef HAVE_FSTAT
-#  ifdef __VMS
-    /* on OpenVMS we must ensure that all bytes are written to the file */
-    if (fd != -1) {
-        fsync(fd);
-    }
-#  endif
     if (fd != -1 && fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
         if (map_size == 0) {
             if (st.st_size == 0) {
@@ -1190,6 +1188,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
     m_obj->data = NULL;
     m_obj->size = (size_t) map_size;
     m_obj->pos = (size_t) 0;
+    m_obj->weakreflist = NULL;
     m_obj->exports = 0;
     m_obj->offset = offset;
     if (fd == -1) {
@@ -1203,18 +1202,18 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
         flags |= MAP_ANONYMOUS;
 #else
         /* SVR4 method to map anonymous memory is to open /dev/zero */
-        fd = devzero = open("/dev/zero", O_RDWR);
+        fd = devzero = _Py_open("/dev/zero", O_RDWR);
         if (devzero == -1) {
             Py_DECREF(m_obj);
             PyErr_SetFromErrno(PyExc_OSError);
             return NULL;
         }
 #endif
-    } else {
-        m_obj->fd = dup(fd);
+    }
+    else {
+        m_obj->fd = _Py_dup(fd);
         if (m_obj->fd == -1) {
             Py_DECREF(m_obj);
-            PyErr_SetFromErrno(PyExc_OSError);
             return NULL;
         }
     }
@@ -1394,6 +1393,7 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
     /* set the initial position */
     m_obj->pos = (size_t) 0;
 
+    m_obj->weakreflist = NULL;
     m_obj->exports = 0;
     /* set the tag name */
     if (tagname != NULL && *tagname != '\0') {

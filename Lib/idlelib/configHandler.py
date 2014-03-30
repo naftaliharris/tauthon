@@ -20,7 +20,6 @@ configuration problem notification and resolution.
 import os
 import sys
 
-from idlelib import macosxSupport
 from configparser import ConfigParser, NoOptionError, NoSectionError
 
 class InvalidConfigType(Exception): pass
@@ -271,8 +270,10 @@ class IdleConf:
             except OSError:
                 pass
         return default
+
     def SetOption(self, configType, section, option, value):
         """In user's config file, set section's option to value.
+
         """
         self.userCfg[configType].SetOption(section, option, value)
 
@@ -525,10 +526,13 @@ class IdleConf:
     def GetCurrentKeySet(self):
         result = self.GetKeySet(self.CurrentKeys())
 
-        if macosxSupport.runningAsOSXApp():
-            # We're using AquaTk, replace all keybingings that use the
-            # Alt key by ones that use the Option key because the former
-            # don't work reliably.
+        if sys.platform == "darwin":
+            # OS X Tk variants do not support the "Alt" keyboard modifier.
+            # So replace all keybingings that use "Alt" with ones that
+            # use the "Option" keyboard modifier.
+            # TO DO: the "Option" modifier does not work properly for
+            #        Cocoa Tk and XQuartz Tk so we should not use it
+            #        in default OS X KeySets.
             for k, v in result.items():
                 v2 = [ x.replace('<Alt-', '<Option-') for x in v ]
                 if v != v2:
@@ -638,8 +642,10 @@ class IdleConf:
                     except OSError:
                         pass
         return keyBindings
+
     def GetExtraHelpSourceList(self,configSet):
         """Fetch list of extra help sources from a given configSet.
+
         Valid configSets are 'user' or 'default'.  Return a list of tuples of
         the form (menu_item , path_to_help_file , option), or return the empty
         list.  'option' is the sequence number of the help resource.  'option'
