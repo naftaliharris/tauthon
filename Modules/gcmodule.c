@@ -65,17 +65,17 @@ static PyObject *garbage = NULL;
 /* Python string to use if unhandled exception occurs */
 static PyObject *gc_str = NULL;
 
-/* Python string used to look for __del__ attribute. */
-static PyObject *delstr = NULL;
+/* a list of callbacks to be invoked when collection is performed */
+static PyObject *callbacks = NULL;
 
-/* This is the number of objects who survived the last full collection. It
+/* This is the number of objects that survived the last full collection. It
    approximates the number of long lived objects tracked by the GC.
 
    (by "full collection", we mean a collection of the oldest generation).
 */
 static Py_ssize_t long_lived_total = 0;
 
-/* This is the number of objects who survived all "non-full" collections,
+/* This is the number of objects that survived all "non-full" collections,
    and are awaiting to undergo a full collection for the first time.
 
 */
@@ -118,7 +118,7 @@ static Py_ssize_t long_lived_pending = 0;
 
 /*
    NOTE: about untracking of mutable objects.
-   
+
    Certain types of container cannot participate in a reference cycle, and
    so do not need to be tracked by the garbage collector. Untracking these
    objects reduces the cost of garbage collections. However, determining
@@ -136,10 +136,10 @@ static Py_ssize_t long_lived_pending = 0;
    not survive until garbage collection. It is therefore not worthwhile
    to untrack eligible tuples at creation time.
 
-   Instead, all tuples except the empty tuple are tracked when created. 
-   During garbage collection it is determined whether any surviving tuples 
-   can be untracked. A tuple can be untracked if all of its contents are 
-   already not tracked. Tuples are examined for untracking in all garbage 
+   Instead, all tuples except the empty tuple are tracked when created.
+   During garbage collection it is determined whether any surviving tuples
+   can be untracked. A tuple can be untracked if all of its contents are
+   already not tracked. Tuples are examined for untracking in all garbage
    collection cycles. It may take more than one cycle to untrack a tuple.
 
    Dictionaries containing only immutable objects also do not need to be
@@ -152,8 +152,8 @@ static Py_ssize_t long_lived_pending = 0;
    The module provides the python function is_tracked(obj), which returns
    the CURRENT tracking status of the object. Subsequent garbage
    collections may change the tracking status of the object.
-   
-   Untracking of certain containers was introduced in issue #4688, and 
+
+   Untracking of certain containers was introduced in issue #4688, and
    the algorithm was refined in response to issue #14775.
 */
 
@@ -731,8 +731,8 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 static void
 debug_cycle(char *msg, PyObject *op)
 {
-    PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
-                      msg, Py_TYPE(op)->tp_name, op);
+    PySys_FormatStderr("gc: %s <%s %p>\n",
+                       msg, Py_TYPE(op)->tp_name, op);
 }
 
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
@@ -813,6 +813,9 @@ clear_freelists(void)
     (void)PyTuple_ClearFreeList();
     (void)PyUnicode_ClearFreeList();
     (void)PyFloat_ClearFreeList();
+    (void)PyList_ClearFreeList();
+    (void)PyDict_ClearFreeList();
+    (void)PySet_ClearFreeList();
 }
 
 static double
@@ -820,7 +823,9 @@ get_time(void)
 {
     double result = 0;
     if (tmod != NULL) {
-        PyObject *f = PyObject_CallMethod(tmod, "time", NULL);
+        _Py_IDENTIFIER(time);
+
+        PyObject *f = _PyObject_CallMethodId(tmod, &PyId_time, NULL);
         if (f == NULL) {
             PyErr_Clear();
         }
@@ -836,7 +841,7 @@ get_time(void)
 /* This is the main function.  Read this to understand how the
  * collection process works. */
 static Py_ssize_t
-collect(int generation)
+collect(int generation, Py_ssize_t *n_collected, Py_ssize_t *n_uncollectable)
 {
     int i;
     Py_ssize_t m = 0; /* # objects collected */
@@ -847,12 +852,6 @@ collect(int generation)
     PyGC_Head finalizers;  /* objects with, & reachable from, __del__ */
     PyGC_Head *gc;
     double t1 = 0.0;
-
-    if (delstr == NULL) {
-        delstr = PyUnicode_InternFromString("__del__");
-        if (delstr == NULL)
-            Py_FatalError("gc couldn't allocate \"__del__\"");
-    }
 
     if (debug & DEBUG_STATS) {
         PySys_WriteStderr("gc: collecting generation %d...\n",
@@ -993,7 +992,62 @@ collect(int generation)
         PyErr_WriteUnraisable(gc_str);
         Py_FatalError("unexpected exception during garbage collection");
     }
+
+    if (n_collected)
+        *n_collected = m;
+    if (n_uncollectable)
+        *n_uncollectable = n;
     return n+m;
+}
+
+/* Invoke progress callbacks to notify clients that garbage collection
+ * is starting or stopping
+ */
+static void
+invoke_gc_callback(const char *phase, int generation,
+                   Py_ssize_t collected, Py_ssize_t uncollectable)
+{
+    Py_ssize_t i;
+    PyObject *info = NULL;
+
+    /* we may get called very early */
+    if (callbacks == NULL)
+        return;
+    /* The local variable cannot be rebound, check it for sanity */
+    assert(callbacks != NULL && PyList_CheckExact(callbacks));
+    if (PyList_GET_SIZE(callbacks) != 0) {
+        info = Py_BuildValue("{sisnsn}",
+            "generation", generation,
+            "collected", collected,
+            "uncollectable", uncollectable);
+        if (info == NULL) {
+            PyErr_WriteUnraisable(NULL);
+            return;
+        }
+    }
+    for (i=0; i<PyList_GET_SIZE(callbacks); i++) {
+        PyObject *r, *cb = PyList_GET_ITEM(callbacks, i);
+        Py_INCREF(cb); /* make sure cb doesn't go away */
+        r = PyObject_CallFunction(cb, "sO", phase, info);
+        Py_XDECREF(r);
+        if (r == NULL)
+            PyErr_WriteUnraisable(cb);
+        Py_DECREF(cb);
+    }
+    Py_XDECREF(info);
+}
+
+/* Perform garbage collection of a generation and invoke
+ * progress callbacks.
+ */
+static Py_ssize_t
+collect_with_callback(int generation)
+{
+    Py_ssize_t result, collected, uncollectable;
+    invoke_gc_callback("start", generation, 0, 0);
+    result = collect(generation, &collected, &uncollectable);
+    invoke_gc_callback("stop", generation, collected, uncollectable);
+    return result;
 }
 
 static Py_ssize_t
@@ -1014,7 +1068,7 @@ collect_generations(void)
             if (i == NUM_GENERATIONS - 1
                 && long_lived_pending < long_lived_total / 4)
                 continue;
-            n = collect(i);
+            n = collect_with_callback(i);
             break;
         }
     }
@@ -1085,7 +1139,7 @@ gc_collect(PyObject *self, PyObject *args, PyObject *kws)
         n = 0; /* already collecting, don't do anything */
     else {
         collecting = 1;
-        n = collect(genarg);
+        n = collect_with_callback(genarg);
         collecting = 0;
     }
 
@@ -1378,6 +1432,15 @@ PyInit_gc(void)
     if (PyModule_AddObject(m, "garbage", garbage) < 0)
         return NULL;
 
+    if (callbacks == NULL) {
+        callbacks = PyList_New(0);
+        if (callbacks == NULL)
+            return NULL;
+    }
+    Py_INCREF(callbacks);
+    if (PyModule_AddObject(m, "callbacks", callbacks) < 0)
+        return NULL;
+
     /* Importing can't be done in collect() because collect()
      * can be called via PyGC_Collect() in Py_Finalize().
      * This wouldn't be a problem, except that <initialized> is
@@ -1410,7 +1473,7 @@ PyGC_Collect(void)
         n = 0; /* already collecting, don't do anything */
     else {
         collecting = 1;
-        n = collect(NUM_GENERATIONS - 1);
+        n = collect_with_callback(NUM_GENERATIONS - 1);
         collecting = 0;
     }
 
@@ -1447,6 +1510,7 @@ _PyGC_Fini(void)
             Py_XDECREF(bytes);
         }
     }
+    Py_CLEAR(callbacks);
 }
 
 /* for debugging */
@@ -1470,13 +1534,6 @@ PyObject_GC_Track(void *op)
     _PyObject_GC_TRACK(op);
 }
 
-/* for binary compatibility with 2.2 */
-void
-_PyObject_GC_Track(PyObject *op)
-{
-    PyObject_GC_Track(op);
-}
-
 void
 PyObject_GC_UnTrack(void *op)
 {
@@ -1485,13 +1542,6 @@ PyObject_GC_UnTrack(void *op)
      */
     if (IS_TRACKED(op))
         _PyObject_GC_UNTRACK(op);
-}
-
-/* for binary compatibility with 2.2 */
-void
-_PyObject_GC_UnTrack(PyObject *op)
-{
-    PyObject_GC_UnTrack(op);
 }
 
 PyObject *

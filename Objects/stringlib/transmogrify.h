@@ -18,10 +18,10 @@ stringlib_expandtabs(PyObject *self, PyObject *args)
     Py_ssize_t i, j;
     PyObject *u;
     int tabsize = 8;
-    
+
     if (!PyArg_ParseTuple(args, "|i:expandtabs", &tabsize))
         return NULL;
-    
+
     /* First pass: determine size of output string */
     i = j = 0;
     e = STRINGLIB_STR(self) + STRINGLIB_LEN(self);
@@ -46,15 +46,15 @@ stringlib_expandtabs(PyObject *self, PyObject *args)
             }
         }
     }
-    
+
     if (i > PY_SSIZE_T_MAX - j)
         goto overflow;
-    
+
     /* Second pass: create output string and fill it */
     u = STRINGLIB_NEW(NULL, i + j);
     if (!u)
         return NULL;
-    
+
     j = 0;
     q = STRINGLIB_STR(u);
     

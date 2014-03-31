@@ -176,36 +176,29 @@ normalizeUserObj(PyObject *obj)
     if (fn->m_self == NULL) {
         /* built-in function: look up the module name */
         PyObject *mod = fn->m_module;
-        const char *modname;
-        if (mod && PyUnicode_Check(mod)) {
-            /* XXX: The following will truncate module names with embedded
-             * null-characters.  It is unlikely that this can happen in
-             * practice and the concequences are not serious enough to
-             * introduce extra checks here.
-             */
-            modname = _PyUnicode_AsString(mod);
-            if (modname == NULL) {
-                modname = "<encoding error>";
-                PyErr_Clear();
+        PyObject *modname = NULL;
+        if (mod != NULL) {
+            if (PyUnicode_Check(mod)) {
+                modname = mod;
+                Py_INCREF(modname);
+            }
+            else if (PyModule_Check(mod)) {
+                modname = PyModule_GetNameObject(mod);
+                if (modname == NULL)
+                    PyErr_Clear();
             }
         }
-        else if (mod && PyModule_Check(mod)) {
-            modname = PyModule_GetName(mod);
-            if (modname == NULL) {
-                PyErr_Clear();
-                modname = "builtins";
+        if (modname != NULL) {
+            if (PyUnicode_CompareWithASCIIString(modname, "builtins") != 0) {
+                PyObject *result;
+                result = PyUnicode_FromFormat("<%U.%s>", modname,
+                                              fn->m_ml->ml_name);
+                Py_DECREF(modname);
+                return result;
             }
+            Py_DECREF(modname);
         }
-        else {
-            modname = "builtins";
-        }
-        if (strcmp(modname, "builtins") != 0)
-            return PyUnicode_FromFormat("<%s.%s>",
-                                        modname,
-                                        fn->m_ml->ml_name);
-        else
-            return PyUnicode_FromFormat("<%s>",
-                                        fn->m_ml->ml_name);
+        return PyUnicode_FromFormat("<%s>", fn->m_ml->ml_name);
     }
     else {
         /* built-in method: try to return
@@ -462,7 +455,6 @@ profiler_callback(PyObject *self, PyFrameObject *frame, int what,
         PyTrace_RETURN event will be generated, so we don't need to
         handle it. */
 
-#ifdef PyTrace_C_CALL   /* not defined in Python <= 2.3 */
     /* the Python function 'frame' is issuing a call to the built-in
        function 'arg' */
     case PyTrace_C_CALL:
@@ -484,7 +476,6 @@ profiler_callback(PyObject *self, PyFrameObject *frame, int what,
                               ((PyCFunctionObject *)arg)->m_ml);
         }
         break;
-#endif
 
     default:
         break;
@@ -674,13 +665,7 @@ setBuiltins(ProfilerObject *pObj, int nvalue)
     if (nvalue == 0)
         pObj->flags &= ~POF_BUILTINS;
     else if (nvalue > 0) {
-#ifndef PyTrace_C_CALL
-        PyErr_SetString(PyExc_ValueError,
-                        "builtins=True requires Python >= 2.4");
-        return -1;
-#else
         pObj->flags |=  POF_BUILTINS;
-#endif
     }
     return 0;
 }
@@ -778,11 +763,7 @@ profiler_init(ProfilerObject *pObj, PyObject *args, PyObject *kw)
     PyObject *timer = NULL;
     double timeunit = 0.0;
     int subcalls = 1;
-#ifdef PyTrace_C_CALL
     int builtins = 1;
-#else
-    int builtins = 0;
-#endif
     static char *kwlist[] = {"timer", "timeunit",
                                    "subcalls", "builtins", 0};
 
