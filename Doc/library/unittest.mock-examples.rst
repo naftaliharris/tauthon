@@ -277,6 +277,20 @@ instantiate the class in those tests.
        ...
     AttributeError: object has no attribute 'old_method'
 
+Using a specification also enables a smarter matching of calls made to the
+mock, regardless of whether some parameters were passed as positional or
+named arguments::
+
+   >>> def f(a, b, c): pass
+   ...
+   >>> mock = Mock(spec=f)
+   >>> mock(1, 2, 3)
+   <Mock name='mock()' id='140161580456576'>
+   >>> mock.assert_called_with(a=1, b=2, c=3)
+
+If you want this smarter matching to also work with method calls on the mock,
+you can use :ref:`auto-speccing <auto-speccing>`.
+
 If you want a stronger form of specification that prevents the setting
 of arbitrary attributes as well as the getting of them then you can use
 `spec_set` instead of `spec`.
@@ -920,8 +934,8 @@ After the `MagicMock` has been used we can use attributes like
     the magic methods you specifically want:
 
         >>> mock = Mock()
-        >>> mock.__setitem__ = Mock(side_effect=getitem)
-        >>> mock.__getitem__ = Mock(side_effect=setitem)
+        >>> mock.__getitem__ = Mock(side_effect=getitem)
+        >>> mock.__setitem__ = Mock(side_effect=setitem)
 
     A *third* option is to use `MagicMock` but passing in `dict` as the `spec`
     (or `spec_set`) argument so that the `MagicMock` created only has

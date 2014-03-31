@@ -62,6 +62,8 @@
 
 #define T_HANDLE T_POINTER
 
+#define DWORD_MAX 4294967295U
+
 /* Grab CancelIoEx dynamically from kernel32 */
 static int has_CancelIoEx = -1;
 static BOOL (CALLBACK *Py_CancelIoEx)(HANDLE, LPOVERLAPPED);
@@ -105,17 +107,37 @@ overlapped_dealloc(OverlappedObject *self)
 {
     DWORD bytes;
     int err = GetLastError();
+
     if (self->pending) {
-        /* make it a programming error to deallocate while operation
-           is pending, even if we can safely cancel it */
         if (check_CancelIoEx() &&
-                Py_CancelIoEx(self->handle, &self->overlapped))
-            GetOverlappedResult(self->handle, &self->overlapped, &bytes, TRUE);
-        PyErr_SetString(PyExc_RuntimeError,
-                        "I/O operations still in flight while destroying "
-                        "Overlapped object, the process may crash");
-        PyErr_WriteUnraisable(NULL);
+            Py_CancelIoEx(self->handle, &self->overlapped) &&
+            GetOverlappedResult(self->handle, &self->overlapped, &bytes, TRUE))
+        {
+            /* The operation is no longer pending -- nothing to do. */
+        }
+        else if (_Py_Finalizing == NULL)
+        {
+            /* The operation is still pending -- give a warning.  This
+               will probably only happen on Windows XP. */
+            PyErr_SetString(PyExc_RuntimeError,
+                            "I/O operations still in flight while destroying "
+                            "Overlapped object, the process may crash");
+            PyErr_WriteUnraisable(NULL);
+        }
+        else
+        {
+            /* The operation is still pending, but the process is
+               probably about to exit, so we need not worry too much
+               about memory leaks.  Leaking self prevents a potential
+               crash.  This can happen when a daemon thread is cleaned
+               up at exit -- see #19565.  We only expect to get here
+               on Windows XP. */
+            CloseHandle(self->overlapped.hEvent);
+            SetLastError(err);
+            return;
+        }
     }
+
     CloseHandle(self->overlapped.hEvent);
     SetLastError(err);
     if (self->write_buffer.obj)
@@ -1142,7 +1164,7 @@ winapi_WriteFile(PyObject *self, PyObject *args, PyObject *kwds)
     HANDLE handle;
     Py_buffer _buf, *buf;
     PyObject *bufobj;
-    DWORD written;
+    DWORD len, written;
     BOOL ret;
     int use_overlapped = 0;
     DWORD err;
@@ -1170,7 +1192,8 @@ winapi_WriteFile(PyObject *self, PyObject *args, PyObject *kwds)
     }
 
     Py_BEGIN_ALLOW_THREADS
-    ret = WriteFile(handle, buf->buf, buf->len, &written,
+    len = (DWORD)Py_MIN(buf->len, DWORD_MAX);
+    ret = WriteFile(handle, buf->buf, len, &written,
                     overlapped ? &overlapped->overlapped : NULL);
     Py_END_ALLOW_THREADS
 
@@ -1320,6 +1343,7 @@ PyInit__winapi(void)
     WINAPI_CONSTANT(F_DWORD, STILL_ACTIVE);
     WINAPI_CONSTANT(F_DWORD, SW_HIDE);
     WINAPI_CONSTANT(F_DWORD, WAIT_OBJECT_0);
+    WINAPI_CONSTANT(F_DWORD, WAIT_ABANDONED_0);
     WINAPI_CONSTANT(F_DWORD, WAIT_TIMEOUT);
 
     WINAPI_CONSTANT("i", NULL);

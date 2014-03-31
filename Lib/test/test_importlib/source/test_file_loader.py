@@ -1,52 +1,52 @@
-from importlib import machinery
-import importlib
-import importlib.abc
 from .. import abc
 from .. import util
 from . import util as source_util
 
+importlib = util.import_importlib('importlib')
+importlib_abc = util.import_importlib('importlib.abc')
+machinery = util.import_importlib('importlib.machinery')
+importlib_util = util.import_importlib('importlib.util')
+
 import errno
-import imp
 import marshal
 import os
 import py_compile
 import shutil
 import stat
 import sys
+import types
 import unittest
+import warnings
 
-from test.support import make_legacy_pyc
+from test.support import make_legacy_pyc, unload
 
 
-class SimpleTest(unittest.TestCase):
+class SimpleTest(abc.LoaderTests):
 
     """Should have no issue importing a source module [basic]. And if there is
     a syntax error, it should raise a SyntaxError [syntax error].
 
     """
 
+    def setUp(self):
+        self.name = 'spam'
+        self.filepath = os.path.join('ham', self.name + '.py')
+        self.loader = self.machinery.SourceFileLoader(self.name, self.filepath)
+
     def test_load_module_API(self):
-        # If fullname is not specified that assume self.name is desired.
-        class TesterMixin(importlib.abc.Loader):
-            def load_module(self, fullname): return fullname
-            def module_repr(self, module): return '<module>'
+        class Tester(self.abc.FileLoader):
+            def get_source(self, _): return 'attr = 42'
+            def is_package(self, _): return False
 
-        class Tester(importlib.abc.FileLoader, TesterMixin):
-            def get_code(self, _): pass
-            def get_source(self, _): pass
-            def is_package(self, _): pass
-
-        name = 'mod_name'
-        loader = Tester(name, 'some_path')
-        self.assertEqual(name, loader.load_module())
-        self.assertEqual(name, loader.load_module(None))
-        self.assertEqual(name, loader.load_module(name))
-        with self.assertRaises(ImportError):
-            loader.load_module(loader.name + 'XXX')
+        loader = Tester('blah', 'blah.py')
+        self.addCleanup(unload, 'blah')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            module = loader.load_module()  # Should not raise an exception.
 
     def test_get_filename_API(self):
         # If fullname is not set then assume self.path is desired.
-        class Tester(importlib.abc.FileLoader):
+        class Tester(self.abc.FileLoader):
             def get_code(self, _): pass
             def get_source(self, _): pass
             def is_package(self, _): pass
@@ -61,11 +61,21 @@ class SimpleTest(unittest.TestCase):
         with self.assertRaises(ImportError):
             loader.get_filename(name + 'XXX')
 
+    def test_equality(self):
+        other = self.machinery.SourceFileLoader(self.name, self.filepath)
+        self.assertEqual(self.loader, other)
+
+    def test_inequality(self):
+        other = self.machinery.SourceFileLoader('_' + self.name, self.filepath)
+        self.assertNotEqual(self.loader, other)
+
     # [basic]
     def test_module(self):
         with source_util.create_modules('_temp') as mapping:
-            loader = machinery.SourceFileLoader('_temp', mapping['_temp'])
-            module = loader.load_module('_temp')
+            loader = self.machinery.SourceFileLoader('_temp', mapping['_temp'])
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                module = loader.load_module('_temp')
             self.assertIn('_temp', sys.modules)
             check = {'__name__': '_temp', '__file__': mapping['_temp'],
                      '__package__': ''}
@@ -74,9 +84,11 @@ class SimpleTest(unittest.TestCase):
 
     def test_package(self):
         with source_util.create_modules('_pkg.__init__') as mapping:
-            loader = machinery.SourceFileLoader('_pkg',
+            loader = self.machinery.SourceFileLoader('_pkg',
                                                  mapping['_pkg.__init__'])
-            module = loader.load_module('_pkg')
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                module = loader.load_module('_pkg')
             self.assertIn('_pkg', sys.modules)
             check = {'__name__': '_pkg', '__file__': mapping['_pkg.__init__'],
                      '__path__': [os.path.dirname(mapping['_pkg.__init__'])],
@@ -87,9 +99,11 @@ class SimpleTest(unittest.TestCase):
 
     def test_lacking_parent(self):
         with source_util.create_modules('_pkg.__init__', '_pkg.mod')as mapping:
-            loader = machinery.SourceFileLoader('_pkg.mod',
+            loader = self.machinery.SourceFileLoader('_pkg.mod',
                                                     mapping['_pkg.mod'])
-            module = loader.load_module('_pkg.mod')
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                module = loader.load_module('_pkg.mod')
             self.assertIn('_pkg.mod', sys.modules)
             check = {'__name__': '_pkg.mod', '__file__': mapping['_pkg.mod'],
                      '__package__': '_pkg'}
@@ -102,13 +116,17 @@ class SimpleTest(unittest.TestCase):
 
     def test_module_reuse(self):
         with source_util.create_modules('_temp') as mapping:
-            loader = machinery.SourceFileLoader('_temp', mapping['_temp'])
-            module = loader.load_module('_temp')
+            loader = self.machinery.SourceFileLoader('_temp', mapping['_temp'])
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                module = loader.load_module('_temp')
             module_id = id(module)
             module_dict_id = id(module.__dict__)
             with open(mapping['_temp'], 'w') as file:
                 file.write("testing_var = 42\n")
-            module = loader.load_module('_temp')
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                module = loader.load_module('_temp')
             self.assertIn('testing_var', module.__dict__,
                          "'testing_var' not in "
                             "{0}".format(list(module.__dict__.keys())))
@@ -122,14 +140,20 @@ class SimpleTest(unittest.TestCase):
         value = '<test>'
         name = '_temp'
         with source_util.create_modules(name) as mapping:
-            orig_module = imp.new_module(name)
+            orig_module = types.ModuleType(name)
             for attr in attributes:
                 setattr(orig_module, attr, value)
             with open(mapping[name], 'w') as file:
                 file.write('+++ bad syntax +++')
-            loader = machinery.SourceFileLoader('_temp', mapping['_temp'])
+            loader = self.machinery.SourceFileLoader('_temp', mapping['_temp'])
             with self.assertRaises(SyntaxError):
-                loader.load_module(name)
+                loader.exec_module(orig_module)
+            for attr in attributes:
+                self.assertEqual(getattr(orig_module, attr), value)
+            with self.assertRaises(SyntaxError):
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', DeprecationWarning)
+                    loader.load_module(name)
             for attr in attributes:
                 self.assertEqual(getattr(orig_module, attr), value)
 
@@ -138,9 +162,11 @@ class SimpleTest(unittest.TestCase):
         with source_util.create_modules('_temp') as mapping:
             with open(mapping['_temp'], 'w') as file:
                 file.write('=')
-            loader = machinery.SourceFileLoader('_temp', mapping['_temp'])
+            loader = self.machinery.SourceFileLoader('_temp', mapping['_temp'])
             with self.assertRaises(SyntaxError):
-                loader.load_module('_temp')
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', DeprecationWarning)
+                    loader.load_module('_temp')
             self.assertNotIn('_temp', sys.modules)
 
     def test_file_from_empty_string_dir(self):
@@ -151,14 +177,16 @@ class SimpleTest(unittest.TestCase):
             file.write("# test file for importlib")
         try:
             with util.uncache('_temp'):
-                loader = machinery.SourceFileLoader('_temp', file_path)
-                mod = loader.load_module('_temp')
+                loader = self.machinery.SourceFileLoader('_temp', file_path)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', DeprecationWarning)
+                    mod = loader.load_module('_temp')
                 self.assertEqual(file_path, mod.__file__)
-                self.assertEqual(imp.cache_from_source(file_path),
+                self.assertEqual(self.util.cache_from_source(file_path),
                                  mod.__cached__)
         finally:
             os.unlink(file_path)
-            pycache = os.path.dirname(imp.cache_from_source(file_path))
+            pycache = os.path.dirname(self.util.cache_from_source(file_path))
             if os.path.exists(pycache):
                 shutil.rmtree(pycache)
 
@@ -168,7 +196,7 @@ class SimpleTest(unittest.TestCase):
         # truncated rather than raise an OverflowError.
         with source_util.create_modules('_temp') as mapping:
             source = mapping['_temp']
-            compiled = imp.cache_from_source(source)
+            compiled = self.util.cache_from_source(source)
             with open(source, 'w') as f:
                 f.write("x = 5")
             try:
@@ -179,20 +207,48 @@ class SimpleTest(unittest.TestCase):
                 if e.errno != getattr(errno, 'EOVERFLOW', None):
                     raise
                 self.skipTest("cannot set modification time to large integer ({})".format(e))
-            loader = machinery.SourceFileLoader('_temp', mapping['_temp'])
-            mod = loader.load_module('_temp')
+            loader = self.machinery.SourceFileLoader('_temp', mapping['_temp'])
+            # PEP 451
+            module = types.ModuleType('_temp')
+            module.__spec__ = self.util.spec_from_loader('_temp', loader)
+            loader.exec_module(module)
+            self.assertEqual(module.x, 5)
+            self.assertTrue(os.path.exists(compiled))
+            os.unlink(compiled)
+            # PEP 302
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                mod = loader.load_module('_temp') # XXX
             # Sanity checks.
             self.assertEqual(mod.__cached__, compiled)
             self.assertEqual(mod.x, 5)
             # The pyc file was created.
-            os.stat(compiled)
+            self.assertTrue(os.path.exists(compiled))
+
+    def test_unloadable(self):
+        loader = self.machinery.SourceFileLoader('good name', {})
+        module = types.ModuleType('bad name')
+        module.__spec__ = self.machinery.ModuleSpec('bad name', loader)
+        with self.assertRaises(ImportError):
+            loader.exec_module(module)
+        with self.assertRaises(ImportError):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                loader.load_module('bad name')
+
+Frozen_SimpleTest, Source_SimpleTest = util.test_both(
+        SimpleTest, importlib=importlib, machinery=machinery, abc=importlib_abc,
+        util=importlib_util)
 
 
-class BadBytecodeTest(unittest.TestCase):
+class BadBytecodeTest:
 
     def import_(self, file, module_name):
         loader = self.loader(module_name, file)
-        module = loader.load_module(module_name)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            # XXX Change to use exec_module().
+            module = loader.load_module(module_name)
         self.assertIn(module_name, sys.modules)
 
     def manipulate_bytecode(self, name, mapping, manipulator, *,
@@ -205,7 +261,7 @@ class BadBytecodeTest(unittest.TestCase):
             pass
         py_compile.compile(mapping[name])
         if not del_source:
-            bytecode_path = imp.cache_from_source(mapping[name])
+            bytecode_path = self.util.cache_from_source(mapping[name])
         else:
             os.unlink(mapping[name])
             bytecode_path = make_legacy_pyc(mapping[name])
@@ -291,10 +347,29 @@ class BadBytecodeTest(unittest.TestCase):
                                     lambda bc: b'\x00\x00\x00\x00' + bc[4:])
             test('_temp', mapping, bc_path)
 
+class BadBytecodeTestPEP451(BadBytecodeTest):
 
-class SourceLoaderBadBytecodeTest(BadBytecodeTest):
+    def import_(self, file, module_name):
+        loader = self.loader(module_name, file)
+        module = types.ModuleType(module_name)
+        module.__spec__ = self.util.spec_from_loader(module_name, loader)
+        loader.exec_module(module)
 
-    loader = machinery.SourceFileLoader
+class BadBytecodeTestPEP302(BadBytecodeTest):
+
+    def import_(self, file, module_name):
+        loader = self.loader(module_name, file)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            module = loader.load_module(module_name)
+        self.assertIn(module_name, sys.modules)
+
+
+class SourceLoaderBadBytecodeTest:
+
+    @classmethod
+    def setUpClass(cls):
+        cls.loader = cls.machinery.SourceFileLoader
 
     @source_util.writes_bytecode_files
     def test_empty_file(self):
@@ -333,7 +408,8 @@ class SourceLoaderBadBytecodeTest(BadBytecodeTest):
         def test(name, mapping, bytecode_path):
             self.import_(mapping[name], name)
             with open(bytecode_path, 'rb') as bytecode_file:
-                self.assertEqual(bytecode_file.read(4), imp.get_magic())
+                self.assertEqual(bytecode_file.read(4),
+                                 self.util.MAGIC_NUMBER)
 
         self._test_bad_magic(test)
 
@@ -383,13 +459,13 @@ class SourceLoaderBadBytecodeTest(BadBytecodeTest):
         zeros = b'\x00\x00\x00\x00'
         with source_util.create_modules('_temp') as mapping:
             py_compile.compile(mapping['_temp'])
-            bytecode_path = imp.cache_from_source(mapping['_temp'])
+            bytecode_path = self.util.cache_from_source(mapping['_temp'])
             with open(bytecode_path, 'r+b') as bytecode_file:
                 bytecode_file.seek(4)
                 bytecode_file.write(zeros)
             self.import_(mapping['_temp'], '_temp')
             source_mtime = os.path.getmtime(mapping['_temp'])
-            source_timestamp = importlib._w_long(source_mtime)
+            source_timestamp = self.importlib._w_long(source_mtime)
             with open(bytecode_path, 'rb') as bytecode_file:
                 bytecode_file.seek(4)
                 self.assertEqual(bytecode_file.read(4), source_timestamp)
@@ -401,7 +477,7 @@ class SourceLoaderBadBytecodeTest(BadBytecodeTest):
         with source_util.create_modules('_temp') as mapping:
             # Create bytecode that will need to be re-created.
             py_compile.compile(mapping['_temp'])
-            bytecode_path = imp.cache_from_source(mapping['_temp'])
+            bytecode_path = self.util.cache_from_source(mapping['_temp'])
             with open(bytecode_path, 'r+b') as bytecode_file:
                 bytecode_file.seek(0)
                 bytecode_file.write(b'\x00\x00\x00\x00')
@@ -409,16 +485,34 @@ class SourceLoaderBadBytecodeTest(BadBytecodeTest):
             os.chmod(bytecode_path,
                         stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
             try:
-                # Should not raise IOError!
+                # Should not raise OSError!
                 self.import_(mapping['_temp'], '_temp')
             finally:
                 # Make writable for eventual clean-up.
                 os.chmod(bytecode_path, stat.S_IWUSR)
 
+class SourceLoaderBadBytecodeTestPEP451(
+        SourceLoaderBadBytecodeTest, BadBytecodeTestPEP451):
+    pass
 
-class SourcelessLoaderBadBytecodeTest(BadBytecodeTest):
+Frozen_SourceBadBytecodePEP451, Source_SourceBadBytecodePEP451 = util.test_both(
+        SourceLoaderBadBytecodeTestPEP451, importlib=importlib, machinery=machinery,
+        abc=importlib_abc, util=importlib_util)
 
-    loader = machinery.SourcelessFileLoader
+class SourceLoaderBadBytecodeTestPEP302(
+        SourceLoaderBadBytecodeTest, BadBytecodeTestPEP302):
+    pass
+
+Frozen_SourceBadBytecodePEP302, Source_SourceBadBytecodePEP302 = util.test_both(
+        SourceLoaderBadBytecodeTestPEP302, importlib=importlib, machinery=machinery,
+        abc=importlib_abc, util=importlib_util)
+
+
+class SourcelessLoaderBadBytecodeTest:
+
+    @classmethod
+    def setUpClass(cls):
+        cls.loader = cls.machinery.SourcelessFileLoader
 
     def test_empty_file(self):
         def test(name, mapping, bytecode_path):
@@ -473,14 +567,22 @@ class SourcelessLoaderBadBytecodeTest(BadBytecodeTest):
     def test_non_code_marshal(self):
         self._test_non_code_marshal(del_source=True)
 
+class SourcelessLoaderBadBytecodeTestPEP451(SourcelessLoaderBadBytecodeTest,
+        BadBytecodeTestPEP451):
+    pass
 
-def test_main():
-    from test.support import run_unittest
-    run_unittest(SimpleTest,
-                 SourceLoaderBadBytecodeTest,
-                 SourcelessLoaderBadBytecodeTest
-                )
+Frozen_SourcelessBadBytecodePEP451, Source_SourcelessBadBytecodePEP451 = util.test_both(
+        SourcelessLoaderBadBytecodeTestPEP451, importlib=importlib,
+        machinery=machinery, abc=importlib_abc, util=importlib_util)
+
+class SourcelessLoaderBadBytecodeTestPEP302(SourcelessLoaderBadBytecodeTest,
+        BadBytecodeTestPEP302):
+    pass
+
+Frozen_SourcelessBadBytecodePEP302, Source_SourcelessBadBytecodePEP302 = util.test_both(
+        SourcelessLoaderBadBytecodeTestPEP302, importlib=importlib,
+        machinery=machinery, abc=importlib_abc, util=importlib_util)
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
