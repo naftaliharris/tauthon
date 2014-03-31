@@ -12,16 +12,17 @@
 .. module:: pickle
    :synopsis: Convert Python objects to streams of bytes and back.
 .. sectionauthor:: Jim Kerr <jbkerr@sr.hp.com>.
-.. sectionauthor:: Barry Warsaw <barry@zope.com>
+.. sectionauthor:: Barry Warsaw <barry@python.org>
 
 
-The :mod:`pickle` module implements a fundamental, but powerful algorithm for
-serializing and de-serializing a Python object structure.  "Pickling" is the
-process whereby a Python object hierarchy is converted into a byte stream, and
-"unpickling" is the inverse operation, whereby a byte stream is converted back
-into an object hierarchy.  Pickling (and unpickling) is alternatively known as
-"serialization", "marshalling," [#]_ or "flattening", however, to avoid
-confusion, the terms used here are "pickling" and "unpickling"..
+The :mod:`pickle` module implements binary protocols for serializing and
+de-serializing a Python object structure.  *"Pickling"* is the process
+whereby a Python object hierarchy is converted into a byte stream, and
+*"unpickling"* is the inverse operation, whereby a byte stream
+(from a :term:`binary file` or :term:`bytes-like object`) is converted
+back into an object hierarchy.  Pickling (and unpickling) is alternatively
+known as "serialization", "marshalling," [#]_ or "flattening"; however, to
+avoid confusion, the terms used here are "pickling" and "unpickling".
 
 .. warning::
 
@@ -33,9 +34,8 @@ confusion, the terms used here are "pickling" and "unpickling"..
 Relationship to other Python modules
 ------------------------------------
 
-The :mod:`pickle` module has an transparent optimizer (:mod:`_pickle`) written
-in C.  It is used whenever available.  Otherwise the pure Python implementation is
-used.
+Comparison with ``marshal``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Python has a more primitive serialization module called :mod:`marshal`, but in
 general :mod:`pickle` should always be the preferred way to serialize Python
@@ -69,17 +69,30 @@ The :mod:`pickle` module differs from :mod:`marshal` in several significant ways
   The :mod:`pickle` serialization format is guaranteed to be backwards compatible
   across Python releases.
 
-Note that serialization is a more primitive notion than persistence; although
-:mod:`pickle` reads and writes file objects, it does not handle the issue of
-naming persistent objects, nor the (even more complicated) issue of concurrent
-access to persistent objects.  The :mod:`pickle` module can transform a complex
-object into a byte stream and it can transform the byte stream into an object
-with the same internal structure.  Perhaps the most obvious thing to do with
-these byte streams is to write them onto a file, but it is also conceivable to
-send them across a network or store them in a database.  The module
-:mod:`shelve` provides a simple interface to pickle and unpickle objects on
-DBM-style database files.
+Comparison with ``json``
+^^^^^^^^^^^^^^^^^^^^^^^^
 
+There are fundamental differences between the pickle protocols and
+`JSON (JavaScript Object Notation) <http://json.org>`_:
+
+* JSON is a text serialization format (it outputs unicode text, although
+  most of the time it is then encoded to ``utf-8``), while pickle is
+  a binary serialization format;
+
+* JSON is human-readable, while pickle is not;
+
+* JSON is interoperable and widely used outside of the Python ecosystem,
+  while pickle is Python-specific;
+
+* JSON, by default, can only represent a subset of the Python built-in
+  types, and no custom classes; pickle can represent an extremely large
+  number of Python types (many of them automatically, by clever usage
+  of Python's introspection facilities; complex cases can be tackled by
+  implementing :ref:`specific object APIs <pickle-inst>`).
+
+.. seealso::
+   The :mod:`json` module: a standard library module allowing JSON
+   serialization and deserialization.
 
 Data stream format
 ------------------
@@ -116,6 +129,18 @@ There are currently 4 different protocols which can be used for pickling.
   :class:`bytes` objects and cannot be unpickled by Python 2.x.  This is
   the default as well as the current recommended protocol; use it whenever
   possible.
+
+.. note::
+   Serialization is a more primitive notion than persistence; although
+   :mod:`pickle` reads and writes file objects, it does not handle the issue of
+   naming persistent objects, nor the (even more complicated) issue of concurrent
+   access to persistent objects.  The :mod:`pickle` module can transform a complex
+   object into a byte stream and it can transform the byte stream into an object
+   with the same internal structure.  Perhaps the most obvious thing to do with
+   these byte streams is to write them onto a file, but it is also conceivable to
+   send them across a network or store them in a database.  The :mod:`shelve`
+   module provides a simple interface to pickle and unpickle objects on
+   DBM-style database files.
 
 
 Module Interface
@@ -161,7 +186,7 @@ process more convenient:
    :class:`io.BytesIO` instance, or any other custom object that meets this
    interface.
 
-   If *fix_imports* is True and *protocol* is less than 3, pickle will try to
+   If *fix_imports* is true and *protocol* is less than 3, pickle will try to
    map the new Python 3.x names to the old module names used in Python 2.x,
    so that the pickle data stream is readable with Python 2.x.
 
@@ -178,7 +203,7 @@ process more convenient:
    supported.  The higher the protocol used, the more recent the version of
    Python needed to read the pickle produced.
 
-   If *fix_imports* is True and *protocol* is less than 3, pickle will try to
+   If *fix_imports* is true and *protocol* is less than 3, pickle will try to
    map the new Python 3.x names to the old module names used in Python 2.x,
    so that the pickle data stream is readable with Python 2.x.
 
@@ -200,7 +225,7 @@ process more convenient:
 
    Optional keyword arguments are *fix_imports*, *encoding* and *errors*,
    which are used to control compatibility support for pickle stream generated
-   by Python 2.x.  If *fix_imports* is True, pickle will try to map the old
+   by Python 2.x.  If *fix_imports* is true, pickle will try to map the old
    Python 2.x names to the new names used in Python 3.x.  The *encoding* and
    *errors* tell pickle how to decode 8-bit string instances pickled by Python
    2.x; these default to 'ASCII' and 'strict', respectively.
@@ -216,7 +241,7 @@ process more convenient:
 
    Optional keyword arguments are *fix_imports*, *encoding* and *errors*,
    which are used to control compatibility support for pickle stream generated
-   by Python 2.x.  If *fix_imports* is True, pickle will try to map the old
+   by Python 2.x.  If *fix_imports* is true, pickle will try to map the old
    Python 2.x names to the new names used in Python 3.x.  The *encoding* and
    *errors* tell pickle how to decode 8-bit string instances pickled by Python
    2.x; these default to 'ASCII' and 'strict', respectively.
@@ -266,7 +291,7 @@ The :mod:`pickle` module exports two classes, :class:`Pickler` and
    argument.  It can thus be an on-disk file opened for binary writing, a
    :class:`io.BytesIO` instance, or any other custom object that meets this interface.
 
-   If *fix_imports* is True and *protocol* is less than 3, pickle will try to
+   If *fix_imports* is true and *protocol* is less than 3, pickle will try to
    map the new Python 3.x names to the old module names used in Python 2.x,
    so that the pickle data stream is readable with Python 2.x.
 
@@ -286,6 +311,29 @@ The :mod:`pickle` module exports two classes, :class:`Pickler` and
       returned by :meth:`persistent_id` cannot itself have a persistent ID.
 
       See :ref:`pickle-persistent` for details and examples of uses.
+
+   .. attribute:: dispatch_table
+
+      A pickler object's dispatch table is a registry of *reduction
+      functions* of the kind which can be declared using
+      :func:`copyreg.pickle`.  It is a mapping whose keys are classes
+      and whose values are reduction functions.  A reduction function
+      takes a single argument of the associated class and should
+      conform to the same interface as a :meth:`__reduce__`
+      method.
+
+      By default, a pickler object will not have a
+      :attr:`dispatch_table` attribute, and it will instead use the
+      global dispatch table managed by the :mod:`copyreg` module.
+      However, to customize the pickling for a specific pickler object
+      one can set the :attr:`dispatch_table` attribute to a dict-like
+      object.  Alternatively, if a subclass of :class:`Pickler` has a
+      :attr:`dispatch_table` attribute then this will be used as the
+      default dispatch table for instances of that class.
+
+      See :ref:`pickle-dispatch` for usage examples.
+
+      .. versionadded:: 3.3
 
    .. attribute:: fast
 
@@ -313,7 +361,7 @@ The :mod:`pickle` module exports two classes, :class:`Pickler` and
 
    Optional keyword arguments are *fix_imports*, *encoding* and *errors*,
    which are used to control compatibility support for pickle stream generated
-   by Python 2.x.  If *fix_imports* is True, pickle will try to map the old
+   by Python 2.x.  If *fix_imports* is true, pickle will try to map the old
    Python 2.x names to the new names used in Python 3.x.  The *encoding* and
    *errors* tell pickle how to decode 8-bit string instances pickled by Python
    2.x; these default to 'ASCII' and 'strict', respectively.
@@ -367,8 +415,8 @@ The following types can be pickled:
 
 * classes that are defined at the top level of a module
 
-* instances of such classes whose :attr:`__dict__` or the result of calling
-  :meth:`__getstate__` is picklable  (see section :ref:`pickle-inst` for
+* instances of such classes whose :attr:`~object.__dict__` or the result of
+  calling :meth:`__getstate__` is picklable  (see section :ref:`pickle-inst` for
   details).
 
 Attempts to pickle unpicklable objects will raise the :exc:`PicklingError`
@@ -412,6 +460,8 @@ conversions can be made by the class's :meth:`__setstate__` method.
 Pickling Class Instances
 ------------------------
 
+.. currentmodule:: None
+
 In this section, we describe the general mechanisms available to you to define,
 customize, and control how class instances are pickled and unpickled.
 
@@ -447,7 +497,7 @@ methods:
    defines the method :meth:`__getstate__`, it is called and the returned object
    is pickled as the contents for the instance, instead of the contents of the
    instance's dictionary.  If the :meth:`__getstate__` method is absent, the
-   instance's :attr:`__dict__` is pickled as usual.
+   instance's :attr:`~object.__dict__` is pickled as usual.
 
 
 .. method:: object.__setstate__(state)
@@ -516,7 +566,7 @@ or both.
    * Optionally, the object's state, which will be passed to the object's
      :meth:`__setstate__` method as previously described.  If the object has no
      such method then, the value must be a dictionary and it will be added to
-     the object's :attr:`__dict__` attribute.
+     the object's :attr:`~object.__dict__` attribute.
 
    * Optionally, an iterator (and not a sequence) yielding successive items.
      These items will be appended to the object either using
@@ -542,6 +592,8 @@ or both.
    the extended version.  The main use for this method is to provide
    backwards-compatible reduce values for older Python releases.
 
+.. currentmodule:: pickle
+
 .. _pickle-persistent:
 
 Persistence of External Objects
@@ -559,25 +611,63 @@ any newer protocol).
 
 The resolution of such persistent IDs is not defined by the :mod:`pickle`
 module; it will delegate this resolution to the user defined methods on the
-pickler and unpickler, :meth:`persistent_id` and :meth:`persistent_load`
-respectively.
+pickler and unpickler, :meth:`~Pickler.persistent_id` and
+:meth:`~Unpickler.persistent_load` respectively.
 
 To pickle objects that have an external persistent id, the pickler must have a
-custom :meth:`persistent_id` method that takes an object as an argument and
-returns either ``None`` or the persistent id for that object.  When ``None`` is
-returned, the pickler simply pickles the object as normal.  When a persistent ID
-string is returned, the pickler will pickle that object, along with a marker so
-that the unpickler will recognize it as a persistent ID.
+custom :meth:`~Pickler.persistent_id` method that takes an object as an
+argument and returns either ``None`` or the persistent id for that object.
+When ``None`` is returned, the pickler simply pickles the object as normal.
+When a persistent ID string is returned, the pickler will pickle that object,
+along with a marker so that the unpickler will recognize it as a persistent ID.
 
 To unpickle external objects, the unpickler must have a custom
-:meth:`persistent_load` method that takes a persistent ID object and returns the
-referenced object.
+:meth:`~Unpickler.persistent_load` method that takes a persistent ID object and
+returns the referenced object.
 
 Here is a comprehensive example presenting how persistent ID can be used to
 pickle external objects by reference.
 
 .. literalinclude:: ../includes/dbpickle.py
 
+.. _pickle-dispatch:
+
+Dispatch Tables
+^^^^^^^^^^^^^^^
+
+If one wants to customize pickling of some classes without disturbing
+any other code which depends on pickling, then one can create a
+pickler with a private dispatch table.
+
+The global dispatch table managed by the :mod:`copyreg` module is
+available as :data:`copyreg.dispatch_table`.  Therefore, one may
+choose to use a modified copy of :data:`copyreg.dispatch_table` as a
+private dispatch table.
+
+For example ::
+
+   f = io.BytesIO()
+   p = pickle.Pickler(f)
+   p.dispatch_table = copyreg.dispatch_table.copy()
+   p.dispatch_table[SomeClass] = reduce_SomeClass
+
+creates an instance of :class:`pickle.Pickler` with a private dispatch
+table which handles the ``SomeClass`` class specially.  Alternatively,
+the code ::
+
+   class MyPickler(pickle.Pickler):
+       dispatch_table = copyreg.dispatch_table.copy()
+       dispatch_table[SomeClass] = reduce_SomeClass
+   f = io.BytesIO()
+   p = MyPickler(f)
+
+does the same, but all instances of ``MyPickler`` will by default
+share the same dispatch table.  The equivalent code using the
+:mod:`copyreg` module is ::
+
+   copyreg.pickle(SomeClass, reduce_SomeClass)
+   f = io.BytesIO()
+   p = pickle.Pickler(f)
 
 .. _pickle-state:
 
@@ -590,7 +680,7 @@ Handling Stateful Objects
 
 Here's an example that shows how to modify pickling behavior for a class.
 The :class:`TextReader` class opens a text file, and returns the line number and
-line contents each time its :meth:`readline` method is called. If a
+line contents each time its :meth:`!readline` method is called. If a
 :class:`TextReader` instance is pickled, all attributes *except* the file object
 member are saved. When the instance is unpickled, the file is reopened, and
 reading resumes from the last location. The :meth:`__setstate__` and
@@ -669,9 +759,10 @@ apply the string argument "echo hello world".  Although this example is
 inoffensive, it is not difficult to imagine one that could damage your system.
 
 For this reason, you may want to control what gets unpickled by customizing
-:meth:`Unpickler.find_class`.  Unlike its name suggests, :meth:`find_class` is
-called whenever a global (i.e., a class or a function) is requested.  Thus it is
-possible to either completely forbid globals or restrict them to a safe subset.
+:meth:`Unpickler.find_class`.  Unlike its name suggests,
+:meth:`Unpickler.find_class` is called whenever a global (i.e., a class or
+a function) is requested.  Thus it is possible to either completely forbid
+globals or restrict them to a safe subset.
 
 Here is an example of an unpickler allowing only few safe classes from the
 :mod:`builtins` module to be loaded::
@@ -725,6 +816,14 @@ As our examples shows, you have to be careful with what you allow to be
 unpickled.  Therefore if security is a concern, you may want to consider
 alternatives such as the marshalling API in :mod:`xmlrpc.client` or
 third-party solutions.
+
+
+Performance
+-----------
+
+Recent versions of the pickle protocol (from protocol 2 and upwards) feature
+efficient binary encodings for several common features and built-in types.
+Also, the :mod:`pickle` module has a transparent optimizer written in C.
 
 
 .. _pickle-example:

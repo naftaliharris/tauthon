@@ -80,7 +80,7 @@ Used in:  PY_LONG_LONG
 #endif
 #endif /* HAVE_LONG_LONG */
 
-/* a build with 30-bit digits for Python long integers needs an exact-width
+/* a build with 30-bit digits for Python integers needs an exact-width
  * 32-bit unsigned integer type to store those digits.  (We could just use
  * type 'unsigned long', but that would be wasteful on a system where longs
  * are 64-bits.)  On Unix systems, the autoconf macro AC_TYPE_UINT32_T defines
@@ -98,7 +98,7 @@ Used in:  PY_LONG_LONG
 #endif
 
 /* Macros for a 64-bit unsigned integer type; used for type 'twodigits' in the
- * long integer implementation, when 30-bit digits are enabled.
+ * integer implementation, when 30-bit digits are enabled.
  */
 #ifdef uint64_t
 #define HAVE_UINT64_T 1
@@ -148,7 +148,7 @@ Used in:  PY_LONG_LONG
 #define _PyHASH_MULTIPLIER 1000003UL  /* 0xf4243 */
 
 /* Parameters used for the numeric hash implementation.  See notes for
-   _PyHash_Double in Objects/object.c.  Numeric hashes are based on
+   _Py_HashDouble in Objects/object.c.  Numeric hashes are based on
    reduction modulo the prime 2**_PyHASH_BITS - 1. */
 
 #if SIZEOF_VOID_P >= 8
@@ -662,7 +662,7 @@ extern char * _getpty(int *, int, mode_t, int);
 /* On QNX 6, struct termio must be declared by including sys/termio.h
    if TCGETA, TCSETA, TCSETAW, or TCSETAF are used.  sys/termio.h must
    be included before termios.h or it will generate an error. */
-#ifdef HAVE_SYS_TERMIO_H
+#if defined(HAVE_SYS_TERMIO_H) && !defined(__hpux)
 #include <sys/termio.h>
 #endif
 

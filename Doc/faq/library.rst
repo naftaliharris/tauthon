@@ -4,7 +4,9 @@
 Library and Extension FAQ
 =========================
 
-.. contents::
+.. only:: html
+
+   .. contents::
 
 General Library Questions
 =========================
@@ -507,6 +509,7 @@ For data that is more regular (e.g. a homogeneous list of ints or floats),
 you can also use the :mod:`array` module.
 
 .. note::
+
    To read and write binary data, it is mandatory to open the file in
    binary mode (here, passing ``"rb"`` to :func:`open`).  If you use
    ``"r"`` instead (the default), the file will be open in text mode
@@ -656,7 +659,7 @@ and client-side web systems.
 .. XXX check if wiki page is still up to date
 
 A summary of available frameworks is maintained by Paul Boddie at
-http://wiki.python.org/moin/WebProgramming .
+http://wiki.python.org/moin/WebProgramming\ .
 
 Cameron Laird maintains a useful set of pages about Python web technologies at
 http://phaseit.net/claird/comp.lang.python/web_python.
