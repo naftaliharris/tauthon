@@ -8,6 +8,12 @@
 extern "C" {
 #endif
 
+_Py_IDENTIFIER(Py_Repr);
+_Py_IDENTIFIER(__bytes__);
+_Py_IDENTIFIER(__dir__);
+_Py_IDENTIFIER(__isabstractmethod__);
+_Py_IDENTIFIER(builtins);
+
 #ifdef Py_REF_DEBUG
 Py_ssize_t _Py_RefTotal;
 
@@ -22,7 +28,7 @@ _Py_GetRefTotal(void)
     o = _PyDict_Dummy();
     if (o != NULL)
         total -= o->ob_refcnt;
-    o = _PySet_Dummy();
+    o = _PySet_Dummy;
     if (o != NULL)
         total -= o->ob_refcnt;
     return total;
@@ -255,6 +261,72 @@ _PyObject_NewVar(PyTypeObject *tp, Py_ssize_t nitems)
     return PyObject_INIT_VAR(op, tp, nitems);
 }
 
+void
+PyObject_CallFinalizer(PyObject *self)
+{
+    PyTypeObject *tp = Py_TYPE(self);
+
+    /* The former could happen on heaptypes created from the C API, e.g.
+       PyType_FromSpec(). */
+    if (!PyType_HasFeature(tp, Py_TPFLAGS_HAVE_FINALIZE) ||
+        tp->tp_finalize == NULL)
+        return;
+    /* tp_finalize should only be called once. */
+    if (PyType_IS_GC(tp) && _PyGC_FINALIZED(self))
+        return;
+
+    tp->tp_finalize(self);
+    if (PyType_IS_GC(tp))
+        _PyGC_SET_FINALIZED(self, 1);
+}
+
+int
+PyObject_CallFinalizerFromDealloc(PyObject *self)
+{
+    Py_ssize_t refcnt;
+
+    /* Temporarily resurrect the object. */
+    if (self->ob_refcnt != 0) {
+        Py_FatalError("PyObject_CallFinalizerFromDealloc called on "
+                      "object with a non-zero refcount");
+    }
+    self->ob_refcnt = 1;
+
+    PyObject_CallFinalizer(self);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return 0;         /* this is the normal path out */
+
+    /* tp_finalize resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    refcnt = self->ob_refcnt;
+    _Py_NewReference(self);
+    self->ob_refcnt = refcnt;
+
+    if (PyType_IS_GC(Py_TYPE(self))) {
+        assert(_PyGC_REFS(self) != _PyGC_REFS_UNTRACKED);
+    }
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+    /* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+     * chain, so no more to do there.
+     * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+     * _Py_NewReference bumped tp_allocs:  both of those need to be
+     * undone.
+     */
+#ifdef COUNT_ALLOCS
+    --Py_TYPE(self)->tp_frees;
+    --Py_TYPE(self)->tp_allocs;
+#endif
+    return -1;
+}
+
 int
 PyObject_Print(PyObject *op, FILE *fp, int flags)
 {
@@ -340,11 +412,17 @@ _PyObject_Dump(PyObject* op)
 #ifdef WITH_THREAD
         PyGILState_STATE gil;
 #endif
+        PyObject *error_type, *error_value, *error_traceback;
+
         fprintf(stderr, "object  : ");
 #ifdef WITH_THREAD
         gil = PyGILState_Ensure();
 #endif
+
+        PyErr_Fetch(&error_type, &error_value, &error_traceback);
         (void)PyObject_Print(op, stderr, 0);
+        PyErr_Restore(error_type, error_value, error_traceback);
+
 #ifdef WITH_THREAD
         PyGILState_Release(gil);
 #endif
@@ -377,6 +455,14 @@ PyObject_Repr(PyObject *v)
     if (Py_TYPE(v)->tp_repr == NULL)
         return PyUnicode_FromFormat("<%s object at %p>",
                                     v->ob_type->tp_name, v);
+
+#ifdef Py_DEBUG
+    /* PyObject_Repr() must not be called with an exception set,
+       because it may clear it (directly or indirectly) and so the
+       caller looses its exception */
+    assert(!PyErr_Occurred());
+#endif
+
     res = (*v->ob_type->tp_repr)(v);
     if (res == NULL)
         return NULL;
@@ -419,6 +505,13 @@ PyObject_Str(PyObject *v)
     if (Py_TYPE(v)->tp_str == NULL)
         return PyObject_Repr(v);
 
+#ifdef Py_DEBUG
+    /* PyObject_Str() must not be called with an exception set,
+       because it may clear it (directly or indirectly) and so the
+       caller loses its exception */
+    assert(!PyErr_Occurred());
+#endif
+
     /* It is possible for a type to have a tp_str representation that loops
        infinitely. */
     if (Py_EnterRecursiveCall(" while getting the str of an object"))
@@ -451,6 +544,9 @@ PyObject_ASCII(PyObject *v)
     if (repr == NULL)
         return NULL;
 
+    if (PyUnicode_IS_ASCII(repr))
+        return repr;
+
     /* repr is guaranteed to be a PyUnicode object by PyObject_Repr */
     ascii = _PyUnicode_AsASCIIString(repr, "backslashreplace");
     Py_DECREF(repr);
@@ -470,7 +566,6 @@ PyObject *
 PyObject_Bytes(PyObject *v)
 {
     PyObject *result, *func;
-    _Py_IDENTIFIER(__bytes__);
 
     if (v == NULL)
         return PyBytes_FromString("<NULL>");
@@ -636,150 +731,6 @@ PyObject_RichCompareBool(PyObject *v, PyObject *w, int op)
     return ok;
 }
 
-/* Set of hash utility functions to help maintaining the invariant that
-    if a==b then hash(a)==hash(b)
-
-   All the utility functions (_Py_Hash*()) return "-1" to signify an error.
-*/
-
-/* For numeric types, the hash of a number x is based on the reduction
-   of x modulo the prime P = 2**_PyHASH_BITS - 1.  It's designed so that
-   hash(x) == hash(y) whenever x and y are numerically equal, even if
-   x and y have different types.
-
-   A quick summary of the hashing strategy:
-
-   (1) First define the 'reduction of x modulo P' for any rational
-   number x; this is a standard extension of the usual notion of
-   reduction modulo P for integers.  If x == p/q (written in lowest
-   terms), the reduction is interpreted as the reduction of p times
-   the inverse of the reduction of q, all modulo P; if q is exactly
-   divisible by P then define the reduction to be infinity.  So we've
-   got a well-defined map
-
-      reduce : { rational numbers } -> { 0, 1, 2, ..., P-1, infinity }.
-
-   (2) Now for a rational number x, define hash(x) by:
-
-      reduce(x)   if x >= 0
-      -reduce(-x) if x < 0
-
-   If the result of the reduction is infinity (this is impossible for
-   integers, floats and Decimals) then use the predefined hash value
-   _PyHASH_INF for x >= 0, or -_PyHASH_INF for x < 0, instead.
-   _PyHASH_INF, -_PyHASH_INF and _PyHASH_NAN are also used for the
-   hashes of float and Decimal infinities and nans.
-
-   A selling point for the above strategy is that it makes it possible
-   to compute hashes of decimal and binary floating-point numbers
-   efficiently, even if the exponent of the binary or decimal number
-   is large.  The key point is that
-
-      reduce(x * y) == reduce(x) * reduce(y) (modulo _PyHASH_MODULUS)
-
-   provided that {reduce(x), reduce(y)} != {0, infinity}.  The reduction of a
-   binary or decimal float is never infinity, since the denominator is a power
-   of 2 (for binary) or a divisor of a power of 10 (for decimal).  So we have,
-   for nonnegative x,
-
-      reduce(x * 2**e) == reduce(x) * reduce(2**e) % _PyHASH_MODULUS
-
-      reduce(x * 10**e) == reduce(x) * reduce(10**e) % _PyHASH_MODULUS
-
-   and reduce(10**e) can be computed efficiently by the usual modular
-   exponentiation algorithm.  For reduce(2**e) it's even better: since
-   P is of the form 2**n-1, reduce(2**e) is 2**(e mod n), and multiplication
-   by 2**(e mod n) modulo 2**n-1 just amounts to a rotation of bits.
-
-   */
-
-Py_hash_t
-_Py_HashDouble(double v)
-{
-    int e, sign;
-    double m;
-    Py_uhash_t x, y;
-
-    if (!Py_IS_FINITE(v)) {
-        if (Py_IS_INFINITY(v))
-            return v > 0 ? _PyHASH_INF : -_PyHASH_INF;
-        else
-            return _PyHASH_NAN;
-    }
-
-    m = frexp(v, &e);
-
-    sign = 1;
-    if (m < 0) {
-        sign = -1;
-        m = -m;
-    }
-
-    /* process 28 bits at a time;  this should work well both for binary
-       and hexadecimal floating point. */
-    x = 0;
-    while (m) {
-        x = ((x << 28) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - 28);
-        m *= 268435456.0;  /* 2**28 */
-        e -= 28;
-        y = (Py_uhash_t)m;  /* pull out integer part */
-        m -= y;
-        x += y;
-        if (x >= _PyHASH_MODULUS)
-            x -= _PyHASH_MODULUS;
-    }
-
-    /* adjust for the exponent;  first reduce it modulo _PyHASH_BITS */
-    e = e >= 0 ? e % _PyHASH_BITS : _PyHASH_BITS-1-((-1-e) % _PyHASH_BITS);
-    x = ((x << e) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - e);
-
-    x = x * sign;
-    if (x == (Py_uhash_t)-1)
-        x = (Py_uhash_t)-2;
-    return (Py_hash_t)x;
-}
-
-Py_hash_t
-_Py_HashPointer(void *p)
-{
-    Py_hash_t x;
-    size_t y = (size_t)p;
-    /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
-       excessive hash collisions for dicts and sets */
-    y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
-    x = (Py_hash_t)y;
-    if (x == -1)
-        x = -2;
-    return x;
-}
-
-Py_hash_t
-_Py_HashBytes(unsigned char *p, Py_ssize_t len)
-{
-    Py_uhash_t x;
-    Py_ssize_t i;
-
-    /*
-      We make the hash of the empty string be 0, rather than using
-      (prefix ^ suffix), since this slightly obfuscates the hash secret
-    */
-#ifdef Py_DEBUG
-    assert(_Py_HashSecret_Initialized);
-#endif
-    if (len == 0) {
-        return 0;
-    }
-    x = (Py_uhash_t) _Py_HashSecret.prefix;
-    x ^= (Py_uhash_t) *p << 7;
-    for (i = 0; i < len; i++)
-        x = (_PyHASH_MULTIPLIER * x) ^ (Py_uhash_t) *p++;
-    x ^= (Py_uhash_t) len;
-    x ^= (Py_uhash_t) _Py_HashSecret.suffix;
-    if (x == -1)
-        x = -2;
-    return x;
-}
-
 Py_hash_t
 PyObject_HashNotImplemented(PyObject *v)
 {
@@ -787,8 +738,6 @@ PyObject_HashNotImplemented(PyObject *v)
                  Py_TYPE(v)->tp_name);
     return -1;
 }
-
-_Py_HashSecret_t _Py_HashSecret;
 
 Py_hash_t
 PyObject_Hash(PyObject *v)
@@ -859,7 +808,6 @@ _PyObject_IsAbstract(PyObject *obj)
 {
     int res;
     PyObject* isabstract;
-    _Py_IDENTIFIER(__isabstractmethod__);
 
     if (obj == NULL)
         return 0;
@@ -1032,8 +980,12 @@ PyObject_SelfIter(PyObject *obj)
 PyObject *
 _PyObject_GetBuiltin(const char *name)
 {
-    PyObject *mod, *attr;
-    mod = PyImport_ImportModule("builtins");
+    PyObject *mod_name, *mod, *attr;
+
+    mod_name = _PyUnicode_FromId(&PyId_builtins);   /* borrowed */
+    if (mod_name == NULL)
+        return NULL;
+    mod = PyImport_Import(mod_name);
     if (mod == NULL)
         return NULL;
     attr = PyObject_GetAttrString(mod, name);
@@ -1317,12 +1269,11 @@ static PyObject *
 _dir_locals(void)
 {
     PyObject *names;
-    PyObject *locals = PyEval_GetLocals();
+    PyObject *locals;
 
-    if (locals == NULL) {
-        PyErr_SetString(PyExc_SystemError, "frame does not exist");
+    locals = PyEval_GetLocals();
+    if (locals == NULL)
         return NULL;
-    }
 
     names = PyMapping_Keys(locals);
     if (!names)
@@ -1347,7 +1298,6 @@ static PyObject *
 _dir_object(PyObject *obj)
 {
     PyObject *result, *sorted;
-    _Py_IDENTIFIER(__dir__);
     PyObject *dirfunc = _PyObject_LookupSpecial(obj, &PyId___dir__);
 
     assert(obj);
@@ -1515,6 +1465,17 @@ NotImplemented_repr(PyObject *op)
 }
 
 static PyObject *
+NotImplemented_reduce(PyObject *op)
+{
+    return PyUnicode_FromString("NotImplemented");
+}
+
+static PyMethodDef notimplemented_methods[] = {
+    {"__reduce__", (PyCFunction)NotImplemented_reduce, METH_NOARGS, NULL},
+    {NULL, NULL}
+};
+
+static PyObject *
 notimplemented_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     if (PyTuple_GET_SIZE(args) || (kwargs && PyDict_Size(kwargs))) {
@@ -1524,12 +1485,21 @@ notimplemented_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     Py_RETURN_NOTIMPLEMENTED;
 }
 
+static void
+notimplemented_dealloc(PyObject* ignore)
+{
+    /* This should never get called, but we also don't want to SEGV if
+     * we accidentally decref NotImplemented out of existence.
+     */
+    Py_FatalError("deallocating NotImplemented");
+}
+
 PyTypeObject _PyNotImplemented_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "NotImplementedType",
     0,
     0,
-    none_dealloc,       /*tp_dealloc*/ /*never called*/
+    notimplemented_dealloc,       /*tp_dealloc*/ /*never called*/
     0,                  /*tp_print*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
@@ -1552,7 +1522,7 @@ PyTypeObject _PyNotImplemented_Type = {
     0,                  /*tp_weaklistoffset */
     0,                  /*tp_iter */
     0,                  /*tp_iternext */
-    0,                  /*tp_methods */
+    notimplemented_methods, /*tp_methods */
     0,                  /*tp_members */
     0,                  /*tp_getset */
     0,                  /*tp_base */
@@ -1699,15 +1669,6 @@ _Py_ReadyTypes(void)
     if (PyType_Ready(&PyMemberDescr_Type) < 0)
         Py_FatalError("Can't initialize member descriptor type");
 
-    if (PyType_Ready(&PyFilter_Type) < 0)
-        Py_FatalError("Can't initialize filter type");
-
-    if (PyType_Ready(&PyMap_Type) < 0)
-        Py_FatalError("Can't initialize map type");
-
-    if (PyType_Ready(&PyZip_Type) < 0)
-        Py_FatalError("Can't initialize zip type");
-
     if (PyType_Ready(&_PyNamespace_Type) < 0)
         Py_FatalError("Can't initialize namespace type");
 
@@ -1749,10 +1710,10 @@ _Py_NewReference(PyObject *op)
 }
 
 void
-_Py_ForgetReference(register PyObject *op)
+_Py_ForgetReference(PyObject *op)
 {
 #ifdef SLOW_UNREF_CHECK
-    register PyObject *p;
+    PyObject *p;
 #endif
     if (op->ob_refcnt < 0)
         Py_FatalError("UNREF negative refcnt");
@@ -1856,26 +1817,6 @@ PyTypeObject *_PyCapsule_hack = &PyCapsule_Type;
 Py_ssize_t (*_Py_abstract_hack)(PyObject *) = PyObject_Size;
 
 
-/* Python's malloc wrappers (see pymem.h) */
-
-void *
-PyMem_Malloc(size_t nbytes)
-{
-    return PyMem_MALLOC(nbytes);
-}
-
-void *
-PyMem_Realloc(void *p, size_t nbytes)
-{
-    return PyMem_REALLOC(p, nbytes);
-}
-
-void
-PyMem_Free(void *p)
-{
-    PyMem_FREE(p);
-}
-
 void
 _PyObject_DebugTypeStats(FILE *out)
 {
@@ -1885,7 +1826,6 @@ _PyObject_DebugTypeStats(FILE *out)
     _PyFrame_DebugMallocStats(out);
     _PyList_DebugMallocStats(out);
     _PyMethod_DebugMallocStats(out);
-    _PySet_DebugMallocStats(out);
     _PyTuple_DebugMallocStats(out);
 }
 
@@ -1901,8 +1841,6 @@ _PyObject_DebugTypeStats(FILE *out)
    See dictobject.c and listobject.c for examples of use.
 */
 
-#define KEY "Py_Repr"
-
 int
 Py_ReprEnter(PyObject *obj)
 {
@@ -1911,14 +1849,16 @@ Py_ReprEnter(PyObject *obj)
     Py_ssize_t i;
 
     dict = PyThreadState_GetDict();
+    /* Ignore a missing thread-state, so that this function can be called
+       early on startup. */
     if (dict == NULL)
         return 0;
-    list = PyDict_GetItemString(dict, KEY);
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL) {
         list = PyList_New(0);
         if (list == NULL)
             return -1;
-        if (PyDict_SetItemString(dict, KEY, list) < 0)
+        if (_PyDict_SetItemId(dict, &PyId_Py_Repr, list) < 0)
             return -1;
         Py_DECREF(list);
     }
@@ -1927,7 +1867,8 @@ Py_ReprEnter(PyObject *obj)
         if (PyList_GET_ITEM(list, i) == obj)
             return 1;
     }
-    PyList_Append(list, obj);
+    if (PyList_Append(list, obj) < 0)
+        return -1;
     return 0;
 }
 
@@ -1937,13 +1878,18 @@ Py_ReprLeave(PyObject *obj)
     PyObject *dict;
     PyObject *list;
     Py_ssize_t i;
+    PyObject *error_type, *error_value, *error_traceback;
+
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
 
     dict = PyThreadState_GetDict();
     if (dict == NULL)
-        return;
-    list = PyDict_GetItemString(dict, KEY);
+        goto finally;
+
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL || !PyList_Check(list))
-        return;
+        goto finally;
+
     i = PyList_GET_SIZE(list);
     /* Count backwards because we always expect obj to be list[-1] */
     while (--i >= 0) {
@@ -1952,6 +1898,10 @@ Py_ReprLeave(PyObject *obj)
             break;
         }
     }
+
+finally:
+    /* ignore exceptions because there is no way to report them. */
+    PyErr_Restore(error_type, error_value, error_traceback);
 }
 
 /* Trashcan support. */
@@ -1972,7 +1922,7 @@ void
 _PyTrash_deposit_object(PyObject *op)
 {
     assert(PyObject_IS_GC(op));
-    assert(_Py_AS_GC(op)->gc.gc_refs == _PyGC_REFS_UNTRACKED);
+    assert(_PyGC_REFS(op) == _PyGC_REFS_UNTRACKED);
     assert(op->ob_refcnt == 0);
     _Py_AS_GC(op)->gc.gc_prev = (PyGC_Head *)_PyTrash_delete_later;
     _PyTrash_delete_later = op;
@@ -1984,7 +1934,7 @@ _PyTrash_thread_deposit_object(PyObject *op)
 {
     PyThreadState *tstate = PyThreadState_GET();
     assert(PyObject_IS_GC(op));
-    assert(_Py_AS_GC(op)->gc.gc_refs == _PyGC_REFS_UNTRACKED);
+    assert(_PyGC_REFS(op) == _PyGC_REFS_UNTRACKED);
     assert(op->ob_refcnt == 0);
     _Py_AS_GC(op)->gc.gc_prev = (PyGC_Head *) tstate->trash_delete_later;
     tstate->trash_delete_later = op;

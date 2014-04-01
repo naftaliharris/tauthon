@@ -481,7 +481,7 @@ form.
    .. note::
 
       The compiled versions of the most recent patterns passed to
-      :func:`re.match`, :func:`re.search` or :func:`re.compile` are cached, so
+      :func:`re.compile` and the module-level matching functions are cached, so
       programs that use only a few regular expressions at a time needn't worry
       about compiling regular expressions.
 
@@ -582,6 +582,16 @@ form.
 
    If you want to locate a match anywhere in *string*, use :func:`search`
    instead (see also :ref:`search-vs-match`).
+
+
+.. function:: fullmatch(pattern, string, flags=0)
+
+   If the whole *string* matches the regular expression *pattern*, return a
+   corresponding :ref:`match object <match-objects>`.  Return ``None`` if the
+   string does not match the pattern; note that this is different from a
+   zero-length match.
+
+   .. versionadded:: 3.4
 
 
 .. function:: split(pattern, string, maxsplit=0, flags=0)
@@ -755,7 +765,7 @@ attributes:
 
    >>> pattern = re.compile("d")
    >>> pattern.search("dog")     # Match at index 0
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 1), match='d'>
    >>> pattern.search("dog", 1)  # No match; search doesn't include the "d"
 
 
@@ -772,10 +782,28 @@ attributes:
    >>> pattern = re.compile("o")
    >>> pattern.match("dog")      # No match as "o" is not at the start of "dog".
    >>> pattern.match("dog", 1)   # Match as "o" is the 2nd character of "dog".
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(1, 2), match='o'>
 
    If you want to locate a match anywhere in *string*, use
    :meth:`~regex.search` instead (see also :ref:`search-vs-match`).
+
+
+.. method:: regex.fullmatch(string[, pos[, endpos]])
+
+   If the whole *string* matches this regular expression, return a corresponding
+   :ref:`match object <match-objects>`.  Return ``None`` if the string does not
+   match the pattern; note that this is different from a zero-length match.
+
+   The optional *pos* and *endpos* parameters have the same meaning as for the
+   :meth:`~regex.search` method.
+
+   >>> pattern = re.compile("o[gh]")
+   >>> pattern.fullmatch("dog")      # No match as "o" is not at the start of "dog".
+   >>> pattern.fullmatch("ogre")     # No match as not the full string matches.
+   >>> pattern.fullmatch("doggie", 1, 3)   # Matches within given limits.
+   <_sre.SRE_Match object; span=(1, 3), match='og'>
+
+   .. versionadded:: 3.4
 
 
 .. method:: regex.split(string, maxsplit=0)
@@ -1139,7 +1167,7 @@ For example::
 
    >>> re.match("c", "abcdef")  # No match
    >>> re.search("c", "abcdef") # Match
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(2, 3), match='c'>
 
 Regular expressions beginning with ``'^'`` can be used with :func:`search` to
 restrict the match at the beginning of the string::
@@ -1147,7 +1175,7 @@ restrict the match at the beginning of the string::
    >>> re.match("c", "abcdef")  # No match
    >>> re.search("^c", "abcdef") # No match
    >>> re.search("^a", "abcdef")  # Match
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 1), match='a'>
 
 Note however that in :const:`MULTILINE` mode :func:`match` only matches at the
 beginning of the string, whereas using :func:`search` with a regular expression
@@ -1155,7 +1183,7 @@ beginning with ``'^'`` will match at the beginning of each line.
 
    >>> re.match('X', 'A\nB\nX', re.MULTILINE)  # No match
    >>> re.search('^X', 'A\nB\nX', re.MULTILINE)  # Match
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(4, 5), match='X'>
 
 
 Making a Phonebook
@@ -1274,9 +1302,9 @@ another one to escape it.  For example, the two following lines of code are
 functionally identical:
 
    >>> re.match(r"\W(.)\1\W", " ff ")
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 4), match=' ff '>
    >>> re.match("\\W(.)\\1\\W", " ff ")
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 4), match=' ff '>
 
 When one wants to match a literal backslash, it must be escaped in the regular
 expression.  With raw string notation, this means ``r"\\"``.  Without raw string
@@ -1284,9 +1312,9 @@ notation, one must use ``"\\\\"``, making the following lines of code
 functionally identical:
 
    >>> re.match(r"\\", r"\\")
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 1), match='\\'>
    >>> re.match("\\\\", r"\\")
-   <_sre.SRE_Match object at ...>
+   <_sre.SRE_Match object; span=(0, 1), match='\\'>
 
 
 Writing a Tokenizer

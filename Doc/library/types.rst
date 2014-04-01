@@ -15,6 +15,9 @@ It also defines names for some object types that are used by the standard
 Python interpreter, but not exposed as builtins like :class:`int` or
 :class:`str` are.
 
+Finally, it provides some additional type-related utility classes and functions
+that are not fundamental enough to be builtins.
+
 
 Dynamic Type Creation
 ---------------------
@@ -107,9 +110,35 @@ Standard names are defined for the following types:
    C".)
 
 
-.. data:: ModuleType
+.. class:: ModuleType(name, doc=None)
 
-   The type of modules.
+   The type of :term:`modules <module>`. Constructor takes the name of the
+   module to be created and optionally its :term:`docstring`.
+
+   .. attribute:: __doc__
+
+      The :term:`docstring` of the module. Defaults to ``None``.
+
+   .. attribute:: __loader__
+
+      The :term:`loader` which loaded the module. Defaults to ``None``.
+
+      .. versionchanged:: 3.4
+         Defaults to ``None``. Previously the attribute was optional.
+
+   .. attribute:: __name__
+
+      The name of the module.
+
+   .. attribute:: __package__
+
+      Which :term:`package` a module belongs to. If the module is top-level
+      (i.e. not a part of any specific package) then the attribute should be set
+      to ``''``, else it should be set to the name of the package (which can be
+      :attr:`__name__` if the module is a package itself). Defaults to ``None``.
+
+      .. versionchanged:: 3.4
+         Defaults to ``None``. Previously the attribute was optional.
 
 
 .. data:: TracebackType
@@ -194,6 +223,9 @@ Standard names are defined for the following types:
       Return a new view of the underlying mapping's values.
 
 
+Additional Utility Classes and Functions
+----------------------------------------
+
 .. class:: SimpleNamespace
 
    A simple :class:`object` subclass that provides attribute access to its
@@ -212,9 +244,26 @@ Standard names are defined for the following types:
                keys = sorted(self.__dict__)
                items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
                return "{}({})".format(type(self).__name__, ", ".join(items))
+           def __eq__(self, other):
+               return self.__dict__ == other.__dict__
 
    ``SimpleNamespace`` may be useful as a replacement for ``class NS: pass``.
    However, for a structured record type use :func:`~collections.namedtuple`
    instead.
 
    .. versionadded:: 3.3
+
+
+.. function:: DynamicClassAttribute(fget=None, fset=None, fdel=None, doc=None)
+
+   Route attribute access on a class to __getattr__.
+
+   This is a descriptor, used to define attributes that act differently when
+   accessed through an instance and through a class.  Instance access remains
+   normal, but access to an attribute through a class will be routed to the
+   class's __getattr__ method; this is done by raising AttributeError.
+
+   This allows one to have properties active on an instance, and have virtual
+   attributes on the class with the same name (see Enum for an example).
+
+   .. versionadded:: 3.4
