@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """ Python Character Mapping Codec for ROT13.
 
-This codec de/encodes from str to str and is therefore usable with
-str.transform() and str.untransform().
+This codec de/encodes from str to str.
 
 Written by Marc-Andre Lemburg (mal@lemburg.com).
 """
@@ -43,6 +42,7 @@ def getregentry():
         incrementaldecoder=IncrementalDecoder,
         streamwriter=StreamWriter,
         streamreader=StreamReader,
+        _is_text_encoding=False,
     )
 
 ### Map

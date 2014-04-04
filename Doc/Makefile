@@ -41,11 +41,11 @@ help:
 checkout:
 	@if [ ! -d tools/sphinx ]; then \
 	  echo "Checking out Sphinx..."; \
-	  svn checkout $(SVNROOT)/external/Sphinx-1.0.7/sphinx tools/sphinx; \
+	  svn checkout $(SVNROOT)/external/Sphinx-1.2/sphinx tools/sphinx; \
 	fi
 	@if [ ! -d tools/docutils ]; then \
 	  echo "Checking out Docutils..."; \
-	  svn checkout $(SVNROOT)/external/docutils-0.6/docutils tools/docutils; \
+	  svn checkout $(SVNROOT)/external/docutils-0.11/docutils tools/docutils; \
 	fi
 	@if [ ! -d tools/jinja2 ]; then \
 	  echo "Checking out Jinja..."; \
@@ -53,7 +53,7 @@ checkout:
 	fi
 	@if [ ! -d tools/pygments ]; then \
 	  echo "Checking out Pygments..."; \
-	  svn checkout $(SVNROOT)/external/Pygments-1.3.1/pygments tools/pygments; \
+	  svn checkout $(SVNROOT)/external/Pygments-1.6/pygments tools/pygments; \
 	fi
 
 update: clean checkout
@@ -186,6 +186,11 @@ serve:
 autobuild-dev:
 	make update
 	make dist SPHINXOPTS='-A daily=1 -A versionswitcher=1'
+	-make suspicious
+
+# for quick rebuilds (HTML only)
+autobuild-html:
+	make html SPHINXOPTS='-A daily=1 -A versionswitcher=1'
 
 # for stable releases: only build if not in pre-release stage (alpha, beta, rc)
 autobuild-stable:
@@ -194,3 +199,4 @@ autobuild-stable:
 		exit 1;; \
 	esac
 	@make autobuild-dev
+

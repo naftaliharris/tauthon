@@ -17,6 +17,10 @@
    * :ref:`Advanced Tutorial <logging-advanced-tutorial>`
    * :ref:`Logging Cookbook <logging-cookbook>`
 
+**Source code:** :source:`Lib/logging/config.py`
+
+--------------
+
 This section describes the API for configuring the logging module.
 
 .. _logging-config-api:
@@ -77,8 +81,9 @@ in :mod:`logging` itself) and defining handlers which are declared either in
 .. function:: fileConfig(fname, defaults=None, disable_existing_loggers=True)
 
    Reads the logging configuration from a :mod:`configparser`\-format file
-   named *fname*. This function can be called several times from an
-   application, allowing an end user to select from various pre-canned
+   named *fname*. The format of the file should be as described in
+   :ref:`logging-config-fileformat`. This function can be called several times
+   from an application, allowing an end user to select from various pre-canned
    configurations (if the developer provides a mechanism to present the choices
    and load the chosen configuration).
 
@@ -101,15 +106,18 @@ in :mod:`logging` itself) and defining handlers which are declared either in
    configurations. If no port is specified, the module's default
    :const:`DEFAULT_LOGGING_CONFIG_PORT` is used. Logging configurations will be
    sent as a file suitable for processing by :func:`fileConfig`. Returns a
-   :class:`Thread` instance on which you can call :meth:`start` to start the
-   server, and which you can :meth:`join` when appropriate. To stop the server,
+   :class:`~threading.Thread` instance on which you can call
+   :meth:`~threading.Thread.start` to start the server, and which you can
+   :meth:`~threading.Thread.join` when appropriate. To stop the server,
    call :func:`stopListening`.
 
    To send a configuration to the socket, read in the configuration file and
    send it to the socket as a string of bytes preceded by a four-byte length
    string packed in binary using ``struct.pack('>L', n)``.
 
-   .. note:: Because portions of the configuration are passed through
+   .. note::
+
+      Because portions of the configuration are passed through
       :func:`eval`, use of this function may open its users to a security risk.
       While the function only binds to a socket on ``localhost``, and so does
       not accept connections from remote machines, there are scenarios where
@@ -166,11 +174,11 @@ otherwise, the context is used to determine what to instantiate.
 
 * *formatters* - the corresponding value will be a dict in which each
   key is a formatter id and each value is a dict describing how to
-  configure the corresponding Formatter instance.
+  configure the corresponding :class:`~logging.Formatter` instance.
 
   The configuring dict is searched for keys ``format`` and ``datefmt``
   (with defaults of ``None``) and these are used to construct a
-  :class:`logging.Formatter` instance.
+  :class:`~logging.Formatter` instance.
 
 * *filters* - the corresponding value will be a dict in which each key
   is a filter id and each value is a dict describing how to configure
@@ -704,10 +712,13 @@ format string, with a comma separator.  An example time in ISO8601 format is
 
 The ``class`` entry is optional.  It indicates the name of the formatter's class
 (as a dotted module and class name.)  This option is useful for instantiating a
-:class:`Formatter` subclass.  Subclasses of :class:`Formatter` can present
-exception tracebacks in an expanded or condensed format.
+:class:`~logging.Formatter` subclass.  Subclasses of
+:class:`~logging.Formatter` can present exception tracebacks in an expanded or
+condensed format.
 
-.. note:: Due to the use of :func:`eval` as described above, there are
+.. note::
+
+   Due to the use of :func:`eval` as described above, there are
    potential security risks which result from using the :func:`listen` to send
    and receive configurations via sockets. The risks are limited to where
    multiple users with no mutual trust run code on the same machine; see the
