@@ -419,7 +419,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
             try:
                 self.rpcclt = MyRPCClient(addr)
                 break
-            except socket.error as err:
+            except OSError as err:
                 pass
         else:
             self.display_port_binding_error()
@@ -844,7 +844,7 @@ class PyShell(OutputWindow):
         ("help", "_Help"),
     ]
 
-    if macosxSupport.runningAsOSXApp():
+    if sys.platform == "darwin":
         menu_specs[-2] = ("windows", "_Window")
 
 
@@ -1034,7 +1034,10 @@ class PyShell(OutputWindow):
                 self.close()
                 return False
         else:
-            nosub = "==== No Subprocess ===="
+            nosub = ("==== No Subprocess ====\n\n" +
+                    "WARNING: Running IDLE without a Subprocess is deprecated\n" +
+                    "and will be removed in a later version. See Help/IDLE Help\n" +
+                    "for details.\n\n")
             sys.displayhook = rpc.displayhook
 
         self.write("Python %s on %s\n%s\n%s" %
@@ -1398,7 +1401,8 @@ USAGE: idle  [-deins] [-t title] [file]*
        idle  [-dns] [-t title] - [arg]*
 
   -h         print this help message and exit
-  -n         run IDLE without a subprocess (see Help/IDLE Help for details)
+  -n         run IDLE without a subprocess (DEPRECATED,
+             see Help/IDLE Help for details)
 
 The following options will override the IDLE 'settings' configuration:
 
@@ -1476,6 +1480,8 @@ def main():
         if o == '-i':
             enable_shell = True
         if o == '-n':
+            print(" Warning: running IDLE without a subprocess is deprecated.",
+                  file=sys.stderr)
             use_subprocess = False
         if o == '-r':
             script = a
@@ -1554,7 +1560,7 @@ def main():
         shell = flist.open_shell()
         if not shell:
             return # couldn't open shell
-        if macosxSupport.runningAsOSXApp() and flist.dict:
+        if macosxSupport.isAquaTk() and flist.dict:
             # On OSX: when the user has double-clicked on a file that causes
             # IDLE to be launched the shell window will open just in front of
             # the file she wants to see. Lower the interpreter window when

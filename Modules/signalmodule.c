@@ -9,7 +9,7 @@
 #endif
 
 #ifdef MS_WINDOWS
-#include <Windows.h>
+#include <windows.h>
 #ifdef HAVE_PROCESS_H
 #include <process.h>
 #endif
@@ -35,11 +35,6 @@
 
 #ifndef SIG_ERR
 #define SIG_ERR ((PyOS_sighandler_t)(-1))
-#endif
-
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#define NSIG 12
-#include <process.h>
 #endif
 
 #ifndef NSIG
@@ -78,10 +73,6 @@
    a working implementation that works in all three cases -- the
    handler ignores signals if getpid() isn't the same as in the main
    thread.  XXX This is a hack.
-
-   GNU pth is a user-space threading library, and as such, all threads
-   run within the same process. In this case, if the currently running
-   thread is not the main_thread, send the signal to the main_thread.
 */
 
 #ifdef WITH_THREAD
@@ -180,15 +171,31 @@ checksignals_witharg(void * unused)
     return PyErr_CheckSignals();
 }
 
+static int
+report_wakeup_error(void *data)
+{
+    int save_errno = errno;
+    errno = (int) (Py_intptr_t) data;
+    PyErr_SetFromErrno(PyExc_OSError);
+    PySys_WriteStderr("Exception ignored when trying to write to the "
+                      "signal wakeup fd:\n");
+    PyErr_WriteUnraisable(NULL);
+    errno = save_errno;
+    return 0;
+}
+
 static void
 trip_signal(int sig_num)
 {
     unsigned char byte;
+    int rc = 0;
 
     Handlers[sig_num].tripped = 1;
     if (wakeup_fd != -1) {
         byte = (unsigned char)sig_num;
-        write(wakeup_fd, &byte, 1);
+        while ((rc = write(wakeup_fd, &byte, 1)) == -1 && errno == EINTR);
+        if (rc == -1)
+            Py_AddPendingCall(report_wakeup_error, (void *) (Py_intptr_t) errno);
     }
     if (is_tripped)
         return;
@@ -203,13 +210,6 @@ signal_handler(int sig_num)
 {
     int save_errno = errno;
 
-#if defined(WITH_THREAD) && defined(WITH_PTH)
-    if (PyThread_get_thread_ident() != main_thread) {
-        pth_raise(*(pth_t *) main_thread, sig_num);
-    }
-    else
-#endif
-    {
 #ifdef WITH_THREAD
     /* See NOTES section above */
     if (getpid() == main_pid)
@@ -231,7 +231,6 @@ signal_handler(int sig_num)
      * makes this true.  See also issue8354. */
     PyOS_setsig(sig_num, signal_handler);
 #endif
-    }
 
     /* Issue #10311: asynchronously executing signal handlers should not
        mutate errno under the feet of unsuspecting C code. */
@@ -800,7 +799,8 @@ signal_sigtimedwait(PyObject *self, PyObject *args)
                           &signals, &timeout))
         return NULL;
 
-    if (_PyTime_ObjectToTimespec(timeout, &tv_sec, &tv_nsec) == -1)
+    if (_PyTime_ObjectToTimespec(timeout, &tv_sec, &tv_nsec,
+                                 _PyTime_ROUND_DOWN) == -1)
         return NULL;
     buf.tv_sec = tv_sec;
     buf.tv_nsec = tv_nsec;
@@ -983,9 +983,10 @@ PyInit_signal(void)
         return NULL;
 
 #if defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
-    if (!initialized)
-        PyStructSequence_InitType(&SiginfoType, &struct_siginfo_desc);
-
+    if (!initialized) {
+        if (PyStructSequence_InitType2(&SiginfoType, &struct_siginfo_desc) < 0)
+            return NULL;
+    }
     Py_INCREF((PyObject*) &SiginfoType);
     PyModule_AddObject(m, "struct_siginfo", (PyObject*) &SiginfoType);
     initialized = 1;

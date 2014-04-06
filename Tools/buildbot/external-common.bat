@@ -30,19 +30,20 @@ if not exist openssl-1.0.1e (
 )
 
 @rem tcl/tk
-if not exist tcl-8.5.11.0 (
-   rd /s/q tcltk tcltk64
-   svn export http://svn.python.org/projects/external/tcl-8.5.11.0
+if not exist tcl-8.6.1.0 (
+   rd /s/q tcltk tcltk64 tcl-8.5.11.0 tk-8.5.11.0
+   svn export http://svn.python.org/projects/external/tcl-8.6.1.0
 )
-if not exist tk-8.5.11.0 svn export http://svn.python.org/projects/external/tk-8.5.11.0
+if not exist tk-8.6.1.0 svn export http://svn.python.org/projects/external/tk-8.6.1.0
 
 @rem sqlite3
-if not exist sqlite-3.7.12 (
-  rd /s/q sqlite-source-3.7.4
-  svn export http://svn.python.org/projects/external/sqlite-3.7.12
+if not exist sqlite-3.8.3.1 (
+  rd /s/q sqlite-source-3.8.1
+  svn export http://svn.python.org/projects/external/sqlite-3.8.3.1
 )
 
 @rem lzma
-if not exist xz-5.0.3 (
-  svn export http://svn.python.org/projects/external/xz-5.0.3
+if not exist xz-5.0.5 (
+  rd /s/q xz-5.0.3
+  svn export http://svn.python.org/projects/external/xz-5.0.5
 )

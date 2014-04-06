@@ -4290,9 +4290,5 @@ class TestBufferProtocol(unittest.TestCase):
         self.assertRaises(BufferError, memoryview, x)
 
 
-def test_main():
-    support.run_unittest(TestBufferProtocol)
-
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
