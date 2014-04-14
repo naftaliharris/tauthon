@@ -679,7 +679,7 @@ def main():
         error(err.args[0], filename, (line, column))
     except SyntaxError as err:
         error(err, filename)
-    except IOError as err:
+    except OSError as err:
         error(err)
     except KeyboardInterrupt:
         print("interrupted\n")

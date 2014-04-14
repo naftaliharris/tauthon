@@ -213,11 +213,11 @@ PyList_GetItem(PyObject *op, Py_ssize_t i)
 }
 
 int
-PyList_SetItem(register PyObject *op, register Py_ssize_t i,
-               register PyObject *newitem)
+PyList_SetItem(PyObject *op, Py_ssize_t i,
+               PyObject *newitem)
 {
-    register PyObject *olditem;
-    register PyObject **p;
+    PyObject *olditem;
+    PyObject **p;
     if (!PyList_Check(op)) {
         Py_XDECREF(newitem);
         PyErr_BadInternalCall();
@@ -338,18 +338,11 @@ static PyObject *
 list_repr(PyListObject *v)
 {
     Py_ssize_t i;
-    PyObject *s = NULL;
-    _PyAccu acc;
-    static PyObject *sep = NULL;
+    PyObject *s;
+    _PyUnicodeWriter writer;
 
     if (Py_SIZE(v) == 0) {
         return PyUnicode_FromString("[]");
-    }
-
-    if (sep == NULL) {
-        sep = PyUnicode_FromString(", ");
-        if (sep == NULL)
-            return NULL;
     }
 
     i = Py_ReprEnter((PyObject*)v);
@@ -357,38 +350,45 @@ list_repr(PyListObject *v)
         return i > 0 ? PyUnicode_FromString("[...]") : NULL;
     }
 
-    if (_PyAccu_Init(&acc))
-        goto error;
+    _PyUnicodeWriter_Init(&writer);
+    writer.overallocate = 1;
+    /* "[" + "1" + ", 2" * (len - 1) + "]" */
+    writer.min_length = 1 + 1 + (2 + 1) * (Py_SIZE(v) - 1) + 1;
 
-    s = PyUnicode_FromString("[");
-    if (s == NULL || _PyAccu_Accumulate(&acc, s))
+    if (_PyUnicodeWriter_WriteChar(&writer, '[') < 0)
         goto error;
-    Py_CLEAR(s);
 
     /* Do repr() on each element.  Note that this may mutate the list,
        so must refetch the list size on each iteration. */
     for (i = 0; i < Py_SIZE(v); ++i) {
+        if (i > 0) {
+            if (_PyUnicodeWriter_WriteASCIIString(&writer, ", ", 2) < 0)
+                goto error;
+        }
+
         if (Py_EnterRecursiveCall(" while getting the repr of a list"))
             goto error;
         s = PyObject_Repr(v->ob_item[i]);
         Py_LeaveRecursiveCall();
-        if (i > 0 && _PyAccu_Accumulate(&acc, sep))
+        if (s == NULL)
             goto error;
-        if (s == NULL || _PyAccu_Accumulate(&acc, s))
+
+        if (_PyUnicodeWriter_WriteStr(&writer, s) < 0) {
+            Py_DECREF(s);
             goto error;
-        Py_CLEAR(s);
+        }
+        Py_DECREF(s);
     }
-    s = PyUnicode_FromString("]");
-    if (s == NULL || _PyAccu_Accumulate(&acc, s))
+
+    writer.overallocate = 0;
+    if (_PyUnicodeWriter_WriteChar(&writer, ']') < 0)
         goto error;
-    Py_CLEAR(s);
 
     Py_ReprLeave((PyObject *)v);
-    return _PyAccu_Finish(&acc);
+    return _PyUnicodeWriter_Finish(&writer);
 
 error:
-    _PyAccu_Destroy(&acc);
-    Py_XDECREF(s);
+    _PyUnicodeWriter_Dealloc(&writer);
     Py_ReprLeave((PyObject *)v);
     return NULL;
 }
@@ -644,9 +644,14 @@ list_ass_slice(PyListObject *a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject *v)
     memcpy(recycle, &item[ilow], s);
 
     if (d < 0) { /* Delete -d items */
-        memmove(&item[ihigh+d], &item[ihigh],
-            (Py_SIZE(a) - ihigh)*sizeof(PyObject *));
-        list_resize(a, Py_SIZE(a) + d);
+        Py_ssize_t tail;
+        tail = (Py_SIZE(a) - ihigh) * sizeof(PyObject *);
+        memmove(&item[ihigh+d], &item[ihigh], tail);
+        if (list_resize(a, Py_SIZE(a) + d) < 0) {
+            memmove(&item[ihigh], &item[ihigh+d], tail);
+            memcpy(&item[ilow], recycle, s);
+            goto Error;
+        }
         item = a->ob_item;
     }
     else if (d > 0) { /* Insert d items */
@@ -826,7 +831,7 @@ listextend(PyListObject *self, PyObject *b)
     iternext = *it->ob_type->tp_iternext;
 
     /* Guess a result list size. */
-    n = _PyObject_LengthHint(b, 8);
+    n = PyObject_LengthHint(b, 8);
     if (n == -1) {
         Py_DECREF(it);
         return NULL;
@@ -871,8 +876,10 @@ listextend(PyListObject *self, PyObject *b)
     }
 
     /* Cut back result list if initial guess was too large. */
-    if (Py_SIZE(self) < self->allocated)
-        list_resize(self, Py_SIZE(self));  /* shrinking can't fail */
+    if (Py_SIZE(self) < self->allocated) {
+        if (list_resize(self, Py_SIZE(self)) < 0)
+            goto error;
+    }
 
     Py_DECREF(it);
     Py_RETURN_NONE;
@@ -925,17 +932,17 @@ listpop(PyListObject *self, PyObject *args)
     v = self->ob_item[i];
     if (i == Py_SIZE(self) - 1) {
         status = list_resize(self, Py_SIZE(self) - 1);
-        assert(status >= 0);
-        return v; /* and v now owns the reference the list had */
+        if (status >= 0)
+            return v; /* and v now owns the reference the list had */
+        else
+            return NULL;
     }
     Py_INCREF(v);
     status = list_ass_slice(self, i, i+1, (PyObject *)NULL);
-    assert(status >= 0);
-    /* Use status, so that in a release build compilers don't
-     * complain about the unused name.
-     */
-    (void) status;
-
+    if (status < 0) {
+        Py_DECREF(v);
+        return NULL;
+    }
     return v;
 }
 
@@ -1051,9 +1058,9 @@ sortslice_advance(sortslice *slice, Py_ssize_t n)
 static int
 binarysort(sortslice lo, PyObject **hi, PyObject **start)
 {
-    register Py_ssize_t k;
-    register PyObject **l, **p, **r;
-    register PyObject *pivot;
+    Py_ssize_t k;
+    PyObject **l, **p, **r;
+    PyObject *pivot;
 
     assert(lo.keys <= start && start <= hi);
     /* assert [lo, start) is sorted */
@@ -2476,6 +2483,7 @@ list_ass_subscript(PyListObject* self, PyObject* item, PyObject* value)
             PyObject **garbage;
             size_t cur;
             Py_ssize_t i;
+            int res;
 
             if (slicelength <= 0)
                 return 0;
@@ -2526,14 +2534,14 @@ list_ass_subscript(PyListObject* self, PyObject* item, PyObject* value)
             }
 
             Py_SIZE(self) -= slicelength;
-            list_resize(self, Py_SIZE(self));
+            res = list_resize(self, Py_SIZE(self));
 
             for (i = 0; i < slicelength; i++) {
                 Py_DECREF(garbage[i]);
             }
             PyMem_FREE(garbage);
 
-            return 0;
+            return res;
         }
         else {
             /* assign slice */
@@ -2660,7 +2668,7 @@ PyTypeObject PyList_Type = {
 
 typedef struct {
     PyObject_HEAD
-    long it_index;
+    Py_ssize_t it_index;
     PyListObject *it_seq; /* Set to NULL when iterator is exhausted */
 } listiterobject;
 
@@ -2797,7 +2805,7 @@ listiter_reduce(listiterobject *it)
 static PyObject *
 listiter_setstate(listiterobject *it, PyObject *state)
 {
-    long index = PyLong_AsLong(state);
+    Py_ssize_t index = PyLong_AsSsize_t(state);
     if (index == -1 && PyErr_Occurred())
         return NULL;
     if (it->it_seq != NULL) {
@@ -2960,7 +2968,7 @@ listiter_reduce_general(void *_it, int forward)
     if (forward) {
         listiterobject *it = (listiterobject *)_it;
         if (it->it_seq)
-            return Py_BuildValue("N(O)l", _PyObject_GetBuiltin("iter"),
+            return Py_BuildValue("N(O)n", _PyObject_GetBuiltin("iter"),
                                  it->it_seq, it->it_index);
     } else {
         listreviterobject *it = (listreviterobject *)_it;

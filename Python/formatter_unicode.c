@@ -156,8 +156,9 @@ parse_internal_render_format_spec(PyObject *format_spec,
 
     Py_ssize_t consumed;
     int align_specified = 0;
+    int fill_char_specified = 0;
 
-    format->fill_char = '\0';
+    format->fill_char = ' ';
     format->align = default_align;
     format->alternate = 0;
     format->sign = '\0';
@@ -171,6 +172,7 @@ parse_internal_render_format_spec(PyObject *format_spec,
     if (end-pos >= 2 && is_alignment_token(READ_spec(pos+1))) {
         format->align = READ_spec(pos+1);
         format->fill_char = READ_spec(pos);
+        fill_char_specified = 1;
         align_specified = 1;
         pos += 2;
     }
@@ -194,7 +196,7 @@ parse_internal_render_format_spec(PyObject *format_spec,
     }
 
     /* The special case for 0-padding (backwards compat) */
-    if (format->fill_char == '\0' && end-pos >= 1 && READ_spec(pos) == '0') {
+    if (!fill_char_specified && end-pos >= 1 && READ_spec(pos) == '0') {
         format->fill_char = '0';
         if (!align_specified) {
             format->align = '=';
@@ -315,7 +317,7 @@ calc_padding(Py_ssize_t nchars, Py_ssize_t width, Py_UCS4 align,
 
 /* Do the padding, and return a pointer to where the caller-supplied
    content goes. */
-static Py_ssize_t
+static int
 fill_padding(_PyUnicodeWriter *writer,
              Py_ssize_t nchars,
              Py_UCS4 fill_char, Py_ssize_t n_lpadding,
@@ -556,7 +558,7 @@ fill_number(_PyUnicodeWriter *writer, const NumberFieldWidths *spec,
 {
     /* Used to keep track of digits, decimal, and remainder. */
     Py_ssize_t d_pos = d_start;
-    const enum PyUnicode_Kind kind = writer->kind;
+    const unsigned int kind = writer->kind;
     const void *data = writer->data;
     Py_ssize_t r;
 
@@ -757,7 +759,8 @@ format_string_internal(PyObject *value, const InternalFormatSpec *format,
         goto done;
     }
 
-    if (format->width == -1 && format->precision == -1) {
+    if ((format->width == -1 || format->width <= len)
+        && (format->precision == -1 || format->precision >= len)) {
         /* Fast path */
         return _PyUnicodeWriter_WriteStr(writer, value);
     }
@@ -770,18 +773,20 @@ format_string_internal(PyObject *value, const InternalFormatSpec *format,
 
     calc_padding(len, format->width, format->align, &lpad, &rpad, &total);
 
-    maxchar = _PyUnicode_FindMaxChar(value, 0, len);
+    maxchar = writer->maxchar;
     if (lpad != 0 || rpad != 0)
         maxchar = Py_MAX(maxchar, format->fill_char);
+    if (PyUnicode_MAX_CHAR_VALUE(value) > maxchar) {
+        Py_UCS4 valmaxchar = _PyUnicode_FindMaxChar(value, 0, len);
+        maxchar = Py_MAX(maxchar, valmaxchar);
+    }
 
     /* allocate the resulting string */
     if (_PyUnicodeWriter_Prepare(writer, total, maxchar) == -1)
         goto done;
 
     /* Write into that space. First the padding. */
-    result = fill_padding(writer, len,
-                          format->fill_char=='\0'?' ':format->fill_char,
-                          lpad, rpad);
+    result = fill_padding(writer, len, format->fill_char, lpad, rpad);
     if (result == -1)
         goto done;
 
@@ -951,8 +956,7 @@ format_long_internal(PyObject *value, const InternalFormatSpec *format,
     /* Populate the memory. */
     result = fill_number(writer, &spec,
                          tmp, inumeric_chars, inumeric_chars + n_digits,
-                         tmp, prefix,
-                         format->fill_char == '\0' ? ' ' : format->fill_char,
+                         tmp, prefix, format->fill_char,
                          &locale, format->type == 'X');
 
 done:
@@ -977,8 +981,7 @@ format_float_internal(PyObject *value,
     Py_ssize_t n_total;
     int has_decimal;
     double val;
-    Py_ssize_t precision;
-    Py_ssize_t default_precision = 6;
+    int precision, default_precision = 6;
     Py_UCS4 type = format->type;
     int add_pct = 0;
     Py_ssize_t index;
@@ -1049,23 +1052,23 @@ format_float_internal(PyObject *value,
         n_digits += 1;
     }
 
-    /* Since there is no unicode version of PyOS_double_to_string,
-       just use the 8 bit version and then convert to unicode. */
-    unicode_tmp = _PyUnicode_FromASCII(buf, n_digits);
-    PyMem_Free(buf);
-    if (unicode_tmp == NULL)
-        goto done;
-
     if (format->sign != '+' && format->sign != ' '
         && format->width == -1
         && format->type != 'n'
         && !format->thousands_separators)
     {
         /* Fast path */
-        result = _PyUnicodeWriter_WriteStr(writer, unicode_tmp);
-        Py_DECREF(unicode_tmp);
+        result = _PyUnicodeWriter_WriteASCIIString(writer, buf, n_digits);
+        PyMem_Free(buf);
         return result;
     }
+
+    /* Since there is no unicode version of PyOS_double_to_string,
+       just use the 8 bit version and then convert to unicode. */
+    unicode_tmp = _PyUnicode_FromASCII(buf, n_digits);
+    PyMem_Free(buf);
+    if (unicode_tmp == NULL)
+        goto done;
 
     /* Is a sign character present in the output?  If so, remember it
        and skip it */
@@ -1100,8 +1103,7 @@ format_float_internal(PyObject *value,
     /* Populate the memory. */
     result = fill_number(writer, &spec,
                          unicode_tmp, index, index + n_digits,
-                         NULL, 0,
-                         format->fill_char == '\0' ? ' ' : format->fill_char,
+                         NULL, 0, format->fill_char,
                          &locale, 0);
 
 done:
@@ -1133,8 +1135,7 @@ format_complex_internal(PyObject *value,
     Py_ssize_t n_im_total;
     int re_has_decimal;
     int im_has_decimal;
-    int precision;
-    Py_ssize_t default_precision = 6;
+    int precision, default_precision = 6;
     Py_UCS4 type = format->type;
     Py_ssize_t i_re;
     Py_ssize_t i_im;
@@ -1308,8 +1309,7 @@ format_complex_internal(PyObject *value,
     /* Populate the memory. First, the padding. */
     result = fill_padding(writer,
                           n_re_total + n_im_total + 1 + add_parens * 2,
-                          format->fill_char=='\0' ? ' ' : format->fill_char,
-                          lpad, rpad);
+                          format->fill_char, lpad, rpad);
     if (result == -1)
         goto done;
 
