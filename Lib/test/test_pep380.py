@@ -954,6 +954,63 @@ class TestPEP380Operation(unittest.TestCase):
         list(gen())
         self.assertEqual(ret, 42)
 
+    def test_close_with_cleared_frame(self):
+        # See issue #17669.
+        #
+        # Create a stack of generators: outer() delegating to inner()
+        # delegating to innermost(). The key point is that the instance of
+        # inner is created first: this ensures that its frame appears before
+        # the instance of outer in the GC linked list.
+        #
+        # At the gc.collect call:
+        #   - frame_clear is called on the inner_gen frame.
+        #   - gen_dealloc is called on the outer_gen generator (the only
+        #     reference is in the frame's locals).
+        #   - gen_close is called on the outer_gen generator.
+        #   - gen_close_iter is called to close the inner_gen generator, which
+        #     in turn calls gen_close, and gen_yf.
+        #
+        # Previously, gen_yf would crash since inner_gen's frame had been
+        # cleared (and in particular f_stacktop was NULL).
+
+        def innermost():
+            yield
+        def inner():
+            outer_gen = yield
+            yield from innermost()
+        def outer():
+            inner_gen = yield
+            yield from inner_gen
+
+        with disable_gc():
+            inner_gen = inner()
+            outer_gen = outer()
+            outer_gen.send(None)
+            outer_gen.send(inner_gen)
+            outer_gen.send(outer_gen)
+
+            del outer_gen
+            del inner_gen
+            gc_collect()
+
+    def test_send_tuple_with_custom_generator(self):
+        # See issue #21209.
+        class MyGen:
+            def __iter__(self):
+                return self
+            def __next__(self):
+                return 42
+            def send(self, what):
+                nonlocal v
+                v = what
+                return None
+        def outer():
+            v = yield from MyGen()
+        g = outer()
+        next(g)
+        v = None
+        g.send((1, 2, 3, 4))
+        self.assertEqual(v, (1, 2, 3, 4))
 
 def test_main():
     from test import support

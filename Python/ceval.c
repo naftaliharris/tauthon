@@ -1840,7 +1840,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 if (u == Py_None)
                     retval = Py_TYPE(x)->tp_iternext(x);
                 else
-                    retval = PyObject_CallMethod(x, "send", "O", u);
+                    retval = PyObject_CallMethodObjArgs(x, "send", u, NULL);
             }
             Py_DECREF(u);
             if (!retval) {
