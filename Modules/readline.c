@@ -54,14 +54,16 @@ extern char **completion_matches(char *, CPFunction *);
  * with the "real" readline and cannot be detected at compile-time,
  * hence we use a runtime check to detect if we're using libedit
  *
- * Currently there is one know API incompatibility:
+ * Currently there is one known API incompatibility:
  * - 'get_history' has a 1-based index with GNU readline, and a 0-based
- *   index with libedit's emulation.
+ *   index with older versions of libedit's emulation.
  * - Note that replace_history and remove_history use a 0-based index
- *   with both implementation.
+ *   with both implementations.
  */
 static int using_libedit_emulation = 0;
 static const char libedit_version_tag[] = "EditLine wrapper";
+
+static int libedit_history_start = 0;
 #endif /* __APPLE__ */
 
 #ifdef HAVE_RL_COMPLETION_DISPLAY_MATCHES_HOOK
@@ -69,6 +71,10 @@ static void
 on_completion_display_matches_hook(char **matches,
                                    int num_matches, int max_length);
 #endif
+
+/* Memory allocated for rl_completer_word_break_characters
+   (see issue #17289 for the motivation). */
+static char *completer_word_break_characters;
 
 /* Exported function to send one line to readline's init file parser */
 
@@ -225,8 +231,7 @@ set_hook(const char *funcname, PyObject **hook_var, PyObject *args)
     if (!PyArg_ParseTuple(args, buf, &function))
         return NULL;
     if (function == Py_None) {
-        Py_XDECREF(*hook_var);
-        *hook_var = NULL;
+        Py_CLEAR(*hook_var);
     }
     else if (PyCallable_Check(function)) {
         PyObject *tmp = *hook_var;
@@ -235,10 +240,9 @@ set_hook(const char *funcname, PyObject **hook_var, PyObject *args)
         Py_XDECREF(tmp);
     }
     else {
-        PyOS_snprintf(buf, sizeof(buf),
-                      "set_%.50s(func): argument not callable",
-                      funcname);
-        PyErr_SetString(PyExc_TypeError, buf);
+        PyErr_Format(PyExc_TypeError,
+                     "set_%.50s(func): argument not callable",
+                     funcname);
         return NULL;
     }
     Py_RETURN_NONE;
@@ -369,12 +373,20 @@ set_completer_delims(PyObject *self, PyObject *args)
 {
     char *break_chars;
 
-    if(!PyArg_ParseTuple(args, "s:set_completer_delims", &break_chars)) {
+    if (!PyArg_ParseTuple(args, "s:set_completer_delims", &break_chars)) {
         return NULL;
     }
-    free((void*)rl_completer_word_break_characters);
-    rl_completer_word_break_characters = strdup(break_chars);
-    Py_RETURN_NONE;
+    /* Keep a reference to the allocated memory in the module state in case
+       some other module modifies rl_completer_word_break_characters
+       (see issue #17289). */
+    free(completer_word_break_characters);
+    completer_word_break_characters = strdup(break_chars);
+    if (completer_word_break_characters) {
+        rl_completer_word_break_characters = completer_word_break_characters;
+        Py_RETURN_NONE;
+    }
+    else
+        return PyErr_NoMemory();
 }
 
 PyDoc_STRVAR(doc_set_completer_delims,
@@ -568,21 +580,21 @@ get_history_item(PyObject *self, PyObject *args)
         return NULL;
 #ifdef  __APPLE__
     if (using_libedit_emulation) {
-        /* Libedit emulation uses 0-based indexes,
-         * the real one uses 1-based indexes,
-         * adjust the index to ensure that Python
-         * code doesn't have to worry about the
-         * difference.
+        /* Older versions of libedit's readline emulation
+         * use 0-based indexes, while readline and newer
+         * versions of libedit use 1-based indexes.
          */
         int length = _py_get_history_length();
-        idx --;
+
+        idx = idx - 1 + libedit_history_start;
 
         /*
          * Apple's readline emulation crashes when
          * the index is out of range, therefore
          * test for that and fail gracefully.
          */
-        if (idx < 0 || idx >= length) {
+        if (idx < (0 + libedit_history_start)
+                || idx >= (length + libedit_history_start)) {
             Py_RETURN_NONE;
         }
     }
@@ -761,14 +773,22 @@ on_hook(PyObject *func)
 }
 
 static int
+#if defined(_RL_FUNCTION_TYPEDEF)
 on_startup_hook(void)
+#else
+on_startup_hook()
+#endif
 {
     return on_hook(startup_hook);
 }
 
 #ifdef HAVE_RL_PRE_INPUT_HOOK
 static int
+#if defined(_RL_FUNCTION_TYPEDEF)
 on_pre_input_hook(void)
+#else
+on_pre_input_hook()
+#endif
 {
     return on_hook(pre_input_hook);
 }
@@ -806,7 +826,7 @@ on_completion_display_matches_hook(char **matches,
         (r != Py_None && PyLong_AsLong(r) == -1 && PyErr_Occurred())) {
         goto error;
     }
-    Py_XDECREF(r); r=NULL;
+    Py_CLEAR(r);
 
     if (0) {
     error:
@@ -864,7 +884,7 @@ on_completion(const char *text, int state)
  * before calling the normal completer */
 
 static char **
-flex_complete(char *text, int start, int end)
+flex_complete(const char *text, int start, int end)
 {
 #ifdef HAVE_RL_COMPLETION_APPEND_CHARACTER
     rl_completion_append_character ='\0';
@@ -892,11 +912,22 @@ setup_readline(void)
 #endif
 
 #ifdef __APPLE__
-    /* the libedit readline emulation resets key bindings etc 
+    /* the libedit readline emulation resets key bindings etc
      * when calling rl_initialize.  So call it upfront
      */
     if (using_libedit_emulation)
         rl_initialize();
+
+    /* Detect if libedit's readline emulation uses 0-based
+     * indexing or 1-based indexing.
+     */
+    add_history("1");
+    if (history_get(1) == NULL) {
+        libedit_history_start = 0;
+    } else {
+        libedit_history_start = 1;
+    }
+    clear_history();
 #endif /* __APPLE__ */
 
     using_history();
@@ -912,14 +943,15 @@ setup_readline(void)
     rl_bind_key_in_map ('\t', rl_complete, emacs_meta_keymap);
     rl_bind_key_in_map ('\033', rl_complete, emacs_meta_keymap);
     /* Set our hook functions */
-    rl_startup_hook = (Function *)on_startup_hook;
+    rl_startup_hook = on_startup_hook;
 #ifdef HAVE_RL_PRE_INPUT_HOOK
-    rl_pre_input_hook = (Function *)on_pre_input_hook;
+    rl_pre_input_hook = on_pre_input_hook;
 #endif
     /* Set our completion function */
-    rl_attempted_completion_function = (CPPFunction *)flex_complete;
+    rl_attempted_completion_function = flex_complete;
     /* Set Python word break characters */
-    rl_completer_word_break_characters =
+    completer_word_break_characters =
+        rl_completer_word_break_characters =
         strdup(" \t\n`~!@#$%^&*()-=+[{]}\\|;:'\",<>/?");
         /* All nonalphanums except '.' */
 
@@ -932,11 +964,11 @@ setup_readline(void)
      */
 #ifdef __APPLE__
     if (using_libedit_emulation)
-	rl_read_init_file(NULL);
+        rl_read_init_file(NULL);
     else
 #endif /* __APPLE__ */
         rl_initialize();
-    
+
     RESTORE_LOCALE(saved_locale)
 }
 
@@ -1104,11 +1136,8 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
         if (length > 0)
 #ifdef __APPLE__
             if (using_libedit_emulation) {
-                /*
-                 * Libedit's emulation uses 0-based indexes,
-                 * the real readline uses 1-based indexes.
-                 */
-                line = (const char *)history_get(length - 1)->line;
+                /* handle older 0-based or newer 1-based indexing */
+                line = (const char *)history_get(length + libedit_history_start - 1)->line;
             } else
 #endif /* __APPLE__ */
             line = (const char *)history_get(length)->line;
@@ -1174,8 +1203,6 @@ PyInit_readline(void)
 
     if (m == NULL)
         return NULL;
-
-
 
     PyOS_ReadlineFunctionPointer = call_readline;
     setup_readline();

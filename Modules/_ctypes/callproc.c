@@ -70,6 +70,10 @@
 
 #include <ffi.h>
 #include "ctypes.h"
+#ifdef HAVE_ALLOCA_H
+/* AIX needs alloca.h for alloca() */
+#include <alloca.h>
+#endif
 
 #if defined(_DEBUG) || defined(__MINGW32__)
 /* Don't use structured exception handling on Windows if this is defined.
@@ -646,7 +650,7 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
             pa->value.i = PyLong_AsLong(obj);
             if (pa->value.i == -1 && PyErr_Occurred()) {
                 PyErr_SetString(PyExc_OverflowError,
-                                "long int too long to convert");
+                                "int too long to convert");
                 return -1;
             }
         }
@@ -663,13 +667,6 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
 
 #ifdef CTYPES_UNICODE
     if (PyUnicode_Check(obj)) {
-#if Py_UNICODE_SIZE == SIZEOF_WCHAR_T
-        pa->ffi_type = &ffi_type_pointer;
-        pa->value.p = PyUnicode_AS_UNICODE(obj);
-        Py_INCREF(obj);
-        pa->keep = obj;
-        return 0;
-#else
         pa->ffi_type = &ffi_type_pointer;
         pa->value.p = PyUnicode_AsWideCharString(obj, NULL);
         if (pa->value.p == NULL)
@@ -680,7 +677,6 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
             return -1;
         }
         return 0;
-#endif
     }
 #endif
 
@@ -957,9 +953,9 @@ void _ctypes_extend_error(PyObject *exc_class, char *fmt, ...)
     else {
         PyErr_Clear();
         PyUnicode_AppendAndDel(&s, PyUnicode_FromString("???"));
-        if (s == NULL)
-            goto error;
     }
+    if (s == NULL)
+        goto error;
     PyErr_SetObject(exc_class, s);
 error:
     Py_XDECREF(tp);
@@ -1700,13 +1696,15 @@ unpickle(PyObject *self, PyObject *args)
     PyObject *state;
     PyObject *result;
     PyObject *tmp;
+    _Py_IDENTIFIER(__new__);
+    _Py_IDENTIFIER(__setstate__);
 
     if (!PyArg_ParseTuple(args, "OO", &typ, &state))
         return NULL;
-    result = PyObject_CallMethod(typ, "__new__", "O", typ);
+    result = _PyObject_CallMethodId(typ, &PyId___new__, "O", typ);
     if (result == NULL)
         return NULL;
-    tmp = PyObject_CallMethod(result, "__setstate__", "O", state);
+    tmp = _PyObject_CallMethodId(result, &PyId___setstate__, "O", state);
     if (tmp == NULL) {
         Py_DECREF(result);
         return NULL;

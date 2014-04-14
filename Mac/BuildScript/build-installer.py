@@ -108,7 +108,7 @@ DEPSRC = os.path.expanduser('~/Universal/other-sources')
 ### There are some issues with the SDK selection below here,
 ### The resulting binary doesn't work on all platforms that
 ### it should. Always default to the 10.4u SDK until that
-### isue is resolved.
+### issue is resolved.
 ###
 ##if int(os.uname()[2].split('.')[0]) == 8:
 ##    # Explicitly use the 10.4u (universal) SDK when
@@ -155,6 +155,7 @@ target_cc_map = {
         '10.6': ('gcc-4.2', 'g++-4.2'),
         '10.7': ('clang', 'clang++'),
         '10.8': ('clang', 'clang++'),
+        '10.9': ('clang', 'clang++'),
 }
 
 CC, CXX = target_cc_map[DEPTARGET]
@@ -191,6 +192,47 @@ def library_recipes():
     result = []
 
     LT_10_5 = bool(DEPTARGET < '10.5')
+
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        result.extend([
+          dict(
+              name="Tcl 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.15-src.tar.gz",
+              checksum='f3df162f92c69b254079c4d0af7a690f',
+              buildDir="unix",
+              configure_pre=[
+                    '--enable-shared',
+                    '--enable-threads',
+                    '--libdir=/Library/Frameworks/Python.framework/Versions/%s/lib'%(getVersion(),),
+              ],
+              useLDFlags=False,
+              install='make TCL_LIBRARY=%(TCL_LIBRARY)s && make install TCL_LIBRARY=%(TCL_LIBRARY)s DESTDIR=%(DESTDIR)s'%{
+                  "DESTDIR": shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  "TCL_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tcl8.5'%(getVersion())),
+                  },
+              ),
+          dict(
+              name="Tk 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.15-src.tar.gz",
+              checksum='55b8e33f903210a4e1c8bce0f820657f',
+              patches=[
+                  "issue19373_tk_8_5_15_source.patch",
+                   ],
+              buildDir="unix",
+              configure_pre=[
+                    '--enable-aqua',
+                    '--enable-shared',
+                    '--enable-threads',
+                    '--libdir=/Library/Frameworks/Python.framework/Versions/%s/lib'%(getVersion(),),
+              ],
+              useLDFlags=False,
+              install='make TCL_LIBRARY=%(TCL_LIBRARY)s TK_LIBRARY=%(TK_LIBRARY)s && make install TCL_LIBRARY=%(TCL_LIBRARY)s TK_LIBRARY=%(TK_LIBRARY)s DESTDIR=%(DESTDIR)s'%{
+                  "DESTDIR": shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  "TCL_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tcl8.5'%(getVersion())),
+                  "TK_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tk8.5'%(getVersion())),
+                  },
+                ),
+        ])
 
     if getVersionTuple() >= (3, 3):
         result.extend([
@@ -525,6 +567,20 @@ def checkEnvironment():
                 % frameworks['Tk'],
             ]
 
+    # For 10.6+ builds, we build two versions of _tkinter:
+    #    - the traditional version (renamed to _tkinter_library.so) linked
+    #       with /Library/Frameworks/{Tcl,Tk}.framework
+    #    - the default version linked with our builtin copies of Tcl and Tk
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        EXPECTED_SHARED_LIBS['_tkinter_library.so'] = \
+            EXPECTED_SHARED_LIBS['_tkinter.so']
+        EXPECTED_SHARED_LIBS['_tkinter.so'] = [
+                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtcl%s.dylib"
+                    % (getVersion(), frameworks['Tcl']),
+                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtk%s.dylib"
+                    % (getVersion(), frameworks['Tk']),
+                ]
+
     # Remove inherited environment variables which might influence build
     environ_var_prefixes = ['CPATH', 'C_INCLUDE_', 'DYLD_', 'LANG', 'LC_',
                             'LD_', 'LIBRARY_', 'PATH', 'PYTHON']
@@ -633,13 +689,19 @@ def extractArchive(builddir, archiveName):
 
     XXX: This function assumes that archives contain a toplevel directory
     that is has the same name as the basename of the archive. This is
-    save enough for anything we use.
+    safe enough for almost anything we use.  Unfortunately, it does not
+    work for current Tcl and Tk source releases where the basename of
+    the archive ends with "-src" but the uncompressed directory does not.
+    For now, just special case Tcl and Tk tar.gz downloads.
     """
     curdir = os.getcwd()
     try:
         os.chdir(builddir)
         if archiveName.endswith('.tar.gz'):
             retval = os.path.basename(archiveName[:-7])
+            if ((retval.startswith('tcl') or retval.startswith('tk'))
+                    and retval.endswith('-src')):
+                retval = retval[:-4]
             if os.path.exists(retval):
                 shutil.rmtree(retval)
             fp = os.popen("tar zxf %s 2>&1"%(shellQuote(archiveName),), 'r')
@@ -738,8 +800,6 @@ def buildRecipe(recipe, basedir, archList):
 
     workDir = extractArchive(buildDir, sourceArchive)
     os.chdir(workDir)
-    if 'buildDir' in recipe:
-        os.chdir(recipe['buildDir'])
 
     for patch in recipe.get('patches', ()):
         if isinstance(patch, tuple):
@@ -765,6 +825,9 @@ def buildRecipe(recipe, basedir, archList):
             fn = fn[:-4]
         runCommand('sh %s' % shellQuote(fn))
         os.unlink(fn)
+
+    if 'buildDir' in recipe:
+        os.chdir(recipe['buildDir'])
 
     if configure is not None:
         configure_args = [
@@ -893,7 +956,7 @@ def buildPython():
                "--with-universal-archs=%s "
                "%s "
                "LDFLAGS='-g -L%s/libraries/usr/local/lib' "
-               "OPT='-g -O3 -I%s/libraries/usr/local/include' 2>&1"%(
+               "CFLAGS='-g -I%s/libraries/usr/local/include' 2>&1"%(
         shellQuote(os.path.join(SRCDIR, 'configure')), shellQuote(SDKPATH),
         UNIVERSALARCHS,
         (' ', '--with-computed-gotos ')[PYTHON_3],
@@ -902,6 +965,23 @@ def buildPython():
 
     print("Running make")
     runCommand("make")
+
+    # For deployment targets of 10.6 and higher, we build our own version
+    # of Tcl and Cocoa Aqua Tk libs because the Apple-supplied Tk 8.5 is
+    # out-of-date and has critical bugs.  Save the _tkinter.so that was
+    # linked with /Library/Frameworks/{Tck,Tk}.framework and build
+    # another _tkinter.so linked with our builtin Tcl and Tk libs.
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        runCommand("find build -name '_tkinter.so' "
+                        " -execdir mv '{}' _tkinter_library.so \;")
+        print("Running make to build builtin _tkinter")
+        runCommand("make TCLTK_INCLUDES='-I%s/libraries/usr/local/include' "
+                "TCLTK_LIBS='-L%s/libraries/usr/local/lib -ltcl8.5 -ltk8.5'"%(
+            shellQuote(WORKDIR)[1:-1],
+            shellQuote(WORKDIR)[1:-1]))
+        # make a copy which will be moved to lib-tkinter later
+        runCommand("find build -name '_tkinter.so' "
+                        " -execdir cp -p '{}' _tkinter_builtin.so \;")
 
     print("Running make install")
     runCommand("make install DESTDIR=%s"%(
@@ -923,11 +1003,31 @@ def buildPython():
                 'Python.framework', 'Versions', getVersion(),
                 'lib'))))
 
+    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
+                                'Python.framework', 'Versions',
+                                version, 'lib', 'python%s'%(version,))
+
+    # If we made multiple versions of _tkinter, move them to
+    # their own directories under python lib.  This allows
+    # users to select which to import by manipulating sys.path
+    # directly or with PYTHONPATH.
+
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        TKINTERS = ['builtin', 'library']
+        tkinter_moves = [('_tkinter_' + tkn + '.so',
+                             os.path.join(path_to_lib, 'lib-tkinter', tkn))
+                         for tkn in TKINTERS]
+        # Create the destination directories under lib-tkinter.
+        # The permissions and uid/gid will be fixed up next.
+        for tkm in tkinter_moves:
+            os.makedirs(tkm[1])
+
     print("Fix file modes")
     frmDir = os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework')
     gid = grp.getgrnam('admin').gr_gid
 
     shared_lib_error = False
+    moves_list = []
     for dirpath, dirnames, filenames in os.walk(frmDir):
         for dn in dirnames:
             os.chmod(os.path.join(dirpath, dn), STAT_0o775)
@@ -953,8 +1053,24 @@ def buildPython():
                                 % (sl, p))
                         shared_lib_error = True
 
+            # If this is a _tkinter variant, move it to its own directory
+            # now that we have fixed its permissions and checked that it
+            # was linked properly.  The directory was created earlier.
+            # The files are moved after the entire tree has been walked
+            # since the shared library checking depends on the files
+            # having unique names.
+            if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+                for tkm in tkinter_moves:
+                    if fn == tkm[0]:
+                        moves_list.append(
+                            (p, os.path.join(tkm[1], '_tkinter.so')))
+
     if shared_lib_error:
         fatal("Unexpected shared library errors.")
+
+    # Now do the moves.
+    for ml in moves_list:
+        shutil.move(ml[0], ml[1])
 
     if PYTHON_3:
         LDVERSION=None
@@ -982,22 +1098,58 @@ def buildPython():
     # the end-users system. Also remove the directories from _sysconfigdata.py
     # (added in 3.3) if it exists.
 
-    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
-                                'Python.framework', 'Versions',
-                                version, 'lib', 'python%s'%(version,))
-    paths = [os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile'),
-             os.path.join(path_to_lib, '_sysconfigdata.py')]
-    for path in paths:
-        if not os.path.exists(path):
-            continue
+    include_path = '-I%s/libraries/usr/local/include' % (WORKDIR,)
+    lib_path = '-L%s/libraries/usr/local/lib' % (WORKDIR,)
+
+    # fix Makefile
+    path = os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile')
+    fp = open(path, 'r')
+    data = fp.read()
+    fp.close()
+
+    for p in (include_path, lib_path):
+        data = data.replace(" " + p, '')
+        data = data.replace(p + " ", '')
+
+    fp = open(path, 'w')
+    fp.write(data)
+    fp.close()
+
+    # fix _sysconfigdata if it exists
+    #
+    # TODO: make this more robust!  test_sysconfig_module of
+    # distutils.tests.test_sysconfig.SysconfigTestCase tests that
+    # the output from get_config_var in both sysconfig and
+    # distutils.sysconfig is exactly the same for both CFLAGS and
+    # LDFLAGS.  The fixing up is now complicated by the pretty
+    # printing in _sysconfigdata.py.  Also, we are using the
+    # pprint from the Python running the installer build which
+    # may not cosmetically format the same as the pprint in the Python
+    # being built (and which is used to originally generate
+    # _sysconfigdata.py).
+
+    import pprint
+    path = os.path.join(path_to_lib, '_sysconfigdata.py')
+    if os.path.exists(path):
         fp = open(path, 'r')
         data = fp.read()
         fp.close()
+        # create build_time_vars dict
+        exec(data)
+        vars = {}
+        for k, v in build_time_vars.items():
+            if type(v) == type(''):
+                for p in (include_path, lib_path):
+                    v = v.replace(' ' + p, '')
+                    v = v.replace(p + ' ', '')
+            vars[k] = v
 
-        data = data.replace(' -L%s/libraries/usr/local/lib'%(WORKDIR,), '')
-        data = data.replace(' -I%s/libraries/usr/local/include'%(WORKDIR,), '')
         fp = open(path, 'w')
-        fp.write(data)
+        # duplicated from sysconfig._generate_posix_vars()
+        fp.write('# system configuration generated and used by'
+                    ' the sysconfig module\n')
+        fp.write('build_time_vars = ')
+        pprint.pprint(vars, stream=fp)
         fp.close()
 
     # Add symlinks in /usr/local/bin, using relative links
@@ -1015,7 +1167,7 @@ def buildPython():
     os.chdir(curdir)
 
     if PYTHON_3:
-        # Remove the 'Current' link, that way we don't accidently mess
+        # Remove the 'Current' link, that way we don't accidentally mess
         # with an already installed version of python 2
         os.unlink(os.path.join(rootDir, 'Library', 'Frameworks',
                             'Python.framework', 'Versions', 'Current'))
