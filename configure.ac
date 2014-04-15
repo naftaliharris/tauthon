@@ -3,7 +3,7 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.4)
+m4_define(PYTHON_VERSION, 3.5)
 
 AC_PREREQ(2.65)
 
@@ -1035,6 +1035,15 @@ if test "$PYTHON" = not-found; then
 else
     ASDLGEN="$PYTHON"
 fi
+
+AC_SUBST(OPCODEHGEN)
+AC_CHECK_PROGS(PYTHON, python$PACKAGE_VERSION python3 python, not-found)
+if test "$PYTHON" = not-found; then
+    OPCODEHGEN="@echo python: $PYTHON! cannot run Tools/scripts/generate_opcode_h.py"
+else
+    OPCODEHGEN="$PYTHON"
+fi
+
 
 
 case $MACHDEP in
