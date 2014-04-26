@@ -134,6 +134,14 @@ class BasicSocketTests(unittest.TestCase):
         self.assertIn(ssl.HAS_SNI, {True, False})
         self.assertIn(ssl.HAS_ECDH, {True, False})
 
+    def test_str_for_enums(self):
+        # Make sure that the PROTOCOL_* constants have enum-like string
+        # reprs.
+        proto = ssl.PROTOCOL_SSLv3
+        self.assertEqual(str(proto), '_SSLMethod.PROTOCOL_SSLv3')
+        ctx = ssl.SSLContext(proto)
+        self.assertIs(ctx.protocol, proto)
+
     def test_random(self):
         v = ssl.RAND_status()
         if support.verbose:
@@ -1371,14 +1379,12 @@ class NetworkedTests(unittest.TestCase):
     def test_get_server_certificate(self):
         def _test_get_server_certificate(host, port, cert=None):
             with support.transient_internet(host):
-                pem = ssl.get_server_certificate((host, port),
-                                                 ssl.PROTOCOL_SSLv23)
+                pem = ssl.get_server_certificate((host, port))
                 if not pem:
                     self.fail("No server certificate on %s:%s!" % (host, port))
 
                 try:
                     pem = ssl.get_server_certificate((host, port),
-                                                     ssl.PROTOCOL_SSLv23,
                                                      ca_certs=CERTFILE)
                 except ssl.SSLError as x:
                     #should fail
@@ -1388,7 +1394,6 @@ class NetworkedTests(unittest.TestCase):
                     self.fail("Got server certificate %s for %s:%s!" % (pem, host, port))
 
                 pem = ssl.get_server_certificate((host, port),
-                                                 ssl.PROTOCOL_SSLv23,
                                                  ca_certs=cert)
                 if not pem:
                     self.fail("No server certificate on %s:%s!" % (host, port))
