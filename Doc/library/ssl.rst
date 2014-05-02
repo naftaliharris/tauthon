@@ -372,22 +372,34 @@ Certificate handling
       IDN A-labels such as ``www*.xn--pthon-kva.org`` are still supported,
       but ``x*.python.org`` no longer matches ``xn--tda.python.org``.
 
-.. function:: cert_time_to_seconds(timestring)
+.. function:: cert_time_to_seconds(cert_time)
 
-   Returns a floating-point value containing a normal seconds-after-the-epoch
-   time value, given the time-string representing the "notBefore" or "notAfter"
-   date from a certificate.
+   Return the time in seconds since the Epoch, given the ``cert_time``
+   string representing the "notBefore" or "notAfter" date from a
+   certificate in ``"%b %d %H:%M:%S %Y %Z"`` strptime format (C
+   locale).
 
-   Here's an example::
+   Here's an example:
 
-     >>> import ssl
-     >>> ssl.cert_time_to_seconds("May  9 00:00:00 2007 GMT")
-     1178694000.0
-     >>> import time
-     >>> time.ctime(ssl.cert_time_to_seconds("May  9 00:00:00 2007 GMT"))
-     'Wed May  9 00:00:00 2007'
+   .. doctest:: newcontext
 
-.. function:: get_server_certificate(addr, ssl_version=PROTOCOL_SSLv3, ca_certs=None)
+      >>> import ssl
+      >>> timestamp = ssl.cert_time_to_seconds("Jan  5 09:34:43 2018 GMT")
+      >>> timestamp
+      1515144883
+      >>> from datetime import datetime
+      >>> print(datetime.utcfromtimestamp(timestamp))
+      2018-01-05 09:34:43
+
+   "notBefore" or "notAfter" dates must use GMT (:rfc:`5280`).
+
+   .. versionchanged:: 3.5
+      Interpret the input time as a time in UTC as specified by 'GMT'
+      timezone in the input string. Local timezone was used
+      previously. Return an integer (no fractions of a second in the
+      input format)
+
+.. function:: get_server_certificate(addr, ssl_version=PROTOCOL_SSLv23, ca_certs=None)
 
    Given the address ``addr`` of an SSL-protected server, as a (*hostname*,
    *port-number*) pair, fetches the server's certificate, and returns it as a
@@ -400,6 +412,10 @@ Certificate handling
 
    .. versionchanged:: 3.3
       This function is now IPv6-compatible.
+
+   .. versionchanged:: 3.5
+      The default *ssl_version* is changed from :data:`PROTOCOL_SSLv3` to
+      :data:`PROTOCOL_SSLv23` for maximum compatibility with modern servers.
 
 .. function:: DER_cert_to_PEM_cert(DER_cert_bytes)
 
@@ -1588,8 +1604,25 @@ the sockets in non-blocking mode and use an event loop).
 Notes on non-blocking sockets
 -----------------------------
 
-When working with non-blocking sockets, there are several things you need
-to be aware of:
+SSL sockets behave slightly different than regular sockets in
+non-blocking mode. When working with non-blocking sockets, there are
+thus several things you need to be aware of:
+
+- Most :class:`SSLSocket` methods will raise either
+  :exc:`SSLWantWriteError` or :exc:`SSLWantReadError` instead of
+  :exc:`BlockingIOError` if an I/O operation would
+  block. :exc:`SSLWantReadError` will be raised if a read operation on
+  the underlying socket is necessary, and :exc:`SSLWantWriteError` for
+  a write operation on the underlying socket. Note that attempts to
+  *write* to an SSL socket may require *reading* from the underlying
+  socket first, and attempts to *read* from the SSL socket may require
+  a prior *write* to the underlying socket.
+
+  .. versionchanged:: 3.5
+
+     In earlier Python versions, the :meth:`!SSLSocket.send` method
+     returned zero instead of raising :exc:`SSLWantWriteError` or
+     :exc:`SSLWantReadError`.
 
 - Calling :func:`~select.select` tells you that the OS-level socket can be
   read from (or written to), but it does not imply that there is sufficient
