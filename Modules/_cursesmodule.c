@@ -134,6 +134,12 @@ typedef chtype attr_t;           /* No attr_t type is available */
 #define STRICT_SYSV_CURSES
 #endif
 
+/*[clinic input]
+module curses
+class curses.window "PyCursesWindowObject *" "&PyCursesWindow_Type"
+[clinic start generated code]*/
+/*[clinic end generated code: output=da39a3ee5e6b4b0d input=88c860abdbb50e0c]*/
+
 /* Definition of exception curses.error */
 
 static PyObject *PyCursesError;
@@ -167,10 +173,6 @@ static char *screen_encoding = NULL;
         PyErr_SetString(PyCursesError,                          \
                         "must call start_color() first");       \
         return 0; }
-
-#ifndef MIN
-#define MIN(x,y) ((x) < (y) ? (x) : (y))
-#endif
 
 /* Utility Functions */
 
@@ -533,7 +535,7 @@ PyCursesWindow_New(WINDOW *win, const char *encoding)
     wo = PyObject_NEW(PyCursesWindowObject, &PyCursesWindow_Type);
     if (wo == NULL) return NULL;
     wo->win = win;
-    wo->encoding = strdup(encoding);
+    wo->encoding = _PyMem_Strdup(encoding);
     if (wo->encoding == NULL) {
         Py_DECREF(wo);
         PyErr_NoMemory();
@@ -547,74 +549,145 @@ PyCursesWindow_Dealloc(PyCursesWindowObject *wo)
 {
     if (wo->win != stdscr) delwin(wo->win);
     if (wo->encoding != NULL)
-        free(wo->encoding);
+        PyMem_Free(wo->encoding);
     PyObject_DEL(wo);
 }
 
 /* Addch, Addstr, Addnstr */
 
+/*[clinic input]
+
+curses.window.addch
+
+    [
+    y: int
+      Y-coordinate.
+    x: int
+      X-coordinate.
+    ]
+
+    ch: object
+      Character to add.
+
+    [
+    attr: long
+      Attributes for the character.
+    ]
+    /
+
+Paint character ch at (y, x) with attributes attr.
+
+Paint character ch at (y, x) with attributes attr,
+overwriting any character previously painted at that location.
+By default, the character position and attributes are the
+current settings for the window object.
+[clinic start generated code]*/
+
+PyDoc_STRVAR(curses_window_addch__doc__,
+"addch([y, x,] ch, [attr])\n"
+"Paint character ch at (y, x) with attributes attr.\n"
+"\n"
+"  y\n"
+"    Y-coordinate.\n"
+"  x\n"
+"    X-coordinate.\n"
+"  ch\n"
+"    Character to add.\n"
+"  attr\n"
+"    Attributes for the character.\n"
+"\n"
+"Paint character ch at (y, x) with attributes attr,\n"
+"overwriting any character previously painted at that location.\n"
+"By default, the character position and attributes are the\n"
+"current settings for the window object.");
+
+#define CURSES_WINDOW_ADDCH_METHODDEF    \
+    {"addch", (PyCFunction)curses_window_addch, METH_VARARGS, curses_window_addch__doc__},
+
 static PyObject *
-PyCursesWindow_AddCh(PyCursesWindowObject *self, PyObject *args)
+curses_window_addch_impl(PyCursesWindowObject *self, int group_left_1, int y, int x, PyObject *ch, int group_right_1, long attr);
+
+static PyObject *
+curses_window_addch(PyCursesWindowObject *self, PyObject *args)
 {
-    int rtn, x, y, use_xy = FALSE;
-    PyObject *chobj;
+    PyObject *return_value = NULL;
+    int group_left_1 = 0;
+    int y = 0;
+    int x = 0;
+    PyObject *ch;
+    int group_right_1 = 0;
+    long attr = 0;
+
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "O:addch", &ch))
+                goto exit;
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "Ol:addch", &ch, &attr))
+                goto exit;
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iiO:addch", &y, &x, &ch))
+                goto exit;
+            group_left_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOl:addch", &y, &x, &ch, &attr))
+                goto exit;
+            group_right_1 = 1;
+            group_left_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "curses.window.addch requires 1 to 4 arguments");
+            goto exit;
+    }
+    return_value = curses_window_addch_impl(self, group_left_1, y, x, ch, group_right_1, attr);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+curses_window_addch_impl(PyCursesWindowObject *self, int group_left_1, int y, int x, PyObject *ch, int group_right_1, long attr)
+/*[clinic end generated code: output=d4b97cc287010c54 input=5a41efb34a2de338]*/
+{
+    PyCursesWindowObject *cwself = (PyCursesWindowObject *)self;
+    int coordinates_group = group_left_1;
+    int attr_group = group_right_1;
+    int rtn;
     int type;
-    chtype ch;
+    chtype cch;
 #ifdef HAVE_NCURSESW
     cchar_t wch;
 #endif
-    attr_t attr = A_NORMAL;
-    long lattr;
     const char *funcname;
 
-    switch (PyTuple_Size(args)) {
-    case 1:
-        if (!PyArg_ParseTuple(args, "O;ch or int", &chobj))
-            return NULL;
-        break;
-    case 2:
-        if (!PyArg_ParseTuple(args, "Ol;ch or int,attr", &chobj, &lattr))
-            return NULL;
-        attr = lattr;
-        break;
-    case 3:
-        if (!PyArg_ParseTuple(args,"iiO;y,x,ch or int", &y, &x, &chobj))
-            return NULL;
-        use_xy = TRUE;
-        break;
-    case 4:
-        if (!PyArg_ParseTuple(args,"iiOl;y,x,ch or int, attr",
-                              &y, &x, &chobj, &lattr))
-            return NULL;
-        attr = lattr;
-        use_xy = TRUE;
-        break;
-    default:
-        PyErr_SetString(PyExc_TypeError, "addch requires 1 to 4 arguments");
-        return NULL;
-    }
+    if (!attr_group)
+      attr = A_NORMAL;
 
 #ifdef HAVE_NCURSESW
-    type = PyCurses_ConvertToCchar_t(self, chobj, &ch, &wch);
+    type = PyCurses_ConvertToCchar_t(cwself, ch, &cch, &wch);
     if (type == 2) {
         funcname = "add_wch";
         wch.attr = attr;
-        if (use_xy == TRUE)
-            rtn = mvwadd_wch(self->win,y,x, &wch);
+        if (coordinates_group)
+            rtn = mvwadd_wch(cwself->win,y,x, &wch);
         else {
-            rtn = wadd_wch(self->win, &wch);
+            rtn = wadd_wch(cwself->win, &wch);
         }
     }
     else
 #else
-    type = PyCurses_ConvertToCchar_t(self, chobj, &ch);
+    type = PyCurses_ConvertToCchar_t(cwself, ch, &cch);
 #endif
     if (type == 1) {
         funcname = "addch";
-        if (use_xy == TRUE)
-            rtn = mvwaddch(self->win,y,x, ch | attr);
+        if (coordinates_group)
+            rtn = mvwaddch(cwself->win,y,x, cch | attr);
         else {
-            rtn = waddch(self->win, ch | attr);
+            rtn = waddch(cwself->win, cch | attr);
         }
     }
     else {
@@ -1212,7 +1285,7 @@ PyCursesWindow_GetStr(PyCursesWindowObject *self, PyObject *args)
         if (!PyArg_ParseTuple(args,"i;n", &n))
             return NULL;
         Py_BEGIN_ALLOW_THREADS
-        rtn2 = wgetnstr(self->win,rtn,MIN(n, 1023));
+        rtn2 = wgetnstr(self->win, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
         break;
     case 2:
@@ -1232,11 +1305,11 @@ PyCursesWindow_GetStr(PyCursesWindowObject *self, PyObject *args)
 #ifdef STRICT_SYSV_CURSES
         Py_BEGIN_ALLOW_THREADS
         rtn2 = wmove(self->win,y,x)==ERR ? ERR :
-        wgetnstr(self->win, rtn, MIN(n, 1023));
+        wgetnstr(self->win, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
 #else
         Py_BEGIN_ALLOW_THREADS
-        rtn2 = mvwgetnstr(self->win, y, x, rtn, MIN(n, 1023));
+        rtn2 = mvwgetnstr(self->win, y, x, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
 #endif
         break;
@@ -1375,7 +1448,7 @@ PyCursesWindow_InStr(PyCursesWindowObject *self, PyObject *args)
     case 1:
         if (!PyArg_ParseTuple(args,"i;n", &n))
             return NULL;
-        rtn2 = winnstr(self->win,rtn,MIN(n,1023));
+        rtn2 = winnstr(self->win, rtn, Py_MIN(n, 1023));
         break;
     case 2:
         if (!PyArg_ParseTuple(args,"ii;y,x",&y,&x))
@@ -1385,7 +1458,7 @@ PyCursesWindow_InStr(PyCursesWindowObject *self, PyObject *args)
     case 3:
         if (!PyArg_ParseTuple(args, "iii;y,x,n", &y, &x, &n))
             return NULL;
-        rtn2 = mvwinnstr(self->win, y, x, rtn, MIN(n,1023));
+        rtn2 = mvwinnstr(self->win, y, x, rtn, Py_MIN(n,1023));
         break;
     default:
         PyErr_SetString(PyExc_TypeError, "instr requires 0 or 3 arguments");
@@ -1699,26 +1772,24 @@ PyCursesWindow_PutWin(PyCursesWindowObject *self, PyObject *stream)
     /* We have to simulate this by writing to a temporary FILE*,
        then reading back, then writing to the argument stream. */
     char fn[100];
-    int fd;
-    FILE *fp;
-    PyObject *res;
+    int fd = -1;
+    FILE *fp = NULL;
+    PyObject *res = NULL;
 
     strcpy(fn, "/tmp/py.curses.putwin.XXXXXX");
     fd = mkstemp(fn);
     if (fd < 0)
         return PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+    if (_Py_set_inheritable(fd, 0, NULL) < 0)
+        goto exit;
     fp = fdopen(fd, "wb+");
     if (fp == NULL) {
-        close(fd);
-        remove(fn);
-        return PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        goto exit;
     }
     res = PyCursesCheckERR(putwin(self->win, fp), "putwin");
-    if (res == NULL) {
-        fclose(fp);
-        remove(fn);
-        return res;
-    }
+    if (res == NULL)
+        goto exit;
     fseek(fp, 0, 0);
     while (1) {
         char buf[BUFSIZ];
@@ -1732,7 +1803,12 @@ PyCursesWindow_PutWin(PyCursesWindowObject *self, PyObject *stream)
         if (res == NULL)
             break;
     }
-    fclose(fp);
+
+exit:
+    if (fp != NULL)
+        fclose(fp);
+    else if (fd != -1)
+        close(fd);
     remove(fn);
     return res;
 }
@@ -1943,20 +2019,20 @@ PyCursesWindow_set_encoding(PyCursesWindowObject *self, PyObject *value)
     ascii = PyUnicode_AsASCIIString(value);
     if (ascii == NULL)
         return -1;
-    encoding = strdup(PyBytes_AS_STRING(ascii));
+    encoding = _PyMem_Strdup(PyBytes_AS_STRING(ascii));
     Py_DECREF(ascii);
     if (encoding == NULL) {
         PyErr_NoMemory();
         return -1;
     }
-    free(self->encoding);
+    PyMem_Free(self->encoding);
     self->encoding = encoding;
     return 0;
 }
 
 
 static PyMethodDef PyCursesWindow_Methods[] = {
-    {"addch",           (PyCFunction)PyCursesWindow_AddCh, METH_VARARGS},
+    CURSES_WINDOW_ADDCH_METHODDEF
     {"addnstr",         (PyCFunction)PyCursesWindow_AddNStr, METH_VARARGS},
     {"addstr",          (PyCFunction)PyCursesWindow_AddStr, METH_VARARGS},
     {"attroff",         (PyCFunction)PyCursesWindow_AttrOff, METH_VARARGS},
@@ -2012,8 +2088,6 @@ static PyMethodDef PyCursesWindow_Methods[] = {
     {"nodelay",         (PyCFunction)PyCursesWindow_nodelay, METH_VARARGS},
     {"notimeout",       (PyCFunction)PyCursesWindow_notimeout, METH_VARARGS},
     {"noutrefresh",     (PyCFunction)PyCursesWindow_NoOutRefresh, METH_VARARGS},
-    /* Backward compatibility alias -- remove in Python 2.3 */
-    {"nooutrefresh",    (PyCFunction)PyCursesWindow_NoOutRefresh, METH_VARARGS},
     {"overlay",         (PyCFunction)PyCursesWindow_Overlay, METH_VARARGS},
     {"overwrite",       (PyCFunction)PyCursesWindow_Overwrite,
      METH_VARARGS},
@@ -2257,12 +2331,13 @@ static PyObject *
 PyCurses_GetWin(PyCursesWindowObject *self, PyObject *stream)
 {
     char fn[100];
-    int fd;
-    FILE *fp;
+    int fd = -1;
+    FILE *fp = NULL;
     PyObject *data;
     size_t datalen;
     WINDOW *win;
     _Py_IDENTIFIER(read);
+    PyObject *res = NULL;
 
     PyCursesInitialised;
 
@@ -2270,44 +2345,47 @@ PyCurses_GetWin(PyCursesWindowObject *self, PyObject *stream)
     fd = mkstemp(fn);
     if (fd < 0)
         return PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+    if (_Py_set_inheritable(fd, 0, NULL) < 0)
+        goto error;
     fp = fdopen(fd, "wb+");
     if (fp == NULL) {
-        close(fd);
-        remove(fn);
-        return PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        goto error;
     }
+
     data = _PyObject_CallMethodId(stream, &PyId_read, "");
-    if (data == NULL) {
-        fclose(fp);
-        remove(fn);
-        return NULL;
-    }
+    if (data == NULL)
+        goto error;
     if (!PyBytes_Check(data)) {
         PyErr_Format(PyExc_TypeError,
                      "f.read() returned %.100s instead of bytes",
                      data->ob_type->tp_name);
         Py_DECREF(data);
-        fclose(fp);
-        remove(fn);
-        return NULL;
+        goto error;
     }
     datalen = PyBytes_GET_SIZE(data);
     if (fwrite(PyBytes_AS_STRING(data), 1, datalen, fp) != datalen) {
         Py_DECREF(data);
-        fclose(fp);
-        remove(fn);
-        return PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        PyErr_SetFromErrnoWithFilename(PyExc_IOError, fn);
+        goto error;
     }
     Py_DECREF(data);
+
     fseek(fp, 0, 0);
     win = getwin(fp);
-    fclose(fp);
-    remove(fn);
     if (win == NULL) {
         PyErr_SetString(PyCursesError, catchall_NULL);
-        return NULL;
+        goto error;
     }
-    return PyCursesWindow_New(win, NULL);
+    res = PyCursesWindow_New(win, NULL);
+
+error:
+    if (fp != NULL)
+        fclose(fp);
+    else if (fd != -1)
+        close(fd);
+    remove(fn);
+    return res;
 }
 
 static PyObject *
@@ -3415,7 +3493,7 @@ PyInit__curses(void)
                 continue;
             if (strncmp(key_n,"KEY_F(",6)==0) {
                 char *p1, *p2;
-                key_n2 = malloc(strlen(key_n)+1);
+                key_n2 = PyMem_Malloc(strlen(key_n)+1);
                 if (!key_n2) {
                     PyErr_NoMemory();
                     break;
@@ -3434,7 +3512,7 @@ PyInit__curses(void)
                 key_n2 = key_n;
             SetDictInt(key_n2,key);
             if (key_n2 != key_n)
-                free(key_n2);
+                PyMem_Free(key_n2);
         }
 #endif
         SetDictInt("KEY_MIN", KEY_MIN);

@@ -81,7 +81,10 @@ of which this module provides three different variants:
 
       Holds an instance of the class specified by the :attr:`MessageClass` class
       variable. This instance parses and manages the headers in the HTTP
-      request.
+      request. The :func:`~http.client.parse_headers` function from
+      :mod:`http.client` is used to parse the headers and it requires that the
+      HTTP request provide a valid :rfc:`2822` style header.
+
 
    .. attribute:: rfile
 
@@ -116,7 +119,7 @@ of which this module provides three different variants:
       HTTP error code value. *message* should be a string containing a
       (detailed) error message of what occurred, and *explain* should be an
       explanation of the error code number. Default *message* and *explain*
-      values can found in the *responses* class variable.
+      values can found in the :attr:`responses` class variable.
 
    .. attribute:: error_content_type
 
@@ -170,12 +173,22 @@ of which this module provides three different variants:
 
       .. versionadded:: 3.2
 
-   .. method:: send_error(code, message=None)
+   .. method:: send_error(code, message=None, explain=None)
 
       Sends and logs a complete error reply to the client. The numeric *code*
-      specifies the HTTP error code, with *message* as optional, more specific text. A
-      complete set of headers is sent, followed by text composed using the
-      :attr:`error_message_format` class variable.
+      specifies the HTTP error code, with *message* as an optional, short, human
+      readable description of the error.  The *explain* argument can be used to
+      provide more detailed information about the error; it will be formatted
+      using the :attr:`error_message_format` class variable and emitted, after
+      a complete set of headers, as the response body.  The :attr:`responses`
+      class variable holds the default values for *message* and *explain* that
+      will be used if no value is provided; for unknown codes the default value
+      for both is the string ``???``.
+
+      .. versionchanged:: 3.4
+         The error response includes a Content-Length header.
+         Added the *explain* argument.
+
 
    .. method:: send_response(code, message=None)
 
@@ -341,7 +354,7 @@ of which this module provides three different variants:
 
 The :class:`SimpleHTTPRequestHandler` class can be used in the following
 manner in order to create a very basic webserver serving files relative to
-the current directory. ::
+the current directory::
 
    import http.server
    import socketserver
@@ -355,11 +368,22 @@ the current directory. ::
    print("serving at port", PORT)
    httpd.serve_forever()
 
+.. _http-server-cli:
+
 :mod:`http.server` can also be invoked directly using the :option:`-m`
 switch of the interpreter with a ``port number`` argument.  Similar to
-the previous example, this serves files relative to the current directory. ::
+the previous example, this serves files relative to the current directory::
 
         python -m http.server 8000
+
+By default, server binds itself to all interfaces.  The option ``-b/--bind``
+specifies a specific address to which it should bind.  For example, the
+following command causes the server to bind to localhost only::
+
+        python -m http.server 8000 --bind 127.0.0.1
+
+.. versionadded:: 3.4
+    ``--bind`` argument was introduced.
 
 
 .. class:: CGIHTTPRequestHandler(request, client_address, server)
@@ -403,7 +427,7 @@ the previous example, this serves files relative to the current directory. ::
    reasons.  Problems with the CGI script will be translated to error 403.
 
 :class:`CGIHTTPRequestHandler` can be enabled in the command line by passing
-the ``--cgi`` option.::
+the ``--cgi`` option::
 
         python -m http.server --cgi 8000
 

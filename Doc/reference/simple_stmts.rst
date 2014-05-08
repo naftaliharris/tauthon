@@ -70,6 +70,7 @@ Assignment statements
 =====================
 
 .. index::
+   single: =; assignment statement
    pair: assignment; statement
    pair: binding; name
    pair: rebinding; name
@@ -260,6 +261,18 @@ Augmented assignment statements
 .. index::
    pair: augmented; assignment
    single: statement; assignment, augmented
+   single: +=; augmented assignment
+   single: -=; augmented assignment
+   single: *=; augmented assignment
+   single: /=; augmented assignment
+   single: %=; augmented assignment
+   single: &=; augmented assignment
+   single: ^=; augmented assignment
+   single: |=; augmented assignment
+   single: **=; augmented assignment
+   single: //=; augmented assignment
+   single: >>=; augmented assignment
+   single: <<=; augmented assignment
 
 Augmented assignment is the combination, in a single statement, of a binary
 operation and an assignment statement:
@@ -655,6 +668,8 @@ initializing the module, which includes execution of the module's code.
 
 If the requested module is retrieved successfully, it will be made
 available in the local namespace in one of three ways:
+
+.. index:: single: as; import statement
 
 * If the module name is followed by :keyword:`as`, then the name
   following :keyword:`as` is bound directly to the imported module.

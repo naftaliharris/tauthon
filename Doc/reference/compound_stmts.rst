@@ -313,14 +313,14 @@ exception, the saved exception is set as the context of the new exception.
 If the :keyword:`finally` clause executes a :keyword:`return` or :keyword:`break`
 statement, the saved exception is discarded::
 
-    def f():
-        try:
-            1/0
-        finally:
-            return 42
-
-    >>> f()
-    42
+   >>> def f():
+   ...     try:
+   ...         1/0
+   ...     finally:
+   ...         return 42
+   ...
+   >>> f()
+   42
 
 The exception information is not available to the program during execution of
 the :keyword:`finally` clause.
@@ -337,6 +337,20 @@ statement, the :keyword:`finally` clause is also executed 'on the way out.' A
 reason is a problem with the current implementation --- this restriction may be
 lifted in the future).
 
+The return value of a function is determined by the last :keyword:`return`
+statement executed.  Since the :keyword:`finally` clause always executes, a
+:keyword:`return` statement executed in the :keyword:`finally` clause will
+always be the last one executed::
+
+   >>> def foo():
+   ...     try:
+   ...         return 'try'
+   ...     finally:
+   ...         return 'finally'
+   ...
+   >>> foo()
+   'finally'
+
 Additional information on exceptions can be found in section :ref:`exceptions`,
 and information on using the :keyword:`raise` statement to generate exceptions
 may be found in section :ref:`raise`.
@@ -348,7 +362,9 @@ may be found in section :ref:`raise`.
 The :keyword:`with` statement
 =============================
 
-.. index:: statement: with
+.. index::
+    statement: with
+    single: as; with statement
 
 The :keyword:`with` statement is used to wrap the execution of a block with
 methods defined by a context manager (see section :ref:`context-managers`).
@@ -493,14 +509,15 @@ case the parameter's default value is substituted.  If a parameter has a default
 value, all following parameters up until the "``*``" must also have a default
 value --- this is a syntactic restriction that is not expressed by the grammar.
 
-**Default parameter values are evaluated when the function definition is
-executed.** This means that the expression is evaluated once, when the function
-is defined, and that the same "pre-computed" value is used for each call.  This
-is especially important to understand when a default parameter is a mutable
-object, such as a list or a dictionary: if the function modifies the object
-(e.g. by appending an item to a list), the default value is in effect modified.
-This is generally not what was intended.  A way around this is to use ``None``
-as the default, and explicitly test for it in the body of the function, e.g.::
+**Default parameter values are evaluated from left to right when the function
+definition is executed.** This means that the expression is evaluated once, when
+the function is defined, and that the same "pre-computed" value is used for each
+call.  This is especially important to understand when a default parameter is a
+mutable object, such as a list or a dictionary: if the function modifies the
+object (e.g. by appending an item to a list), the default value is in effect
+modified.  This is generally not what was intended.  A way around this is to use
+``None`` as the default, and explicitly test for it in the body of the function,
+e.g.::
 
    def whats_on_the_telly(penguin=None):
        if penguin is None:

@@ -109,6 +109,7 @@ import types
 import math
 import time
 import inspect
+import sys
 
 from os.path import isfile, split, join
 from copy import deepcopy
@@ -992,6 +993,12 @@ class TurtleScreen(TurtleScreenBase):
         self._colormode = _CFG["colormode"]
         self._keys = []
         self.clear()
+        if sys.platform == 'darwin':
+            # Force Turtle window to the front on OS X. This is needed because
+            # the Turtle window will show behind the Terminal window when you
+            # start the demo from the command line.
+            cv._rootwindow.call('wm', 'attributes', '.', '-topmost', '1')
+            cv._rootwindow.call('wm', 'attributes', '.', '-topmost', '0')
 
     def clear(self):
         """Delete all drawings and all turtles from the TurtleScreen.
@@ -3843,18 +3850,18 @@ def write_docstringdict(filename="turtle_docstringdict"):
         key = "Turtle."+methodname
         docsdict[key] = eval(key).__doc__
 
-    f = open("%s.py" % filename,"w")
-    keys = sorted([x for x in docsdict.keys()
-                        if x.split('.')[1] not in _alias_list])
-    f.write('docsdict = {\n\n')
-    for key in keys[:-1]:
+    with open("%s.py" % filename,"w") as f:
+        keys = sorted([x for x in docsdict.keys()
+                            if x.split('.')[1] not in _alias_list])
+        f.write('docsdict = {\n\n')
+        for key in keys[:-1]:
+            f.write('%s :\n' % repr(key))
+            f.write('        """%s\n""",\n\n' % docsdict[key])
+        key = keys[-1]
         f.write('%s :\n' % repr(key))
-        f.write('        """%s\n""",\n\n' % docsdict[key])
-    key = keys[-1]
-    f.write('%s :\n' % repr(key))
-    f.write('        """%s\n"""\n\n' % docsdict[key])
-    f.write("}\n")
-    f.close()
+        f.write('        """%s\n"""\n\n' % docsdict[key])
+        f.write("}\n")
+        f.close()
 
 def read_docstrings(lang):
     """Read in docstrings from lang-specific docstring dictionary.

@@ -8,8 +8,8 @@ import weakref
 import errno
 
 from test.support import (TESTFN, captured_output, check_impl_detail,
-                          check_warnings, cpython_only, gc_collect,
-                          no_tracing, run_unittest, unlink)
+                          check_warnings, cpython_only, gc_collect, run_unittest,
+                          no_tracing, unlink)
 
 class NaiveException(Exception):
     def __init__(self, x):
@@ -257,22 +257,22 @@ class ExceptionTests(unittest.TestCase):
                 {'args' : ('foo', 1)}),
             (SystemExit, ('foo',),
                 {'args' : ('foo',), 'code' : 'foo'}),
-            (IOError, ('foo',),
+            (OSError, ('foo',),
                 {'args' : ('foo',), 'filename' : None,
                  'errno' : None, 'strerror' : None}),
-            (IOError, ('foo', 'bar'),
+            (OSError, ('foo', 'bar'),
                 {'args' : ('foo', 'bar'), 'filename' : None,
                  'errno' : 'foo', 'strerror' : 'bar'}),
-            (IOError, ('foo', 'bar', 'baz'),
+            (OSError, ('foo', 'bar', 'baz'),
                 {'args' : ('foo', 'bar'), 'filename' : 'baz',
                  'errno' : 'foo', 'strerror' : 'bar'}),
-            (IOError, ('foo', 'bar', 'baz', 'quux'),
-                {'args' : ('foo', 'bar', 'baz', 'quux')}),
-            (EnvironmentError, ('errnoStr', 'strErrorStr', 'filenameStr'),
+            (OSError, ('foo', 'bar', 'baz', None, 'quux'),
+                {'args' : ('foo', 'bar'), 'filename' : 'baz', 'filename2': 'quux'}),
+            (OSError, ('errnoStr', 'strErrorStr', 'filenameStr'),
                 {'args' : ('errnoStr', 'strErrorStr'),
                  'strerror' : 'strErrorStr', 'errno' : 'errnoStr',
                  'filename' : 'filenameStr'}),
-            (EnvironmentError, (1, 'strErrorStr', 'filenameStr'),
+            (OSError, (1, 'strErrorStr', 'filenameStr'),
                 {'args' : (1, 'strErrorStr'), 'errno' : 1,
                  'strerror' : 'strErrorStr', 'filename' : 'filenameStr'}),
             (SyntaxError, (), {'msg' : None, 'text' : None,
@@ -422,7 +422,7 @@ class ExceptionTests(unittest.TestCase):
         self.assertIsNone(e.__context__)
         self.assertIsNone(e.__cause__)
 
-        class MyException(EnvironmentError):
+        class MyException(OSError):
             pass
 
         e = MyException()
@@ -763,7 +763,7 @@ class ExceptionTests(unittest.TestCase):
             pass
         self.assertEqual(e, (None, None, None))
 
-    def testUnicodeChangeAttributes(self):
+    def test_unicode_change_attributes(self):
         # See issue 7309. This was a crasher.
 
         u = UnicodeEncodeError('baz', 'xxxxx', 1, 5, 'foo')
@@ -799,6 +799,12 @@ class ExceptionTests(unittest.TestCase):
         self.assertEqual(str(u), "can't translate characters in position 1-4: 965230951443685724997")
         u.start = 1000
         self.assertEqual(str(u), "can't translate characters in position 1000-4: 965230951443685724997")
+
+    def test_unicode_errors_no_object(self):
+        # See issue #21134.
+        klasses = UnicodeEncodeError, UnicodeDecodeError, UnicodeTranslateError
+        for klass in klasses:
+            self.assertEqual(str(klass.__new__(klass)), "")
 
     @no_tracing
     def test_badisinstance(self):
@@ -967,9 +973,6 @@ class ImportErrorTests(unittest.TestCase):
             exc = ImportError(arg)
             self.assertEqual(str(arg), str(exc))
 
-
-def test_main():
-    run_unittest(ExceptionTests, ImportErrorTests)
 
 if __name__ == '__main__':
     unittest.main()

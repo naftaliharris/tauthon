@@ -3,10 +3,12 @@
 """
 
 import io
+import operator
 import os
 import unittest
 import dbm.dumb as dumbdbm
 from test import support
+from functools import partial
 
 _fname = support.TESTFN
 
@@ -182,6 +184,38 @@ class DumbDBMTestCase(unittest.TestCase):
             got = sorted(f.items())
             self.assertEqual(expected, got)
             f.close()
+
+    def test_context_manager(self):
+        with dumbdbm.open(_fname, 'c') as db:
+            db["dumbdbm context manager"] = "context manager"
+
+        with dumbdbm.open(_fname, 'r') as db:
+            self.assertEqual(list(db.keys()), [b"dumbdbm context manager"])
+
+        with self.assertRaises(dumbdbm.error):
+            db.keys()
+
+    def test_check_closed(self):
+        f = dumbdbm.open(_fname, 'c')
+        f.close()
+
+        for meth in (partial(operator.delitem, f),
+                     partial(operator.setitem, f, 'b'),
+                     partial(operator.getitem, f),
+                     partial(operator.contains, f)):
+            with self.assertRaises(dumbdbm.error) as cm:
+                meth('test')
+            self.assertEqual(str(cm.exception),
+                             "DBM object has already been closed")
+
+        for meth in (operator.methodcaller('keys'),
+                     operator.methodcaller('iterkeys'),
+                     operator.methodcaller('items'),
+                     len):
+            with self.assertRaises(dumbdbm.error) as cm:
+                meth(f)
+            self.assertEqual(str(cm.exception),
+                             "DBM object has already been closed")
 
     def tearDown(self):
         _delete_files()

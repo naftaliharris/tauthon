@@ -853,17 +853,6 @@ Windows.  It also contains the Mingw32CCompiler class which handles the mingw32
 port of GCC (same as cygwin in no-cygwin mode).
 
 
-:mod:`distutils.emxccompiler` --- OS/2 EMX Compiler
-===================================================
-
-.. module:: distutils.emxccompiler
-   :synopsis: OS/2 EMX Compiler support
-
-
-This module provides the EMXCCompiler class, a subclass of
-:class:`UnixCCompiler` that handles the EMX port of the GNU C compiler to OS/2.
-
-
 :mod:`distutils.archive_util` ---  Archiving utilities
 ======================================================
 
@@ -1004,7 +993,7 @@ directories.
 
    Files in *src* that begin with :file:`.nfs` are skipped (more information on
    these files is available in answer D2 of the `NFS FAQ page
-   <http://nfs.sourceforge.net/#section_d>`_.
+   <http://nfs.sourceforge.net/#section_d>`_).
 
    .. versionchanged:: 3.3.1
       NFS files are ignored.
