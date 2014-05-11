@@ -192,30 +192,12 @@ def _heapify_max(x):
     for i in reversed(range(n//2)):
         _siftup_max(x, i)
 
-def nlargest(n, iterable):
-    """Find the n largest elements in a dataset.
-
-    Equivalent to:  sorted(iterable, reverse=True)[:n]
-    """
-    if n < 0:
-        return []
-    it = iter(iterable)
-    result = list(islice(it, n))
-    if not result:
-        return result
-    heapify(result)
-    _heappushpop = heappushpop
-    for elem in it:
-        _heappushpop(result, elem)
-    result.sort(reverse=True)
-    return result
-
 def nsmallest(n, iterable):
     """Find the n smallest elements in a dataset.
 
     Equivalent to:  sorted(iterable)[:n]
     """
-    if n < 0:
+    if n <= 0:
         return []
     it = iter(iterable)
     result = list(islice(it, n))
@@ -423,7 +405,6 @@ def nsmallest(n, iterable, key=None):
     result = _nsmallest(n, it)
     return [r[2] for r in result]                           # undecorate
 
-_nlargest = nlargest
 def nlargest(n, iterable, key=None):
     """Find the n largest elements in a dataset.
 
@@ -433,12 +414,12 @@ def nlargest(n, iterable, key=None):
     # Short-cut for n==1 is to use max() when len(iterable)>0
     if n == 1:
         it = iter(iterable)
-        head = list(islice(it, 1))
-        if not head:
-            return []
+        sentinel = object()
         if key is None:
-            return [max(chain(head, it))]
-        return [max(chain(head, it), key=key)]
+            result = max(it, default=sentinel)
+        else:
+            result = max(it, default=sentinel, key=key)
+        return [] if result is sentinel else [result]
 
     # When n>=size, it's faster to use sorted()
     try:
@@ -451,15 +432,40 @@ def nlargest(n, iterable, key=None):
 
     # When key is none, use simpler decoration
     if key is None:
-        it = zip(iterable, count(0,-1))                     # decorate
-        result = _nlargest(n, it)
-        return [r[0] for r in result]                       # undecorate
+        it = iter(iterable)
+        result = list(islice(zip(it, count(0, -1)), n))
+        if not result:
+            return result
+        heapify(result)
+        order = -n
+        top = result[0][0]
+        _heapreplace = heapreplace
+        for elem in it:
+            if top < elem:
+                order -= 1
+                _heapreplace(result, (elem, order))
+                top = result[0][0]
+        result.sort(reverse=True)
+        return [r[0] for r in result]
 
     # General case, slowest method
-    in1, in2 = tee(iterable)
-    it = zip(map(key, in1), count(0,-1), in2)               # decorate
-    result = _nlargest(n, it)
-    return [r[2] for r in result]                           # undecorate
+    it = iter(iterable)
+    result = [(key(elem), i, elem) for i, elem in zip(range(0, -n, -1), it)]
+    if not result:
+        return result
+    heapify(result)
+    order = -n
+    top = result[0][0]
+    _heapreplace = heapreplace
+    for elem in it:
+        k = key(elem)
+        if top < k:
+            order -= 1
+            _heapreplace(result, (k, order, elem))
+            top = result[0][0]
+    result.sort(reverse=True)
+    return [r[2] for r in result]
+
 
 if __name__ == "__main__":
     # Simple sanity test
