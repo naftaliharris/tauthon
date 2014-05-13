@@ -436,6 +436,17 @@ class _IPAddressBase(_TotalOrderingMixin):
         return str(self)
 
     @property
+    def reverse_pointer(self):
+        """The name of the reverse DNS pointer for the IP address, e.g.:
+            >>> ipaddress.ip_address("127.0.0.1").reverse_pointer
+            '1.0.0.127.in-addr.arpa'
+            >>> ipaddress.ip_address("2001:db8::1").reverse_pointer
+            '1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa'
+
+        """
+        return self._reverse_pointer()
+
+    @property
     def version(self):
         msg = '%200s has no version specified' % (type(self),)
         raise NotImplementedError(msg)
@@ -980,15 +991,15 @@ class _BaseNetwork(_IPAddressBase):
                 raise ValueError('cannot set prefixlen_diff and new_prefix')
             prefixlen_diff = self._prefixlen - new_prefix
 
-        if self.prefixlen - prefixlen_diff < 0:
+        new_prefixlen = self.prefixlen - prefixlen_diff
+        if new_prefixlen < 0:
             raise ValueError(
                 'current prefixlen is %d, cannot have a prefixlen_diff of %d' %
                 (self.prefixlen, prefixlen_diff))
-        # TODO (pmoody): optimize this.
-        t = self.__class__('%s/%d' % (self.network_address,
-                                      self.prefixlen - prefixlen_diff),
-                                     strict=False)
-        return t.__class__('%s/%d' % (t.network_address, t.prefixlen))
+        return self.__class__((
+            int(self.network_address) & (int(self.netmask) << prefixlen_diff),
+            new_prefixlen
+            ))
 
     @property
     def is_multicast(self):
@@ -1221,6 +1232,15 @@ class _BaseV4:
             return True
         return False
 
+    def _reverse_pointer(self):
+        """Return the reverse DNS pointer name for the IPv4 address.
+
+        This implements the method described in RFC1035 3.5.
+
+        """
+        reverse_octets = str(self).split('.')[::-1]
+        return '.'.join(reverse_octets) + '.in-addr.arpa'
+
     @property
     def max_prefixlen(self):
         return self._max_prefixlen
@@ -1369,6 +1389,18 @@ class IPv4Interface(IPv4Address):
             self._prefixlen = self._max_prefixlen
             return
 
+        if isinstance(address, tuple):
+            IPv4Address.__init__(self, address[0])
+            if len(address) > 1:
+                self._prefixlen = int(address[1])
+            else:
+                self._prefixlen = self._max_prefixlen
+
+            self.network = IPv4Network(address, strict=False)
+            self.netmask = self.network.netmask
+            self.hostmask = self.network.hostmask
+            return
+
         addr = _split_optional_netmask(address)
         IPv4Address.__init__(self, addr[0])
 
@@ -1484,21 +1516,41 @@ class IPv4Network(_BaseV4, _BaseNetwork):
         _BaseV4.__init__(self, address)
         _BaseNetwork.__init__(self, address)
 
-        # Constructing from a packed address
-        if isinstance(address, bytes):
+        # Constructing from a packed address or integer
+        if isinstance(address, (int, bytes)):
             self.network_address = IPv4Address(address)
             self._prefixlen = self._max_prefixlen
             self.netmask = IPv4Address(self._ALL_ONES)
             #fixme: address/network test here
             return
 
-        # Efficient constructor from integer.
-        if isinstance(address, int):
-            self.network_address = IPv4Address(address)
-            self._prefixlen = self._max_prefixlen
-            self.netmask = IPv4Address(self._ALL_ONES)
-            #fixme: address/network test here.
+        if isinstance(address, tuple):
+            if len(address) > 1:
+                # If address[1] is a string, treat it like a netmask.
+                if isinstance(address[1], str):
+                    self.netmask = IPv4Address(address[1])
+                    self._prefixlen = self._prefix_from_ip_int(
+                        int(self.netmask))
+                # address[1] should be an int.
+                else:
+                    self._prefixlen = int(address[1])
+                    self.netmask = IPv4Address(self._ip_int_from_prefix(
+                            self._prefixlen))
+            # We weren't given an address[1].
+            else:
+                self._prefixlen = self._max_prefixlen
+                self.netmask = IPv4Address(self._ip_int_from_prefix(
+                        self._prefixlen))
+            self.network_address = IPv4Address(address[0])
+            packed = int(self.network_address)
+            if packed & int(self.netmask) != packed:
+                if strict:
+                    raise ValueError('%s has host bits set' % self)
+                else:
+                    self.network_address = IPv4Address(packed &
+                                                       int(self.netmask))
             return
+
 
         # Assume input argument to be string or any object representation
         # which converts into a formatted IP prefix string.
@@ -1784,6 +1836,15 @@ class _BaseV6:
             return '%s/%d' % (':'.join(parts), self._prefixlen)
         return ':'.join(parts)
 
+    def _reverse_pointer(self):
+        """Return the reverse DNS pointer name for the IPv6 address.
+
+        This implements the method described in RFC3596 2.5.
+
+        """
+        reverse_chars = self.exploded[::-1].replace(':', '')
+        return '.'.join(reverse_chars) + '.ip6.arpa'
+
     @property
     def max_prefixlen(self):
         return self._max_prefixlen
@@ -2001,6 +2062,16 @@ class IPv6Interface(IPv6Address):
             self.network = IPv6Network(self._ip)
             self._prefixlen = self._max_prefixlen
             return
+        if isinstance(address, tuple):
+            IPv6Address.__init__(self, address[0])
+            if len(address) > 1:
+                self._prefixlen = int(address[1])
+            else:
+                self._prefixlen = self._max_prefixlen
+            self.network = IPv6Network(address, strict=False)
+            self.netmask = self.network.netmask
+            self.hostmask = self.network.hostmask
+            return
 
         addr = _split_optional_netmask(address)
         IPv6Address.__init__(self, addr[0])
@@ -2118,18 +2189,29 @@ class IPv6Network(_BaseV6, _BaseNetwork):
         _BaseV6.__init__(self, address)
         _BaseNetwork.__init__(self, address)
 
-        # Efficient constructor from integer.
-        if isinstance(address, int):
+        # Efficient constructor from integer or packed address
+        if isinstance(address, (bytes, int)):
             self.network_address = IPv6Address(address)
             self._prefixlen = self._max_prefixlen
             self.netmask = IPv6Address(self._ALL_ONES)
             return
 
-        # Constructing from a packed address
-        if isinstance(address, bytes):
-            self.network_address = IPv6Address(address)
-            self._prefixlen = self._max_prefixlen
-            self.netmask = IPv6Address(self._ALL_ONES)
+        if isinstance(address, tuple):
+            self.network_address = IPv6Address(address[0])
+            if len(address) > 1:
+                self._prefixlen = int(address[1])
+            else:
+                self._prefixlen = self._max_prefixlen
+            self.netmask = IPv6Address(self._ip_int_from_prefix(
+                    self._prefixlen))
+            self.network_address = IPv6Address(address[0])
+            packed = int(self.network_address)
+            if packed & int(self.netmask) != packed:
+                if strict:
+                    raise ValueError('%s has host bits set' % self)
+                else:
+                    self.network_address = IPv6Address(packed &
+                                                       int(self.netmask))
             return
 
         # Assume input argument to be string or any object representation
