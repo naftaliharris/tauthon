@@ -146,6 +146,20 @@ write code that handles both IP versions correctly.
       the appropriate length (most significant octet first). This is 4 bytes
       for IPv4 and 16 bytes for IPv6.
 
+   .. attribute:: reverse_pointer
+
+      The name of the reverse DNS PTR record for the IP address, e.g.::
+
+          >>> ipaddress.ip_address("127.0.0.1").reverse_pointer
+          '1.0.0.127.in-addr.arpa'
+          >>> ipaddress.ip_address("2001:db8::1").reverse_pointer
+          '1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa'
+
+      This is the name that could be used for performing a PTR lookup, not the
+      resolved hostname itself.
+
+   .. versionadded:: 3.5
+
    .. attribute:: is_multicast
 
       ``True`` if the address is reserved for multicast use.  See
@@ -226,6 +240,7 @@ write code that handles both IP versions correctly.
    :class:`IPv4Address` class:
 
    .. attribute:: packed
+   .. attribute:: reverse_pointer
    .. attribute:: version
    .. attribute:: max_prefixlen
    .. attribute:: is_multicast
@@ -377,6 +392,12 @@ so to avoid duplication they are only documented for :class:`IPv4Network`.
    3. An integer packed into a :class:`bytes` object of length 4, big-endian.
       The interpretation is similar to an integer *address*.
 
+   4. A two-tuple of an address description and a netmask, where the address
+      description is either a string, a 32-bits integer, a 4-bytes packed
+      integer, or an existing IPv4Address object; and the netmask is either
+      an integer representing the prefix length (e.g. ``24``) or a string
+      representing the prefix mask (e.g. ``255.255.255.0``).
+
    An :exc:`AddressValueError` is raised if *address* is not a valid IPv4
    address.  A :exc:`NetmaskValueError` is raised if the mask is not valid for
    an IPv4 address.
@@ -388,6 +409,10 @@ so to avoid duplication they are only documented for :class:`IPv4Network`.
    Unless stated otherwise, all network methods accepting other network/address
    objects will raise :exc:`TypeError` if the argument's IP version is
    incompatible to ``self``
+
+   .. versionchanged:: 3.5
+
+      Added the two-tuple form for the *address* constructor parameter.
 
    .. attribute:: version
    .. attribute:: max_prefixlen
@@ -553,6 +578,11 @@ so to avoid duplication they are only documented for :class:`IPv4Network`.
    3. An integer packed into a :class:`bytes` object of length 16, bit-endian.
       The interpretation is similar to an integer *address*.
 
+   4. A two-tuple of an address description and a netmask, where the address
+      description is either a string, a 128-bits integer, a 16-bytes packed
+      integer, or an existing IPv4Address object; and the netmask is an
+      integer representing the prefix length.
+
    An :exc:`AddressValueError` is raised if *address* is not a valid IPv6
    address.  A :exc:`NetmaskValueError` is raised if the mask is not valid for
    an IPv6 address.
@@ -560,6 +590,10 @@ so to avoid duplication they are only documented for :class:`IPv4Network`.
    If *strict* is ``True`` and host bits are set in the supplied address,
    then :exc:`ValueError` is raised.  Otherwise, the host bits are masked out
    to determine the appropriate network address.
+
+   .. versionchanged:: 3.5
+
+      Added the two-tuple form for the *address* constructor parameter.
 
    .. attribute:: version
    .. attribute:: max_prefixlen
