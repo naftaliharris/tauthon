@@ -17,7 +17,7 @@ Here are some of the useful functions provided by this module:
     getclasstree() - arrange classes so as to represent their hierarchy
 
     getargspec(), getargvalues(), getcallargs() - get info about function arguments
-    getfullargspec() - same, with support for Python-3000 features
+    getfullargspec() - same, with support for Python 3 features
     formatargspec(), formatargvalues() - format an argument spec
     getouterframes(), getinnerframes() - get info about frames
     currentframe() - get the current stack frame
@@ -32,6 +32,7 @@ __author__ = ('Ka-Ping Yee <ping@lfw.org>',
               'Yury Selivanov <yselivanov@sprymix.com>')
 
 import ast
+import enum
 import importlib.machinery
 import itertools
 import linecache
@@ -919,7 +920,7 @@ def getargspec(func):
     'varargs' and 'varkw' are the names of the * and ** arguments or None.
     'defaults' is an n-tuple of the default values of the last n arguments.
 
-    Use the getfullargspec() API for Python-3000 code, as annotations
+    Use the getfullargspec() API for Python 3 code, as annotations
     and keyword arguments are supported. getargspec() will raise ValueError
     if the func has either annotations or keyword arguments.
     """
@@ -966,9 +967,10 @@ def getfullargspec(func):
         # getfullargspec() historically ignored __wrapped__ attributes,
         # so we ensure that remains the case in 3.3+
 
-        sig = _signature_internal(func,
-                                  follow_wrapper_chains=False,
-                                  skip_bound_arg=False)
+        sig = _signature_from_callable(func,
+                                       follow_wrapper_chains=False,
+                                       skip_bound_arg=False,
+                                       sigcls=Signature)
     except Exception as ex:
         # Most of the times 'signature' will raise ValueError.
         # But, it can also raise AttributeError, and, maybe something
@@ -1495,6 +1497,10 @@ _NonUserDefinedCallables = (_WrapperDescriptor,
 
 
 def _signature_get_user_defined_method(cls, method_name):
+    """Private helper. Checks if ``cls`` has an attribute
+    named ``method_name`` and returns it only if it is a
+    pure python function.
+    """
     try:
         meth = getattr(cls, method_name)
     except AttributeError:
@@ -1507,9 +1513,10 @@ def _signature_get_user_defined_method(cls, method_name):
 
 
 def _signature_get_partial(wrapped_sig, partial, extra_args=()):
-    # Internal helper to calculate how 'wrapped_sig' signature will
-    # look like after applying a 'functools.partial' object (or alike)
-    # on it.
+    """Private helper to calculate how 'wrapped_sig' signature will
+    look like after applying a 'functools.partial' object (or alike)
+    on it.
+    """
 
     old_params = wrapped_sig.parameters
     new_params = OrderedDict(old_params.items())
@@ -1582,8 +1589,9 @@ def _signature_get_partial(wrapped_sig, partial, extra_args=()):
 
 
 def _signature_bound_method(sig):
-    # Internal helper to transform signatures for unbound
-    # functions to bound methods
+    """Private helper to transform signatures for unbound
+    functions to bound methods.
+    """
 
     params = tuple(sig.parameters.values())
 
@@ -1607,8 +1615,9 @@ def _signature_bound_method(sig):
 
 
 def _signature_is_builtin(obj):
-    # Internal helper to test if `obj` is a callable that might
-    # support Argument Clinic's __text_signature__ protocol.
+    """Private helper to test if `obj` is a callable that might
+    support Argument Clinic's __text_signature__ protocol.
+    """
     return (isbuiltin(obj) or
             ismethoddescriptor(obj) or
             isinstance(obj, _NonUserDefinedCallables) or
@@ -1618,10 +1627,11 @@ def _signature_is_builtin(obj):
 
 
 def _signature_is_functionlike(obj):
-    # Internal helper to test if `obj` is a duck type of FunctionType.
-    # A good example of such objects are functions compiled with
-    # Cython, which have all attributes that a pure Python function
-    # would have, but have their code statically compiled.
+    """Private helper to test if `obj` is a duck type of FunctionType.
+    A good example of such objects are functions compiled with
+    Cython, which have all attributes that a pure Python function
+    would have, but have their code statically compiled.
+    """
 
     if not callable(obj) or isclass(obj):
         # All function-like objects are obviously callables,
@@ -1642,11 +1652,12 @@ def _signature_is_functionlike(obj):
 
 
 def _signature_get_bound_param(spec):
-    # Internal helper to get first parameter name from a
-    # __text_signature__ of a builtin method, which should
-    # be in the following format: '($param1, ...)'.
-    # Assumptions are that the first argument won't have
-    # a default value or an annotation.
+    """ Private helper to get first parameter name from a
+    __text_signature__ of a builtin method, which should
+    be in the following format: '($param1, ...)'.
+    Assumptions are that the first argument won't have
+    a default value or an annotation.
+    """
 
     assert spec.startswith('($')
 
@@ -1665,7 +1676,9 @@ def _signature_get_bound_param(spec):
 
 def _signature_strip_non_python_syntax(signature):
     """
-    Takes a signature in Argument Clinic's extended signature format.
+    Private helper function. Takes a signature in Argument Clinic's
+    extended signature format.
+
     Returns a tuple of three things:
       * that signature re-rendered in standard Python syntax,
       * the index of the "self" parameter (generally 0), or None if
@@ -1734,8 +1747,10 @@ def _signature_strip_non_python_syntax(signature):
 
 
 def _signature_fromstr(cls, obj, s, skip_bound_arg=True):
-    # Internal helper to parse content of '__text_signature__'
-    # and return a Signature based on it
+    """Private helper to parse content of '__text_signature__'
+    and return a Signature based on it.
+    """
+
     Parameter = cls._parameter_cls
 
     clean_signature, self_parameter, last_positional_only = \
@@ -1873,8 +1888,10 @@ def _signature_fromstr(cls, obj, s, skip_bound_arg=True):
 
 
 def _signature_from_builtin(cls, func, skip_bound_arg=True):
-    # Internal helper function to get signature for
-    # builtin callables
+    """Private helper function to get signature for
+    builtin callables.
+    """
+
     if not _signature_is_builtin(func):
         raise TypeError("{!r} is not a Python builtin "
                         "function".format(func))
@@ -1886,7 +1903,14 @@ def _signature_from_builtin(cls, func, skip_bound_arg=True):
     return _signature_fromstr(cls, func, s, skip_bound_arg)
 
 
-def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
+def _signature_from_callable(obj, *,
+                             follow_wrapper_chains=True,
+                             skip_bound_arg=True,
+                             sigcls):
+
+    """Private helper function to get signature for arbitrary
+    callable objects.
+    """
 
     if not callable(obj):
         raise TypeError('{!r} is not a callable object'.format(obj))
@@ -1894,9 +1918,12 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
     if isinstance(obj, types.MethodType):
         # In this case we skip the first parameter of the underlying
         # function (usually `self` or `cls`).
-        sig = _signature_internal(obj.__func__,
-                                  follow_wrapper_chains,
-                                  skip_bound_arg)
+        sig = _signature_from_callable(
+            obj.__func__,
+            follow_wrapper_chains=follow_wrapper_chains,
+            skip_bound_arg=skip_bound_arg,
+            sigcls=sigcls)
+
         if skip_bound_arg:
             return _signature_bound_method(sig)
         else:
@@ -1927,9 +1954,12 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
             # (usually `self`, or `cls`) will not be passed
             # automatically (as for boundmethods)
 
-            wrapped_sig = _signature_internal(partialmethod.func,
-                                              follow_wrapper_chains,
-                                              skip_bound_arg)
+            wrapped_sig = _signature_from_callable(
+                partialmethod.func,
+                follow_wrapper_chains=follow_wrapper_chains,
+                skip_bound_arg=skip_bound_arg,
+                sigcls=sigcls)
+
             sig = _signature_get_partial(wrapped_sig, partialmethod, (None,))
 
             first_wrapped_param = tuple(wrapped_sig.parameters.values())[0]
@@ -1940,16 +1970,18 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
     if isfunction(obj) or _signature_is_functionlike(obj):
         # If it's a pure Python function, or an object that is duck type
         # of a Python function (Cython functions, for instance), then:
-        return Signature.from_function(obj)
+        return sigcls.from_function(obj)
 
     if _signature_is_builtin(obj):
-        return _signature_from_builtin(Signature, obj,
+        return _signature_from_builtin(sigcls, obj,
                                        skip_bound_arg=skip_bound_arg)
 
     if isinstance(obj, functools.partial):
-        wrapped_sig = _signature_internal(obj.func,
-                                          follow_wrapper_chains,
-                                          skip_bound_arg)
+        wrapped_sig = _signature_from_callable(
+            obj.func,
+            follow_wrapper_chains=follow_wrapper_chains,
+            skip_bound_arg=skip_bound_arg,
+            sigcls=sigcls)
         return _signature_get_partial(wrapped_sig, obj)
 
     sig = None
@@ -1960,23 +1992,29 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
         # in its metaclass
         call = _signature_get_user_defined_method(type(obj), '__call__')
         if call is not None:
-            sig = _signature_internal(call,
-                                      follow_wrapper_chains,
-                                      skip_bound_arg)
+            sig = _signature_from_callable(
+                call,
+                follow_wrapper_chains=follow_wrapper_chains,
+                skip_bound_arg=skip_bound_arg,
+                sigcls=sigcls)
         else:
             # Now we check if the 'obj' class has a '__new__' method
             new = _signature_get_user_defined_method(obj, '__new__')
             if new is not None:
-                sig = _signature_internal(new,
-                                          follow_wrapper_chains,
-                                          skip_bound_arg)
+                sig = _signature_from_callable(
+                    new,
+                    follow_wrapper_chains=follow_wrapper_chains,
+                    skip_bound_arg=skip_bound_arg,
+                    sigcls=sigcls)
             else:
                 # Finally, we should have at least __init__ implemented
                 init = _signature_get_user_defined_method(obj, '__init__')
                 if init is not None:
-                    sig = _signature_internal(init,
-                                              follow_wrapper_chains,
-                                              skip_bound_arg)
+                    sig = _signature_from_callable(
+                        init,
+                        follow_wrapper_chains=follow_wrapper_chains,
+                        skip_bound_arg=skip_bound_arg,
+                        sigcls=sigcls)
 
         if sig is None:
             # At this point we know, that `obj` is a class, with no user-
@@ -1998,7 +2036,7 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
                     if text_sig:
                         # If 'obj' class has a __text_signature__ attribute:
                         # return a signature based on it
-                        return _signature_fromstr(Signature, obj, text_sig)
+                        return _signature_fromstr(sigcls, obj, text_sig)
 
             # No '__text_signature__' was found for the 'obj' class.
             # Last option is to check if its '__init__' is
@@ -2018,9 +2056,11 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
         call = _signature_get_user_defined_method(type(obj), '__call__')
         if call is not None:
             try:
-                sig = _signature_internal(call,
-                                          follow_wrapper_chains,
-                                          skip_bound_arg)
+                sig = _signature_from_callable(
+                    call,
+                    follow_wrapper_chains=follow_wrapper_chains,
+                    skip_bound_arg=skip_bound_arg,
+                    sigcls=sigcls)
             except ValueError as ex:
                 msg = 'no signature found for {!r}'.format(obj)
                 raise ValueError(msg) from ex
@@ -2040,41 +2080,35 @@ def _signature_internal(obj, follow_wrapper_chains=True, skip_bound_arg=True):
 
     raise ValueError('callable {!r} is not supported by signature'.format(obj))
 
-def signature(obj):
-    '''Get a signature object for the passed callable.'''
-    return _signature_internal(obj)
-
 
 class _void:
-    '''A private marker - used in Parameter & Signature'''
+    """A private marker - used in Parameter & Signature."""
 
 
 class _empty:
-    pass
+    """Marker object for Signature.empty and Parameter.empty."""
 
 
-class _ParameterKind(int):
-    def __new__(self, *args, name):
-        obj = int.__new__(self, *args)
-        obj._name = name
-        return obj
+class _ParameterKind(enum.IntEnum):
+    POSITIONAL_ONLY = 0
+    POSITIONAL_OR_KEYWORD = 1
+    VAR_POSITIONAL = 2
+    KEYWORD_ONLY = 3
+    VAR_KEYWORD = 4
 
     def __str__(self):
-        return self._name
-
-    def __repr__(self):
-        return '<_ParameterKind: {!r}>'.format(self._name)
+        return self._name_
 
 
-_POSITIONAL_ONLY        = _ParameterKind(0, name='POSITIONAL_ONLY')
-_POSITIONAL_OR_KEYWORD  = _ParameterKind(1, name='POSITIONAL_OR_KEYWORD')
-_VAR_POSITIONAL         = _ParameterKind(2, name='VAR_POSITIONAL')
-_KEYWORD_ONLY           = _ParameterKind(3, name='KEYWORD_ONLY')
-_VAR_KEYWORD            = _ParameterKind(4, name='VAR_KEYWORD')
+_POSITIONAL_ONLY         = _ParameterKind.POSITIONAL_ONLY
+_POSITIONAL_OR_KEYWORD   = _ParameterKind.POSITIONAL_OR_KEYWORD
+_VAR_POSITIONAL          = _ParameterKind.VAR_POSITIONAL
+_KEYWORD_ONLY            = _ParameterKind.KEYWORD_ONLY
+_VAR_KEYWORD             = _ParameterKind.VAR_KEYWORD
 
 
 class Parameter:
-    '''Represents a parameter in a function signature.
+    """Represents a parameter in a function signature.
 
     Has the following public attributes:
 
@@ -2093,7 +2127,7 @@ class Parameter:
         Possible values: `Parameter.POSITIONAL_ONLY`,
         `Parameter.POSITIONAL_OR_KEYWORD`, `Parameter.VAR_POSITIONAL`,
         `Parameter.KEYWORD_ONLY`, `Parameter.VAR_KEYWORD`.
-    '''
+    """
 
     __slots__ = ('_name', '_kind', '_default', '_annotation')
 
@@ -2130,6 +2164,16 @@ class Parameter:
 
         self._name = name
 
+    def __reduce__(self):
+        return (type(self),
+                (self._name, self._kind),
+                {'_default': self._default,
+                 '_annotation': self._annotation})
+
+    def __setstate__(self, state):
+        self._default = state['_default']
+        self._annotation = state['_annotation']
+
     @property
     def name(self):
         return self._name
@@ -2148,7 +2192,7 @@ class Parameter:
 
     def replace(self, *, name=_void, kind=_void,
                 annotation=_void, default=_void):
-        '''Creates a customized copy of the Parameter.'''
+        """Creates a customized copy of the Parameter."""
 
         if name is _void:
             name = self._name
@@ -2184,8 +2228,18 @@ class Parameter:
         return formatted
 
     def __repr__(self):
-        return '<{} at {:#x} {!r}>'.format(self.__class__.__name__,
-                                           id(self), self.name)
+        return '<{} at {:#x} "{}">'.format(self.__class__.__name__,
+                                           id(self), self)
+
+    def __hash__(self):
+        hash_tuple = (self.name, int(self.kind))
+
+        if self._annotation is not _empty:
+            hash_tuple += (self._annotation,)
+        if self._default is not _empty:
+            hash_tuple += (self._default,)
+
+        return hash(hash_tuple)
 
     def __eq__(self, other):
         return (issubclass(other.__class__, Parameter) and
@@ -2199,7 +2253,7 @@ class Parameter:
 
 
 class BoundArguments:
-    '''Result of `Signature.bind` call.  Holds the mapping of arguments
+    """Result of `Signature.bind` call.  Holds the mapping of arguments
     to the function's parameters.
 
     Has the following public attributes:
@@ -2213,7 +2267,7 @@ class BoundArguments:
         Tuple of positional arguments values.
     * kwargs : dict
         Dict of keyword arguments values.
-    '''
+    """
 
     def __init__(self, signature, arguments):
         self.arguments = arguments
@@ -2286,7 +2340,7 @@ class BoundArguments:
 
 
 class Signature:
-    '''A Signature object represents the overall signature of a function.
+    """A Signature object represents the overall signature of a function.
     It stores a Parameter object for each parameter accepted by the
     function, as well as information specific to the function itself.
 
@@ -2306,7 +2360,7 @@ class Signature:
     * bind_partial(*args, **kwargs) -> BoundArguments
         Creates a partial mapping from positional and keyword arguments
         to parameters (simulating 'functools.partial' behavior.)
-    '''
+    """
 
     __slots__ = ('_return_annotation', '_parameters')
 
@@ -2317,9 +2371,9 @@ class Signature:
 
     def __init__(self, parameters=None, *, return_annotation=_empty,
                  __validate_parameters__=True):
-        '''Constructs Signature from the given list of Parameter
+        """Constructs Signature from the given list of Parameter
         objects and 'return_annotation'.  All arguments are optional.
-        '''
+        """
 
         if parameters is None:
             params = OrderedDict()
@@ -2368,7 +2422,7 @@ class Signature:
 
     @classmethod
     def from_function(cls, func):
-        '''Constructs Signature for the given python function'''
+        """Constructs Signature for the given python function."""
 
         is_duck_function = False
         if not isfunction(func):
@@ -2449,7 +2503,13 @@ class Signature:
 
     @classmethod
     def from_builtin(cls, func):
+        """Constructs Signature for the given builtin function."""
         return _signature_from_builtin(cls, func)
+
+    @classmethod
+    def from_callable(cls, obj):
+        """Constructs Signature for the given callable object."""
+        return _signature_from_callable(obj, sigcls=cls)
 
     @property
     def parameters(self):
@@ -2460,10 +2520,10 @@ class Signature:
         return self._return_annotation
 
     def replace(self, *, parameters=_void, return_annotation=_void):
-        '''Creates a customized copy of the Signature.
+        """Creates a customized copy of the Signature.
         Pass 'parameters' and/or 'return_annotation' arguments
         to override them in the new copy.
-        '''
+        """
 
         if parameters is _void:
             parameters = self.parameters.values()
@@ -2473,6 +2533,12 @@ class Signature:
 
         return type(self)(parameters,
                           return_annotation=return_annotation)
+
+    def __hash__(self):
+        hash_tuple = tuple(self.parameters.values())
+        if self._return_annotation is not _empty:
+            hash_tuple += (self._return_annotation,)
+        return hash(hash_tuple)
 
     def __eq__(self, other):
         if (not issubclass(type(other), Signature) or
@@ -2508,7 +2574,7 @@ class Signature:
         return not self.__eq__(other)
 
     def _bind(self, args, kwargs, *, partial=False):
-        '''Private method.  Don't use directly.'''
+        """Private method. Don't use directly."""
 
         arguments = OrderedDict()
 
@@ -2635,18 +2701,30 @@ class Signature:
         return self._bound_arguments_cls(self, arguments)
 
     def bind(*args, **kwargs):
-        '''Get a BoundArguments object, that maps the passed `args`
+        """Get a BoundArguments object, that maps the passed `args`
         and `kwargs` to the function's signature.  Raises `TypeError`
         if the passed arguments can not be bound.
-        '''
+        """
         return args[0]._bind(args[1:], kwargs)
 
     def bind_partial(*args, **kwargs):
-        '''Get a BoundArguments object, that partially maps the
+        """Get a BoundArguments object, that partially maps the
         passed `args` and `kwargs` to the function's signature.
         Raises `TypeError` if the passed arguments can not be bound.
-        '''
+        """
         return args[0]._bind(args[1:], kwargs, partial=True)
+
+    def __reduce__(self):
+        return (type(self),
+                (tuple(self._parameters.values()),),
+                {'_return_annotation': self._return_annotation})
+
+    def __setstate__(self, state):
+        self._return_annotation = state['_return_annotation']
+
+    def __repr__(self):
+        return '<{} at {:#x} "{}">'.format(self.__class__.__name__,
+                                           id(self), self)
 
     def __str__(self):
         result = []
@@ -2692,6 +2770,12 @@ class Signature:
             rendered += ' -> {}'.format(anno)
 
         return rendered
+
+
+def signature(obj):
+    """Get a signature object for the passed callable."""
+    return Signature.from_callable(obj)
+
 
 def _main():
     """ Logic for inspecting an object given at command line """
