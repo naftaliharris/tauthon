@@ -2096,22 +2096,9 @@ def test_DocTestSuite():
          >>> suite.run(unittest.TestResult())
          <unittest.result.TestResult run=0 errors=0 failures=0>
 
-       However, if DocTestSuite finds no docstrings, it raises an error:
+       The module need not contain any docstrings either:
 
-         >>> try:
-         ...     doctest.DocTestSuite('test.sample_doctest_no_docstrings')
-         ... except ValueError as e:
-         ...     error = e
-
-         >>> print(error.args[1])
-         has no docstrings
-
-       You can prevent this error by passing a DocTestFinder instance with
-       the `exclude_empty` keyword argument set to False:
-
-         >>> finder = doctest.DocTestFinder(exclude_empty=False)
-         >>> suite = doctest.DocTestSuite('test.sample_doctest_no_docstrings',
-         ...                              test_finder=finder)
+         >>> suite = doctest.DocTestSuite('test.sample_doctest_no_docstrings')
          >>> suite.run(unittest.TestResult())
          <unittest.result.TestResult run=0 errors=0 failures=0>
 
@@ -2120,6 +2107,22 @@ def test_DocTestSuite():
          >>> suite = test.sample_doctest.test_suite()
          >>> suite.run(unittest.TestResult())
          <unittest.result.TestResult run=9 errors=0 failures=4>
+
+       We can also provide a DocTestFinder:
+
+         >>> finder = doctest.DocTestFinder()
+         >>> suite = doctest.DocTestSuite('test.sample_doctest',
+         ...                          test_finder=finder)
+         >>> suite.run(unittest.TestResult())
+         <unittest.result.TestResult run=9 errors=0 failures=4>
+
+       The DocTestFinder need not return any tests:
+
+         >>> finder = doctest.DocTestFinder()
+         >>> suite = doctest.DocTestSuite('test.sample_doctest_no_docstrings',
+         ...                          test_finder=finder)
+         >>> suite.run(unittest.TestResult())
+         <unittest.result.TestResult run=0 errors=0 failures=0>
 
        We can supply global variables.  If we pass globs, they will be
        used instead of the module globals.  Here we'll pass an empty
@@ -2168,7 +2171,7 @@ def test_DocTestSuite():
          >>> test.test_doctest.sillySetup
          Traceback (most recent call last):
          ...
-         AttributeError: 'module' object has no attribute 'sillySetup'
+         AttributeError: module 'test.test_doctest' has no attribute 'sillySetup'
 
        The setUp and tearDown funtions are passed test objects. Here
        we'll use the setUp function to supply the missing variable y:
@@ -2314,7 +2317,7 @@ def test_DocFileSuite():
          >>> test.test_doctest.sillySetup
          Traceback (most recent call last):
          ...
-         AttributeError: 'module' object has no attribute 'sillySetup'
+         AttributeError: module 'test.test_doctest' has no attribute 'sillySetup'
 
        The setUp and tearDown funtions are passed test objects.
        Here, we'll use a setUp function to set the favorite color in
@@ -2897,7 +2900,7 @@ Invalid doctest option:
 
 def test_main():
     # Check the doctest cases in doctest itself:
-    support.run_doctest(doctest, verbosity=True)
+    ret = support.run_doctest(doctest, verbosity=True)
     # Check the doctest cases defined here:
     from test import test_doctest
     support.run_doctest(test_doctest, verbosity=True)
