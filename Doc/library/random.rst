@@ -46,8 +46,7 @@ from sources provided by the operating system.
 .. warning::
 
    The pseudo-random generators of this module should not be used for
-   security purposes.  Use :func:`os.urandom` or :class:`SystemRandom` if
-   you require a cryptographically secure pseudo-random number generator.
+   security purposes.
 
 
 Bookkeeping functions:
