@@ -3,7 +3,7 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.4)
+m4_define(PYTHON_VERSION, 3.5)
 
 AC_PREREQ(2.65)
 
@@ -1035,6 +1035,15 @@ if test "$PYTHON" = not-found; then
 else
     ASDLGEN="$PYTHON"
 fi
+
+AC_SUBST(OPCODEHGEN)
+AC_CHECK_PROGS(PYTHON, python$PACKAGE_VERSION python3 python, not-found)
+if test "$PYTHON" = not-found; then
+    OPCODEHGEN="@echo python: $PYTHON! cannot run Tools/scripts/generate_opcode_h.py"
+else
+    OPCODEHGEN="$PYTHON"
+fi
+
 
 
 case $MACHDEP in
@@ -2304,6 +2313,17 @@ case "$withval" in
 esac
 ],
 [AC_MSG_RESULT(default)])
+
+AC_MSG_CHECKING(for --with-address-sanitizer)
+AC_ARG_WITH(address_sanitizer,
+            AS_HELP_STRING([--with-address-sanitizer],
+                           [enable AddressSanitizer]),
+[
+AC_MSG_RESULT($withval)
+BASECFLAGS="-fsanitize=address -fno-omit-frame-pointer $BASECFLAGS"
+LDFLAGS="-fsanitize=address $LDFLAGS"
+],
+[AC_MSG_RESULT(no)])
 
 # Most SVR4 platforms (e.g. Solaris) need -lsocket and -lnsl.
 AC_CHECK_LIB(nsl, t_open, [LIBS="-lnsl $LIBS"]) # SVR4
@@ -3788,6 +3808,19 @@ if test "$have_gcc_asm_for_x87" = yes
 then
     AC_DEFINE(HAVE_GCC_ASM_FOR_X87, 1,
     [Define if we can use gcc inline assembler to get and set x87 control word])
+fi
+
+AC_MSG_CHECKING(whether we can use gcc inline assembler to get and set mc68881 fpcr)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[
+  unsigned int fpcr;
+  __asm__ __volatile__ ("fmove.l %%fpcr,%0" : "=g" (fpcr));
+  __asm__ __volatile__ ("fmove.l %0,%%fpcr" : : "g" (fpcr));
+]])],[have_gcc_asm_for_mc68881=yes],[have_gcc_asm_for_mc68881=no])
+AC_MSG_RESULT($have_gcc_asm_for_mc68881)
+if test "$have_gcc_asm_for_mc68881" = yes
+then
+    AC_DEFINE(HAVE_GCC_ASM_FOR_MC68881, 1,
+    [Define if we can use gcc inline assembler to get and set mc68881 fpcr])
 fi
 
 # Detect whether system arithmetic is subject to x87-style double

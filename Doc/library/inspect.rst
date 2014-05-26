@@ -462,6 +462,9 @@ function.
    Signature objects are *immutable*.  Use :meth:`Signature.replace` to make a
    modified copy.
 
+   .. versionchanged:: 3.5
+      Signature objects are picklable and hashable.
+
    .. attribute:: Signature.empty
 
       A special class-level marker to specify absence of a return annotation.
@@ -506,11 +509,28 @@ function.
          >>> str(new_sig)
          "(a, b) -> 'new return anno'"
 
+   .. classmethod:: Signature.from_callable(obj)
+
+       Return a :class:`Signature` (or its subclass) object for a given callable
+       ``obj``. This method simplifies subclassing of :class:`Signature`:
+
+       ::
+
+         class MySignature(Signature):
+             pass
+         sig = MySignature.from_callable(min)
+         assert isinstance(sig, MySignature)
+
+       .. versionadded:: 3.5
+
 
 .. class:: Parameter(name, kind, \*, default=Parameter.empty, annotation=Parameter.empty)
 
    Parameter objects are *immutable*.  Instead of modifying a Parameter object,
    you can use :meth:`Parameter.replace` to create a modified copy.
+
+   .. versionchanged:: 3.5
+      Parameter objects are picklable and hashable.
 
    .. attribute:: Parameter.empty
 
