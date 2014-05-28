@@ -7,6 +7,7 @@
 .. sectionauthor:: Marc-André Lemburg <mal@lemburg.com>
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
 
+**Source code:** :source:`Lib/codecs.py`
 
 .. index::
    single: Unicode
@@ -22,10 +23,9 @@ manages the codec and error handling lookup process.
 
 It defines the following functions:
 
-.. function:: encode(obj, [encoding[, errors]])
+.. function:: encode(obj, encoding='utf-8', errors='strict')
 
-   Encodes *obj* using the codec registered for *encoding*. The default
-   encoding is ``utf-8``.
+   Encodes *obj* using the codec registered for *encoding*.
 
    *Errors* may be given to set the desired error handling scheme. The
    default error handler is ``strict`` meaning that encoding errors raise
@@ -33,10 +33,9 @@ It defines the following functions:
    :exc:`UnicodeEncodeError`). Refer to :ref:`codec-base-classes` for more
    information on codec error handling.
 
-.. function:: decode(obj, [encoding[, errors]])
+.. function:: decode(obj, encoding='utf-8', errors='strict')
 
-   Decodes *obj* using the codec registered for *encoding*. The default
-   encoding is ``utf-8``.
+   Decodes *obj* using the codec registered for *encoding*.
 
    *Errors* may be given to set the desired error handling scheme. The
    default error handler is ``strict`` meaning that decoding errors raise
@@ -1420,4 +1419,3 @@ This module implements a variant of the UTF-8 codec: On encoding a UTF-8 encoded
 BOM will be prepended to the UTF-8 encoded bytes. For the stateful encoder this
 is only done once (on the first write to the byte stream).  For decoding an
 optional UTF-8 encoded BOM at the start of the data will be skipped.
-
