@@ -38,7 +38,7 @@ Unix and Macintosh).  For each of the distinct head-tail combinations, it sees
 if it refers to an existing directory, and if so, adds it to ``sys.path`` and
 also inspects the newly added path for configuration files.
 
-.. deprecated:: 3.4
+.. deprecated-removed:: 3.4 3.5
    Support for the "site-python" directory will be removed in 3.5.
 
 If a file named "pyvenv.cfg" exists one directory above sys.executable,
@@ -184,7 +184,7 @@ Module contents
    unless the Python interpreter was started with the :option:`-S` flag.
 
    .. versionchanged:: 3.3
-      This function used to be called unconditionnally.
+      This function used to be called unconditionally.
 
 
 .. function:: addsitedir(sitedir, known_paths=None)
