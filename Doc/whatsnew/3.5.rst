@@ -1,0 +1,274 @@
+****************************
+  What's New In Python 3.5
+****************************
+
+:Release: |release|
+:Date: |today|
+
+.. Rules for maintenance:
+
+   * Anyone can add text to this document.  Do not spend very much time
+   on the wording of your changes, because your text will probably
+   get rewritten to some degree.
+
+   * The maintainer will go through Misc/NEWS periodically and add
+   changes; it's therefore more important to add your changes to
+   Misc/NEWS than to this file.
+
+   * This is not a complete list of every single change; completeness
+   is the purpose of Misc/NEWS.  Some changes I consider too small
+   or esoteric to include.  If such a change is added to the text,
+   I'll just remove it.  (This is another reason you shouldn't spend
+   too much time on writing your addition.)
+
+   * If you want to draw your new text to the attention of the
+   maintainer, add 'XXX' to the beginning of the paragraph or
+   section.
+
+   * It's OK to just add a fragmentary note about a change.  For
+   example: "XXX Describe the transmogrify() function added to the
+   socket module."  The maintainer will research the change and
+   write the necessary text.
+
+   * You can comment out your additions if you like, but it's not
+   necessary (especially when a final release is some months away).
+
+   * Credit the author of a patch or bugfix.   Just the name is
+   sufficient; the e-mail address isn't necessary.
+
+   * It's helpful to add the bug/patch number as a comment:
+
+   XXX Describe the transmogrify() function added to the socket
+   module.
+   (Contributed by P.Y. Developer in :issue:`12345`.)
+
+   This saves the maintainer the effort of going through the Mercurial log
+   when researching a change.
+
+This article explains the new features in Python 3.5, compared to 3.4.
+
+For full details, see the :source:`Misc/NEWS` file.
+
+.. note:: Prerelease users should be aware that this document is currently in
+   draft form. It will be updated substantially as Python 3.5 moves towards
+   release, so it's worth checking back even after reading earlier versions.
+
+
+.. seealso::
+
+    .. :pep:`4XX` - Python 3.5 Release Schedule
+
+
+Summary -- Release highlights
+=============================
+
+.. This section singles out the most important changes in Python 3.3.
+   Brevity is key.
+
+New syntax features:
+
+* None yet.
+
+New library modules:
+
+* None yet.
+
+New built-in features:
+
+* None yet.
+
+Implementation improvements:
+
+* When the ``LC_TYPE`` locale is the POSIX locale (``C`` locale),
+  :py:data:`sys.stdin` and :py:data:`sys.stdout` are now using the
+  ``surrogateescape`` error handler, instead of the ``strict`` error handler
+  (:issue:`19977`).
+
+Significantly Improved Library Modules:
+
+* None yet.
+
+Security improvements:
+
+* None yet.
+
+Please read on for a comprehensive list of user-facing changes.
+
+
+.. PEP-sized items next.
+
+.. _pep-4XX:
+
+.. PEP 4XX: Virtual Environments
+.. =============================
+
+
+.. (Implemented by Foo Bar.)
+
+.. .. seealso::
+
+    :pep:`4XX` - Python Virtual Environments
+       PEP written by Carl Meyer
+
+
+
+
+Other Language Changes
+======================
+
+Some smaller changes made to the core Python language are:
+
+* None yet.
+
+
+
+New Modules
+===========
+
+.. module name
+.. -----------
+
+* None yet.
+
+
+Improved Modules
+================
+
+doctest
+-------
+
+* :func:`doctest.DocTestSuite` returns an empty :class:`unittest.TestSuite` if
+  *module* contains no docstrings instead of raising :exc:`ValueError`
+  (contributed by Glenn Jones in :issue:`15916`).
+
+importlib
+---------
+
+* :class:`importlib.util.LazyLoader` allows for the lazy loading of modules in
+  applications where startup time is paramount (contributed by Brett Cannon in
+  :issue:`17621`).
+
+* :func:`importlib.abc.InspectLoader.source_to_code` is now a
+  static method to make it easier to work with source code in a string.
+  With a module object that you want to initialize you can then use
+  ``exec(code, module.__dict__)`` to execute the code in the module.
+
+* :func:`importlib.util.module_from_spec` is now the preferred way to create a
+  new module. Compared to :class:`types.ModuleType`, this new function will set
+  the various import-controlled attributes based on the passed-in spec object.
+
+inspect
+-------
+
+* :class:`inspect.Signature` and :class:`inspect.Parameter` are now
+  picklable and hashable (contributed by Yury Selivanov in :issue:`20726`
+  and :issue:`20334`).
+
+* New class method :meth:`inspect.Signature.from_callable`, which makes
+  subclassing of :class:`~inspect.Signature` easier (contributed
+  by Yury Selivanov and Eric Snow in :issue:`17373`).
+
+ipaddress
+---------
+
+* :class:`ipaddress.IPv4Network` and :class:`ipaddress.IPv6Network` now
+  accept an ``(address, netmask)`` tuple argument, so as to easily construct
+  network objects from existing addresses (contributed by Peter Moody
+  and Antoine Pitrou in :issue:`16531`).
+
+signal
+------
+
+* Different constants of :mod:`signal` module are now enumeration values using
+  the :mod:`enum` module. This allows meaningful names to be printed during
+  debugging, instead of integer “magic numbers”. (contribute by Giampaolo
+  Rodola' in :issue:`21076`)
+
+xmlrpc
+------
+
+* :class:`xmlrpc.client.ServerProxy` is now a :term:`context manager`
+  (contributed by Claudiu Popa in :issue:`20627`).
+
+
+Optimizations
+=============
+
+The following performance enhancements have been added:
+
+* Construction of ``bytes(int)`` (filled by zero bytes) is faster and use less
+  memory for large objects. ``calloc()`` is used instead of ``malloc()`` to
+  allocate memory for these objects.
+
+* Some operations on :class:`~ipaddress.IPv4Network` and
+  :class:`~ipaddress.IPv6Network` have been massively sped up, such as
+  :meth:`~ipaddress.IPv4Network.subnets`, :meth:`~ipaddress.IPv4Network.supernet`,
+  :func:`~ipaddress.summarize_address_range`, :func:`~ipaddress.collapse_addresses`.
+  The speed up can range from 3x to 15x.
+  (:issue:`21486`, :issue:`21487`, :issue:`20826`)
+
+
+Build and C API Changes
+=======================
+
+Changes to Python's build process and to the C API include:
+
+* New ``calloc`` functions:
+
+  * :c:func:`PyMem_RawCalloc`
+  * :c:func:`PyMem_Calloc`
+  * :c:func:`PyObject_Calloc`
+  * :c:func:`_PyObject_GC_Calloc`
+
+
+Deprecated
+==========
+
+Unsupported Operating Systems
+-----------------------------
+
+* None yet.
+
+
+Deprecated Python modules, functions and methods
+------------------------------------------------
+
+* The :mod:`formatter` module has now graduated to full deprecation and is still
+  slated for removal in Python 3.6.
+
+
+Deprecated functions and types of the C API
+-------------------------------------------
+
+* None yet.
+
+
+Deprecated features
+-------------------
+
+* None yet.
+
+
+Porting to Python 3.5
+=====================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+Changes in the Python API
+-------------------------
+
+* Before Python 3.5, a :class:`datetime.time` object was considered to be false
+  if it represented midnight in UTC.  This behavior was considered obscure and
+  error-prone and has been removed in Python 3.5.  See :issue:`13936` for full
+  details.
+
+* :meth:`ssl.SSLSocket.send()` now raises either :exc:`ssl.SSLWantReadError`
+  or :exc:`ssl.SSLWantWriteError` on a non-blocking socket if the operation
+  would block. Previously, it would return 0.  See :issue:`20951`.
+
+Changes in the C API
+--------------------
+
+* The :c:type:`PyMemAllocator` structure was renamed to
+  :c:type:`PyMemAllocatorEx` and a new ``calloc`` field was added.
