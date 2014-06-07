@@ -341,7 +341,7 @@ Directory and files operations
 
    On Windows, the current directory is always prepended to the *path* whether
    or not you use the default or provide your own, which is the behavior the
-   command shell uses when finding executables.  Additionaly, when finding the
+   command shell uses when finding executables.  Additionally, when finding the
    *cmd* in the *path*, the ``PATHEXT`` environment variable is checked.  For
    example, if you call ``shutil.which("python")``, :func:`which` will search
    ``PATHEXT`` to know that it should look for ``python.exe`` within the *path*
@@ -420,6 +420,26 @@ Another example that uses the *ignore* argument to add a logging call::
 
    copytree(source, destination, ignore=_logpath)
 
+
+.. _shutil-rmtree-example:
+
+rmtree example
+~~~~~~~~~~~~~~
+
+This example shows how to remove a directory tree on Windows where some
+of the files have their read-only bit set. It uses the onerror callback
+to clear the readonly bit and reattempt the remove. Any subsequent failure
+will propagate. ::
+
+    import os, stat
+    import shutil
+
+    def remove_readonly(func, path, _):
+        "Clear the readonly bit and reattempt the removal"
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
+    shutil.rmtree(directory, onerror=remove_readonly)
 
 .. _archiving-operations:
 
