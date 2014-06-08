@@ -40,7 +40,7 @@ Debug
     Used to build Python with extra debugging capabilities, equivalent
     to using ./configure --with-pydebug on UNIX.  All binaries built
     using this configuration have "_d" added to their name:
-    python34_d.dll, python_d.exe, parser_d.pyd, and so on.  Both the
+    python35_d.dll, python_d.exe, parser_d.pyd, and so on.  Both the
     build and rt (run test) batch files in this directory accept a -d
     option for debug builds.  If you are building Python to help with
     development of CPython, you will most likely use this configuration.
@@ -181,30 +181,19 @@ _ssl
     you should first try to update NASM and do a full rebuild of
     OpenSSL.
 
-    If you like to use the official sources instead of the files from
-    python.org's subversion repository, Perl is required to build the
-    necessary makefiles and assembly files.  ActivePerl is available
-    from
+    The ssl sub-project expects your OpenSSL sources to have already
+    been configured and be ready to build.  If you get your sources
+    from svn.python.org as suggested in the "Getting External Sources"
+    section below, the OpenSSL source will already be ready to go.  If
+    you want to build a different version, you will need to run
+
+       PCbuild\prepare_ssl.py path\to\openssl-source-dir
+
+    That script will prepare your OpenSSL sources in the same way that
+    those available on svn.python.org have been prepared.  Note that
+    Perl must be installed and available on your PATH to configure
+    OpenSSL.  ActivePerl is recommended and is available from
         http://www.activestate.com/activeperl/
-    The svn.python.org version contains pre-built makefiles and assembly
-    files.
-
-    The build process makes sure that no patented algorithms are
-    included.  For now RC5, MDC2 and IDEA are excluded from the build.
-    You may have to manually remove $(OBJ_D)\i_*.obj from ms\nt.mak if
-    using official sources; the svn.python.org-hosted version is already
-    fixed.
-
-    The ssl.vcxproj sub-project simply invokes PCbuild/build_ssl.py,
-    which locates and builds OpenSSL.
-
-    build_ssl.py attempts to catch the most common errors (such as not
-    being able to find OpenSSL sources, or not being able to find a Perl
-    that works with OpenSSL) and give a reasonable error message.  If
-    you have a problem that doesn't seem to be handled correctly (e.g.,
-    you know you have ActivePerl but we can't find it), please take a
-    peek at build_ssl.py and suggest patches.  Note that build_ssl.py
-    should be able to be run directly from the command-line.
 
     The ssl sub-project does not have the ability to clean the OpenSSL
     build; if you need to rebuild, you'll have to clean it by hand.
@@ -217,11 +206,19 @@ _tkinter
     Homepage:
         http://www.tcl.tk/
 
-    Unlike the other external libraries listed above, Tk must be built
-    separately before the _tkinter module can be built. This means that
-    a pre-built Tcl/Tk installation is expected in ..\..\tcltk (tcltk64
-    for 64-bit) relative to this directory.  See "Getting External
-    Sources" below for the easiest method to ensure Tcl/Tk is built.
+    Tkinter's dependencies are built by the tcl.vcxproj and tk.vcxproj
+    projects.  The tix.vcxproj project also builds the Tix extended
+    widget set for use with Tkinter.
+
+    Those three projects install their respective components in a
+    directory alongside the source directories called "tcltk" on
+    Win32 and "tcltk64" on x64.  They also copy the Tcl and Tk DLLs
+    into the current output directory, which should ensure that Tkinter
+    is able to load Tcl/Tk without having to change your PATH.
+
+    The tcl, tk, and tix sub-projects do not have the ability to clean
+    their builds; if you need to rebuild, you'll have to clean them by
+    hand.
 
 
 Getting External Sources
@@ -249,26 +246,6 @@ things work.  For instance, if you were to download a version 5.0.7 of
 XZ Utils, you would need to extract the archive into ..\..\xz-5.0.5
 anyway, since that is where the solution is set to look for xz.  The
 same is true for all other external projects.
-
-The external(-amd64).bat scripts will also build a debug build of
-Tcl/Tk, but there aren't any equivalent batch files for building release
-versions of Tcl/Tk currently available.  If you need to build a release
-version of Tcl/Tk, just take a look at the relevant external(-amd64).bat
-file and find the two nmake lines, then call each one without the
-'DEBUG=1' parameter, i.e.:
-
-The external-amd64.bat file contains this for tcl:
-    nmake -f makefile.vc DEBUG=1 MACHINE=AMD64 INSTALLDIR=..\..\tcltk64 clean all install
-
-So for a release build, you'd call it as:
-    nmake -f makefile.vc MACHINE=AMD64 INSTALLDIR=..\..\tcltk64 clean all install
-
-Note that the above command is called from within ..\..\tcl-8.6.1.0\win
-(relative to this directory); don't forget to build Tk as well as Tcl!
-
-This will be cleaned up in the future; http://bugs.python.org/issue15968
-tracks adding a new tcltk.vcxproj file that will build Tcl/Tk and Tix
-the same way the other external projects listed above are built.
 
 
 Building for AMD64
@@ -332,6 +309,7 @@ The property files used are (+-- = "also imports"):
  * pyproject (base settings for all projects, user macros like PyDllName)
  * release (release macro: NDEBUG)
  * sqlite3 (used only by sqlite3.vcxproj)
+ * tcltk (used by _tkinter, tcl, tk and tix projects)
  * x64 (AMD64 / x64 platform specific settings)
 
 The pyproject property file defines _WIN32 and x64 defines _WIN64 and
