@@ -13,6 +13,10 @@ Core and Builtins
 - Issue #19656: Running Python with the -3 option now also warns about
   non-ascii bytes literals.
 
+- Issue #21642: If the conditional if-else expression, allow an integer written
+  with no space between itself and the ``else`` keyword (e.g. ``True if 42else
+  False``) to be valid syntax.
+
 - Issue #21523: Fix over-pessimistic computation of the stack effect of
   some opcodes in the compiler.  This also fixes a quadratic compilation
   time issue noticeable when compiling code with a large number of "and"
@@ -23,6 +27,12 @@ Library
 
 - Issue #21304: Backport the key derivation function hashlib.pbkdf2_hmac from
   Python 3 per PEP 466.
+
+- Issue #11709: Fix the pydoc.help function to not fail when sys.stdin is not a
+  valid file.
+
+- Issue #13223: Fix pydoc.writedoc so that the HTML documentation for methods
+  that use 'self' in the example code is generated correctly.
 
 - Issue #21552: Fixed possible integer overflow of too long string lengths in
   the tkinter module on 64-bit platforms.
