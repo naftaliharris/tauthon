@@ -10,6 +10,10 @@ Release date: TBA
 Core and Builtins
 -----------------
 
+- Issue #21642: If the conditional if-else expression, allow an integer written
+  with no space between itself and the ``else`` keyword (e.g. ``True if 42else
+  False``) to be valid syntax.
+
 - Issue #21523: Fix over-pessimistic computation of the stack effect of
   some opcodes in the compiler.  This also fixes a quadratic compilation
   time issue noticeable when compiling code with a large number of "and"
@@ -88,7 +92,15 @@ Core and Builtins
 Library
 -------
 
+- Issue #11709: Fix the pydoc.help function to not fail when sys.stdin is not a
+  valid file.
+
 - Issue #21515: tempfile.TemporaryFile now uses os.O_TMPFILE flag is available.
+
+- Issue #13223: Fix pydoc.writedoc so that the HTML documentation for methods
+  that use 'self' in the example code is generated correctly.
+
+- Issue #21463: In urllib.request, fix pruning of the FTP cache.
 
 - Issue #21618: The subprocess module could fail to close open fds that were
   inherited by the calling process and already higher than POSIX resource
