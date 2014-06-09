@@ -890,10 +890,6 @@ class CP65001Test(ReadTest, unittest.TestCase):
                          "\U00010fff\uD800")
         self.assertTrue(codecs.lookup_error("surrogatepass"))
 
-    def test_readline(self):
-        self.skipTest("issue #20571: code page 65001 codec does not "
-                      "support partial decoder yet")
-
 
 class UTF7Test(ReadTest, unittest.TestCase):
     encoding = "utf-7"
@@ -1600,6 +1596,12 @@ class CodecsModuleTest(unittest.TestCase):
         self.assertEqual(codecs.decode(b'abc'), 'abc')
         self.assertRaises(UnicodeDecodeError, codecs.decode, b'\xff', 'ascii')
 
+        # test keywords
+        self.assertEqual(codecs.decode(obj=b'\xe4\xf6\xfc', encoding='latin-1'),
+                         '\xe4\xf6\xfc')
+        self.assertEqual(codecs.decode(b'[\xff]', 'ascii', errors='ignore'),
+                         '[]')
+
     def test_encode(self):
         self.assertEqual(codecs.encode('\xe4\xf6\xfc', 'latin-1'),
                          b'\xe4\xf6\xfc')
@@ -1607,6 +1609,12 @@ class CodecsModuleTest(unittest.TestCase):
         self.assertRaises(LookupError, codecs.encode, "foo", "__spam__")
         self.assertEqual(codecs.encode('abc'), b'abc')
         self.assertRaises(UnicodeEncodeError, codecs.encode, '\xffff', 'ascii')
+
+        # test keywords
+        self.assertEqual(codecs.encode(obj='\xe4\xf6\xfc', encoding='latin-1'),
+                         b'\xe4\xf6\xfc')
+        self.assertEqual(codecs.encode('[\xff]', 'ascii', errors='ignore'),
+                         b'[]')
 
     def test_register(self):
         self.assertRaises(TypeError, codecs.register)
@@ -2750,15 +2758,15 @@ class CodePageTest(unittest.TestCase):
         self.assertRaisesRegex(UnicodeEncodeError, 'cp932',
             codecs.code_page_encode, 932, '\xff')
         self.assertRaisesRegex(UnicodeDecodeError, 'cp932',
-            codecs.code_page_decode, 932, b'\x81\x00')
+            codecs.code_page_decode, 932, b'\x81\x00', 'strict', True)
         self.assertRaisesRegex(UnicodeDecodeError, 'CP_UTF8',
-            codecs.code_page_decode, self.CP_UTF8, b'\xff')
+            codecs.code_page_decode, self.CP_UTF8, b'\xff', 'strict', True)
 
     def check_decode(self, cp, tests):
         for raw, errors, expected in tests:
             if expected is not None:
                 try:
-                    decoded = codecs.code_page_decode(cp, raw, errors)
+                    decoded = codecs.code_page_decode(cp, raw, errors, True)
                 except UnicodeDecodeError as err:
                     self.fail('Unable to decode %a from "cp%s" with '
                               'errors=%r: %s' % (raw, cp, errors, err))
@@ -2770,7 +2778,7 @@ class CodePageTest(unittest.TestCase):
                 self.assertLessEqual(decoded[1], len(raw))
             else:
                 self.assertRaises(UnicodeDecodeError,
-                    codecs.code_page_decode, cp, raw, errors)
+                    codecs.code_page_decode, cp, raw, errors, True)
 
     def check_encode(self, cp, tests):
         for text, errors, expected in tests:
@@ -2799,6 +2807,9 @@ class CodePageTest(unittest.TestCase):
             ('[\u20ac]', 'replace', b'[?]'),
             ('[\xff]', 'backslashreplace', b'[\\xff]'),
             ('[\xff]', 'xmlcharrefreplace', b'[&#255;]'),
+            ('\udcff', 'strict', None),
+            ('[\udcff]', 'surrogateescape', b'[\xff]'),
+            ('[\udcff]', 'surrogatepass', None),
         ))
         self.check_decode(932, (
             (b'abc', 'strict', 'abc'),
@@ -2808,6 +2819,7 @@ class CodePageTest(unittest.TestCase):
             (b'[\xff]', 'ignore', '[]'),
             (b'[\xff]', 'replace', '[\ufffd]'),
             (b'[\xff]', 'surrogateescape', '[\udcff]'),
+            (b'[\xff]', 'surrogatepass', None),
             (b'\x81\x00abc', 'strict', None),
             (b'\x81\x00abc', 'ignore', '\x00abc'),
             (b'\x81\x00abc', 'replace', '\ufffd\x00abc'),
@@ -2818,9 +2830,12 @@ class CodePageTest(unittest.TestCase):
             ('abc', 'strict', b'abc'),
             ('\xe9\u20ac', 'strict',  b'\xe9\x80'),
             ('\xff', 'strict', b'\xff'),
+            # test error handlers
             ('\u0141', 'strict', None),
             ('\u0141', 'ignore', b''),
             ('\u0141', 'replace', b'L'),
+            ('\udc98', 'surrogateescape', b'\x98'),
+            ('\udc98', 'surrogatepass', None),
         ))
         self.check_decode(1252, (
             (b'abc', 'strict', 'abc'),
