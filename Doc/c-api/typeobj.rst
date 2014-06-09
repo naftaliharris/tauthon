@@ -1139,6 +1139,9 @@ Number Object Structures
             binaryfunc nb_inplace_true_divide;
 
             unaryfunc nb_index;
+
+            binaryfunc nb_matrix_multiply;
+            binaryfunc nb_inplace_matrix_multiply;
        } PyNumberMethods;
 
    .. note::
