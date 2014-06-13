@@ -8,6 +8,7 @@ Written by Marc-Andre Lemburg (mal@lemburg.com).
 import _string
 import codecs
 import itertools
+import operator
 import struct
 import sys
 import unittest
@@ -250,6 +251,7 @@ class UnicodeTest(string_tests.CommonTest,
                              {ord('a'): None, ord('b'): ''})
         self.checkequalnofix('xyyx', 'xzx', 'translate',
                              {ord('z'): 'yy'})
+
         # this needs maketrans()
         self.checkequalnofix('abababc', 'abababc', 'translate',
                              {'b': '<i>'})
@@ -259,6 +261,33 @@ class UnicodeTest(string_tests.CommonTest,
         tbl = self.type2test.maketrans('abc', 'xyz', 'd')
         self.checkequalnofix('xyzzy', 'abdcdcbdddd', 'translate', tbl)
 
+        # various tests switching from ASCII to latin1 or the opposite;
+        # same length, remove a letter, or replace with a longer string.
+        self.assertEqual("[a]".translate(str.maketrans('a', 'X')),
+                         "[X]")
+        self.assertEqual("[a]".translate(str.maketrans({'a': 'X'})),
+                         "[X]")
+        self.assertEqual("[a]".translate(str.maketrans({'a': None})),
+                         "[]")
+        self.assertEqual("[a]".translate(str.maketrans({'a': 'XXX'})),
+                         "[XXX]")
+        self.assertEqual("[a]".translate(str.maketrans({'a': '\xe9'})),
+                         "[\xe9]")
+        self.assertEqual("[a]".translate(str.maketrans({'a': '<\xe9>'})),
+                         "[<\xe9>]")
+        self.assertEqual("[\xe9]".translate(str.maketrans({'\xe9': 'a'})),
+                         "[a]")
+        self.assertEqual("[\xe9]".translate(str.maketrans({'\xe9': None})),
+                         "[]")
+
+        # invalid Unicode characters
+        invalid_char = 0x10ffff+1
+        for before in "a\xe9\u20ac\U0010ffff":
+            mapping = str.maketrans({before: invalid_char})
+            text = "[%s]" % before
+            self.assertRaises(ValueError, text.translate, mapping)
+
+        # errors
         self.assertRaises(TypeError, self.type2test.maketrans)
         self.assertRaises(ValueError, self.type2test.maketrans, 'abc', 'defg')
         self.assertRaises(TypeError, self.type2test.maketrans, 2, 'def')
@@ -1148,20 +1177,20 @@ class UnicodeTest(string_tests.CommonTest,
         self.assertEqual('%.2s' % "a\xe9\u20ac", 'a\xe9')
 
         #issue 19995
-        class PsuedoInt:
+        class PseudoInt:
             def __init__(self, value):
                 self.value = int(value)
             def __int__(self):
                 return self.value
             def __index__(self):
                 return self.value
-        class PsuedoFloat:
+        class PseudoFloat:
             def __init__(self, value):
                 self.value = float(value)
             def __int__(self):
                 return int(self.value)
-        pi = PsuedoFloat(3.1415)
-        letter_m = PsuedoInt(109)
+        pi = PseudoFloat(3.1415)
+        letter_m = PseudoInt(109)
         self.assertEqual('%x' % 42, '2a')
         self.assertEqual('%X' % 15, 'F')
         self.assertEqual('%o' % 9, '11')
@@ -1170,11 +1199,11 @@ class UnicodeTest(string_tests.CommonTest,
         self.assertEqual('%X' % letter_m, '6D')
         self.assertEqual('%o' % letter_m, '155')
         self.assertEqual('%c' % letter_m, 'm')
-        self.assertWarns(DeprecationWarning, '%x'.__mod__, pi),
-        self.assertWarns(DeprecationWarning, '%x'.__mod__, 3.14),
-        self.assertWarns(DeprecationWarning, '%X'.__mod__, 2.11),
-        self.assertWarns(DeprecationWarning, '%o'.__mod__, 1.79),
-        self.assertWarns(DeprecationWarning, '%c'.__mod__, pi),
+        self.assertRaisesRegex(TypeError, '%x format: an integer is required, not float', operator.mod, '%x', 3.14),
+        self.assertRaisesRegex(TypeError, '%X format: an integer is required, not float', operator.mod, '%X', 2.11),
+        self.assertRaisesRegex(TypeError, '%o format: an integer is required, not float', operator.mod, '%o', 1.79),
+        self.assertRaisesRegex(TypeError, '%x format: an integer is required, not PseudoFloat', operator.mod, '%x', pi),
+        self.assertRaises(TypeError, operator.mod, '%c', pi),
 
     def test_formatting_with_enum(self):
         # issue18780
