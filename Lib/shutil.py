@@ -486,7 +486,7 @@ def _basename(path):
     sep = os.path.sep + (os.path.altsep or '')
     return os.path.basename(path.rstrip(sep))
 
-def move(src, dst):
+def move(src, dst, copy_function=copy2):
     """Recursively move a file or directory to another location. This is
     similar to the Unix "mv" command. Return the file or directory's
     destination.
@@ -502,6 +502,11 @@ def move(src, dst):
     Otherwise, src is copied to the destination and then removed. Symlinks are
     recreated under the new name if os.rename() fails because of cross
     filesystem renames.
+
+    The optional `copy_function` argument is a callable that will be used
+    to copy the source or it will be delegated to `copytree`.
+    By default, copy2() is used, but any function that supports the same
+    signature (like copy()) can be used.
 
     A lot more could be done here...  A look at a mv.c shows a lot of
     the issues this implementation glosses over.
@@ -527,11 +532,13 @@ def move(src, dst):
             os.unlink(src)
         elif os.path.isdir(src):
             if _destinsrc(src, dst):
-                raise Error("Cannot move a directory '%s' into itself '%s'." % (src, dst))
-            copytree(src, real_dst, symlinks=True)
+                raise Error("Cannot move a directory '%s' into itself"
+                            " '%s'." % (src, dst))
+            copytree(src, real_dst, copy_function=copy_function,
+                     symlinks=True)
             rmtree(src)
         else:
-            copy2(src, real_dst)
+            copy_function(src, real_dst)
             os.unlink(src)
     return real_dst
 
@@ -630,23 +637,6 @@ def _make_tarball(base_name, base_dir, compress="gzip", verbose=0, dry_run=0,
 
     return archive_name
 
-def _call_external_zip(base_dir, zip_filename, verbose=False, dry_run=False):
-    # XXX see if we want to keep an external call here
-    if verbose:
-        zipoptions = "-r"
-    else:
-        zipoptions = "-rq"
-    from distutils.errors import DistutilsExecError
-    from distutils.spawn import spawn
-    try:
-        spawn(["zip", zipoptions, zip_filename, base_dir], dry_run=dry_run)
-    except DistutilsExecError:
-        # XXX really should distinguish between "couldn't find
-        # external 'zip' command" and "zip failed".
-        raise ExecError("unable to create zip file '%s': "
-            "could neither import the 'zipfile' module nor "
-            "find a standalone zip utility") % zip_filename
-
 def _make_zipfile(base_name, base_dir, verbose=0, dry_run=0, logger=None):
     """Create a zip file from all the files under 'base_dir'.
 
@@ -656,6 +646,8 @@ def _make_zipfile(base_name, base_dir, verbose=0, dry_run=0, logger=None):
     available, raises ExecError.  Returns the name of the output zip
     file.
     """
+    import zipfile
+
     zip_filename = base_name + ".zip"
     archive_dir = os.path.dirname(base_name)
 
@@ -665,30 +657,20 @@ def _make_zipfile(base_name, base_dir, verbose=0, dry_run=0, logger=None):
         if not dry_run:
             os.makedirs(archive_dir)
 
-    # If zipfile module is not available, try spawning an external 'zip'
-    # command.
-    try:
-        import zipfile
-    except ImportError:
-        zipfile = None
+    if logger is not None:
+        logger.info("creating '%s' and adding '%s' to it",
+                    zip_filename, base_dir)
 
-    if zipfile is None:
-        _call_external_zip(base_dir, zip_filename, verbose, dry_run)
-    else:
-        if logger is not None:
-            logger.info("creating '%s' and adding '%s' to it",
-                        zip_filename, base_dir)
-
-        if not dry_run:
-            with zipfile.ZipFile(zip_filename, "w",
-                                 compression=zipfile.ZIP_DEFLATED) as zf:
-                for dirpath, dirnames, filenames in os.walk(base_dir):
-                    for name in filenames:
-                        path = os.path.normpath(os.path.join(dirpath, name))
-                        if os.path.isfile(path):
-                            zf.write(path, path)
-                            if logger is not None:
-                                logger.info("adding '%s'", path)
+    if not dry_run:
+        with zipfile.ZipFile(zip_filename, "w",
+                             compression=zipfile.ZIP_DEFLATED) as zf:
+            for dirpath, dirnames, filenames in os.walk(base_dir):
+                for name in filenames:
+                    path = os.path.normpath(os.path.join(dirpath, name))
+                    if os.path.isfile(path):
+                        zf.write(path, path)
+                        if logger is not None:
+                            logger.info("adding '%s'", path)
 
     return zip_filename
 
