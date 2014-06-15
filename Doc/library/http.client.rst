@@ -51,7 +51,7 @@ The module provides the following classes:
    .. versionchanged:: 3.2
       *source_address* was added.
 
-   .. deprecated:: 3.2
+   .. deprecated-removed:: 3.2 3.4
       The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
       are not supported anymore.
 
@@ -89,7 +89,7 @@ The module provides the following classes:
       This class now supports HTTPS virtual hosts if possible (that is,
       if :data:`ssl.HAS_SNI` is true).
 
-   .. deprecated:: 3.2
+   .. deprecated-removed:: 3.2 3.4
       The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
       are not supported anymore.
 
@@ -99,7 +99,7 @@ The module provides the following classes:
    Class whose instances are returned upon successful connection.  Not
    instantiated directly by user.
 
-   .. deprecated:: 3.2
+   .. deprecated-removed:: 3.2 3.4
       The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
       are not supported anymore.
 
@@ -169,8 +169,8 @@ The following exceptions are raised as appropriate:
    A subclass of :exc:`HTTPException`.  Raised if a server responds with a HTTP
    status code that we don't understand.
 
-The constants defined in this module are:
 
+The constants defined in this module are:
 
 .. data:: HTTP_PORT
 
@@ -343,6 +343,15 @@ and also the following constants for integer status codes:
 | :const:`UPGRADE_REQUIRED`                | ``426`` | HTTP Upgrade to TLS,                                                  |
 |                                          |         | :rfc:`2817`, Section 6                                                |
 +------------------------------------------+---------+-----------------------------------------------------------------------+
+| :const:`PRECONDITION_REQUIRED`           | ``428`` | Additional HTTP Status Codes,                                         |
+|                                          |         | :rfc:`6585`, Section 3                                                |
++------------------------------------------+---------+-----------------------------------------------------------------------+
+| :const:`TOO_MANY_REQUESTS`               | ``429`` | Additional HTTP Status Codes,                                         |
+|                                          |         | :rfc:`6585`, Section 4                                                |
++------------------------------------------+---------+-----------------------------------------------------------------------+
+| :const:`REQUEST_HEADER_FIELDS_TOO_LARGE` | ``431`` | Additional HTTP Status Codes,                                         |
+|                                          |         | :rfc:`6585`, Section 5                                                |
++------------------------------------------+---------+-----------------------------------------------------------------------+
 | :const:`INTERNAL_SERVER_ERROR`           | ``500`` | HTTP/1.1, `RFC 2616, Section                                          |
 |                                          |         | 10.5.1                                                                |
 |                                          |         | <http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.5.1>`_  |
@@ -373,6 +382,12 @@ and also the following constants for integer status codes:
 | :const:`NOT_EXTENDED`                    | ``510`` | An HTTP Extension Framework,                                          |
 |                                          |         | :rfc:`2774`, Section 7                                                |
 +------------------------------------------+---------+-----------------------------------------------------------------------+
+| :const:`NETWORK_AUTHENTICATION_REQUIRED` | ``511`` | Additional HTTP Status Codes,                                         |
+|                                          |         | :rfc:`6585`, Section 6                                                |
++------------------------------------------+---------+-----------------------------------------------------------------------+
+
+.. versionchanged:: 3.3
+   Added codes ``428``, ``429``, ``431`` and ``511`` from :rfc:`6585`.
 
 
 .. data:: responses
@@ -436,11 +451,25 @@ HTTPConnection Objects
 
 .. method:: HTTPConnection.set_tunnel(host, port=None, headers=None)
 
-   Set the host and the port for HTTP Connect Tunnelling. Normally used when it
-   is required to a HTTPS Connection through a proxy server.
+   Set the host and the port for HTTP Connect Tunnelling. This allows running
+   the connection through a proxy server.
 
-   The headers argument should be a mapping of extra HTTP headers to send
-   with the CONNECT request.
+   The host and port arguments specify the endpoint of the tunneled connection
+   (i.e. the address included in the CONNECT request, *not* the address of the
+   proxy server).
+
+   The headers argument should be a mapping of extra HTTP headers to send with
+   the CONNECT request.
+
+   For example, to tunnel through a HTTPS proxy server running locally on port
+   8080, we would pass the address of the proxy to the :class:`HTTPSConnection`
+   constructor, and the address of the host that we eventually want to reach to
+   the :meth:`~HTTPConnection.set_tunnel` method::
+
+      >>> import http.client
+      >>> conn = http.client.HTTPSConnection("localhost", 8080)
+      >>> conn.set_tunnel("www.python.org")
+      >>> conn.request("HEAD","/index.html")
 
    .. versionadded:: 3.2
 
@@ -506,6 +535,12 @@ statement.
 
    Reads and returns the response body, or up to the next *amt* bytes.
 
+.. method:: HTTPResponse.readinto(b)
+
+   Reads up to the next len(b) bytes of the response body into the buffer *b*.
+   Returns the number of bytes read.
+
+   .. versionadded:: 3.3
 
 .. method:: HTTPResponse.getheader(name, default=None)
 
@@ -552,7 +587,7 @@ statement.
 
 .. attribute:: HTTPResponse.closed
 
-   Is True if the stream is closed.
+   Is ``True`` if the stream is closed.
 
 Examples
 --------
@@ -614,8 +649,10 @@ Here is an example session that shows how to ``POST`` requests::
 
 Client side ``HTTP PUT`` requests are very similar to ``POST`` requests. The
 difference lies only the server side where HTTP server will allow resources to
-be created via ``PUT`` request. Here is an example session that shows how to do
-``PUT`` request using http.client::
+be created via ``PUT`` request. It should be noted that custom HTTP methods
++are also handled in :class:`urllib.request.Request` by sending the appropriate
++method attribute.Here is an example session that shows how to do ``PUT``
+request using http.client::
 
     >>> # This creates an HTTP message
     >>> # with the content of BODY as the enclosed representation
@@ -626,7 +663,7 @@ be created via ``PUT`` request. Here is an example session that shows how to do
     >>> conn = http.client.HTTPConnection("localhost", 8080)
     >>> conn.request("PUT", "/file", BODY)
     >>> response = conn.getresponse()
-    >>> print(resp.status, response.reason)
+    >>> print(response.status, response.reason)
     200, OK
 
 .. _httpmessage-objects:
