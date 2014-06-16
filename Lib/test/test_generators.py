@@ -1,3 +1,94 @@
+import gc
+import sys
+import unittest
+import weakref
+
+from test import support
+
+
+class FinalizationTest(unittest.TestCase):
+
+    def test_frame_resurrect(self):
+        # A generator frame can be resurrected by a generator's finalization.
+        def gen():
+            nonlocal frame
+            try:
+                yield
+            finally:
+                frame = sys._getframe()
+
+        g = gen()
+        wr = weakref.ref(g)
+        next(g)
+        del g
+        support.gc_collect()
+        self.assertIs(wr(), None)
+        self.assertTrue(frame)
+        del frame
+        support.gc_collect()
+
+    def test_refcycle(self):
+        # A generator caught in a refcycle gets finalized anyway.
+        old_garbage = gc.garbage[:]
+        finalized = False
+        def gen():
+            nonlocal finalized
+            try:
+                g = yield
+                yield 1
+            finally:
+                finalized = True
+
+        g = gen()
+        next(g)
+        g.send(g)
+        self.assertGreater(sys.getrefcount(g), 2)
+        self.assertFalse(finalized)
+        del g
+        support.gc_collect()
+        self.assertTrue(finalized)
+        self.assertEqual(gc.garbage, old_garbage)
+
+
+class GeneratorTest(unittest.TestCase):
+
+    def test_name(self):
+        def func():
+            yield 1
+
+        # check generator names
+        gen = func()
+        self.assertEqual(gen.__name__, "func")
+        self.assertEqual(gen.__qualname__,
+                         "GeneratorTest.test_name.<locals>.func")
+
+        # modify generator names
+        gen.__name__ = "name"
+        gen.__qualname__ = "qualname"
+        self.assertEqual(gen.__name__, "name")
+        self.assertEqual(gen.__qualname__, "qualname")
+
+        # generator names must be a string and cannot be deleted
+        self.assertRaises(TypeError, setattr, gen, '__name__', 123)
+        self.assertRaises(TypeError, setattr, gen, '__qualname__', 123)
+        self.assertRaises(TypeError, delattr, gen, '__name__')
+        self.assertRaises(TypeError, delattr, gen, '__qualname__')
+
+        # modify names of the function creating the generator
+        func.__qualname__ = "func_qualname"
+        func.__name__ = "func_name"
+        gen = func()
+        self.assertEqual(gen.__name__, "func_name")
+        self.assertEqual(gen.__qualname__, "func_qualname")
+
+        # unnamed generator
+        gen = (x for x in range(10))
+        self.assertEqual(gen.__name__,
+                         "<genexpr>")
+        self.assertEqual(gen.__qualname__,
+                         "GeneratorTest.test_name.<locals>.<genexpr>")
+
+
 tutorial_tests = """
 Let's try a simple generator:
 
