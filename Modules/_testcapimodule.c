@@ -2710,9 +2710,30 @@ test_pymem_alloc0(PyObject *self)
 {
     void *ptr;
 
+    ptr = PyMem_RawMalloc(0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyMem_RawMalloc(0) returns NULL");
+        return NULL;
+    }
+    PyMem_RawFree(ptr);
+
+    ptr = PyMem_RawCalloc(0, 0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyMem_RawCalloc(0, 0) returns NULL");
+        return NULL;
+    }
+    PyMem_RawFree(ptr);
+
     ptr = PyMem_Malloc(0);
     if (ptr == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "PyMem_Malloc(0) returns NULL");
+        return NULL;
+    }
+    PyMem_Free(ptr);
+
+    ptr = PyMem_Calloc(0, 0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyMem_Calloc(0, 0) returns NULL");
         return NULL;
     }
     PyMem_Free(ptr);
@@ -2724,13 +2745,22 @@ test_pymem_alloc0(PyObject *self)
     }
     PyObject_Free(ptr);
 
+    ptr = PyObject_Calloc(0, 0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyObject_Calloc(0, 0) returns NULL");
+        return NULL;
+    }
+    PyObject_Free(ptr);
+
     Py_RETURN_NONE;
 }
 
 typedef struct {
-    PyMemAllocator alloc;
+    PyMemAllocatorEx alloc;
 
     size_t malloc_size;
+    size_t calloc_nelem;
+    size_t calloc_elsize;
     void *realloc_ptr;
     size_t realloc_new_size;
     void *free_ptr;
@@ -2741,6 +2771,14 @@ static void* hook_malloc (void* ctx, size_t size)
     alloc_hook_t *hook = (alloc_hook_t *)ctx;
     hook->malloc_size = size;
     return hook->alloc.malloc(hook->alloc.ctx, size);
+}
+
+static void* hook_calloc (void* ctx, size_t nelem, size_t elsize)
+{
+    alloc_hook_t *hook = (alloc_hook_t *)ctx;
+    hook->calloc_nelem = nelem;
+    hook->calloc_elsize = elsize;
+    return hook->alloc.calloc(hook->alloc.ctx, nelem, elsize);
 }
 
 static void* hook_realloc (void* ctx, void* ptr, size_t new_size)
@@ -2764,17 +2802,15 @@ test_setallocators(PyMemAllocatorDomain domain)
     PyObject *res = NULL;
     const char *error_msg;
     alloc_hook_t hook;
-    PyMemAllocator alloc;
-    size_t size, size2;
+    PyMemAllocatorEx alloc;
+    size_t size, size2, nelem, elsize;
     void *ptr, *ptr2;
 
-    hook.malloc_size = 0;
-    hook.realloc_ptr = NULL;
-    hook.realloc_new_size = 0;
-    hook.free_ptr = NULL;
+    memset(&hook, 0, sizeof(hook));
 
     alloc.ctx = &hook;
     alloc.malloc = &hook_malloc;
+    alloc.calloc = &hook_calloc;
     alloc.realloc = &hook_realloc;
     alloc.free = &hook_free;
     PyMem_GetAllocator(domain, &hook.alloc);
@@ -2829,6 +2865,33 @@ test_setallocators(PyMemAllocatorDomain domain)
     if (hook.free_ptr != ptr2) {
         error_msg = "free invalid pointer";
         goto fail;
+    }
+
+    nelem = 2;
+    elsize = 5;
+    switch(domain)
+    {
+    case PYMEM_DOMAIN_RAW: ptr = PyMem_RawCalloc(nelem, elsize); break;
+    case PYMEM_DOMAIN_MEM: ptr = PyMem_Calloc(nelem, elsize); break;
+    case PYMEM_DOMAIN_OBJ: ptr = PyObject_Calloc(nelem, elsize); break;
+    default: ptr = NULL; break;
+    }
+
+    if (ptr == NULL) {
+        error_msg = "calloc failed";
+        goto fail;
+    }
+
+    if (hook.calloc_nelem != nelem || hook.calloc_elsize != elsize) {
+        error_msg = "calloc invalid nelem or elsize";
+        goto fail;
+    }
+
+    switch(domain)
+    {
+    case PYMEM_DOMAIN_RAW: PyMem_RawFree(ptr); break;
+    case PYMEM_DOMAIN_MEM: PyMem_Free(ptr); break;
+    case PYMEM_DOMAIN_OBJ: PyObject_Free(ptr); break;
     }
 
     Py_INCREF(Py_None);
@@ -3298,6 +3361,109 @@ static PyTypeObject test_structmembersType = {
 };
 
 
+typedef struct {
+    PyObject_HEAD
+} matmulObject;
+
+static PyObject *
+matmulType_matmul(PyObject *self, PyObject *other)
+{
+    return Py_BuildValue("(sOO)", "matmul", self, other);
+}
+
+static PyObject *
+matmulType_imatmul(PyObject *self, PyObject *other)
+{
+    return Py_BuildValue("(sOO)", "imatmul", self, other);
+}
+
+static void
+matmulType_dealloc(PyObject *self)
+{
+    Py_TYPE(self)->tp_free(self);
+}
+
+static PyNumberMethods matmulType_as_number = {
+    0,                          /* nb_add */
+    0,                          /* nb_subtract */
+    0,                          /* nb_multiply */
+    0,                          /* nb_remainde r*/
+    0,                          /* nb_divmod */
+    0,                          /* nb_power */
+    0,                          /* nb_negative */
+    0,                          /* tp_positive */
+    0,                          /* tp_absolute */
+    0,                          /* tp_bool */
+    0,                          /* nb_invert */
+    0,                          /* nb_lshift */
+    0,                          /* nb_rshift */
+    0,                          /* nb_and */
+    0,                          /* nb_xor */
+    0,                          /* nb_or */
+    0,                          /* nb_int */
+    0,                          /* nb_reserved */
+    0,                          /* nb_float */
+    0,                          /* nb_inplace_add */
+    0,                          /* nb_inplace_subtract */
+    0,                          /* nb_inplace_multiply */
+    0,                          /* nb_inplace_remainder */
+    0,                          /* nb_inplace_power */
+    0,                          /* nb_inplace_lshift */
+    0,                          /* nb_inplace_rshift */
+    0,                          /* nb_inplace_and */
+    0,                          /* nb_inplace_xor */
+    0,                          /* nb_inplace_or */
+    0,                          /* nb_floor_divide */
+    0,                          /* nb_true_divide */
+    0,                          /* nb_inplace_floor_divide */
+    0,                          /* nb_inplace_true_divide */
+    0,                          /* nb_index */
+    matmulType_matmul,        /* nb_matrix_multiply */
+    matmulType_imatmul        /* nb_matrix_inplace_multiply */
+};
+
+static PyTypeObject matmulType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "matmulType",
+    sizeof(matmulObject),               /* tp_basicsize */
+    0,                                  /* tp_itemsize */
+    matmulType_dealloc,                 /* destructor tp_dealloc */
+    0,                                  /* tp_print */
+    0,                                  /* tp_getattr */
+    0,                                  /* tp_setattr */
+    0,                                  /* tp_reserved */
+    0,                                  /* tp_repr */
+    &matmulType_as_number,              /* tp_as_number */
+    0,                                  /* tp_as_sequence */
+    0,                                  /* tp_as_mapping */
+    0,                                  /* tp_hash */
+    0,                                  /* tp_call */
+    0,                                  /* tp_str */
+    PyObject_GenericGetAttr,            /* tp_getattro */
+    PyObject_GenericSetAttr,            /* tp_setattro */
+    0,                                  /* tp_as_buffer */
+    0,                                  /* tp_flags */
+    "C level type with matrix operations defined",
+    0,                                  /* traverseproc tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    PyType_GenericNew,                  /* tp_new */
+    PyObject_Del,                       /* tp_free */
+};
+
 
 static struct PyModuleDef _testcapimodule = {
     PyModuleDef_HEAD_INIT,
@@ -3327,6 +3493,10 @@ PyInit__testcapi(void)
     /* don't use a name starting with "test", since we don't want
        test_capi to automatically call this */
     PyModule_AddObject(m, "_test_structmembersType", (PyObject *)&test_structmembersType);
+    if (PyType_Ready(&matmulType) < 0)
+        return NULL;
+    Py_INCREF(&matmulType);
+    PyModule_AddObject(m, "matmulType", (PyObject *)&matmulType);
 
     PyModule_AddObject(m, "CHAR_MAX", PyLong_FromLong(CHAR_MAX));
     PyModule_AddObject(m, "CHAR_MIN", PyLong_FromLong(CHAR_MIN));
