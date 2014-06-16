@@ -906,12 +906,15 @@ to sockets.
    On other platforms, the generic :func:`fcntl.fcntl` and :func:`fcntl.ioctl`
    functions may be used; they accept a socket object as their first argument.
 
-.. method:: socket.listen(backlog)
+.. method:: socket.listen([backlog])
 
-   Listen for connections made to the socket.  The *backlog* argument specifies the
-   maximum number of queued connections and should be at least 0; the maximum value
-   is system-dependent (usually 5), the minimum value is forced to 0.
+   Enable a server to accept connections.  If *backlog* is specified, it must
+   be at least 0 (if it is lower, it is set to 0); it specifies the number of
+   unaccepted connections that the system will allow before refusing new
+   connections. If not specified, a default reasonable value is chosen.
 
+   .. versionchanged:: 3.5
+      The *backlog* parameter is now optional.
 
 .. method:: socket.makefile(mode='r', buffering=None, *, encoding=None, \
                             errors=None, newline=None)
@@ -1145,6 +1148,21 @@ to sockets.
 
    .. versionadded:: 3.3
 
+.. method:: socket.sendfile(file, offset=0, count=None)
+
+   Send a file until EOF is reached by using high-performance
+   :mod:`os.sendfile` and return the total number of bytes which were sent.
+   *file* must be a regular file object opened in binary mode. If
+   :mod:`os.sendfile` is not available (e.g. Windows) or *file* is not a
+   regular file :meth:`send` will be used instead. *offset* tells from where to
+   start reading the file. If specified, *count* is the total number of bytes
+   to transmit as opposed to sending the file until EOF is reached. File
+   position is updated on return or also in case of error in which case
+   :meth:`file.tell() <io.IOBase.tell>` can be used to figure out the number of
+   bytes which were sent. The socket must be of :const:`SOCK_STREAM` type. Non-
+   blocking sockets are not supported.
+
+   .. versionadded:: 3.5
 
 .. method:: socket.set_inheritable(inheritable)
 
@@ -1444,7 +1462,7 @@ After binding (:const:`CAN_RAW`) or connecting (:const:`CAN_BCM`) the socket, yo
 can use the :meth:`socket.send`, and the :meth:`socket.recv` operations (and
 their counterparts) on the socket object as usual.
 
-This example might require special priviledge::
+This example might require special privileges::
 
    import socket
    import struct

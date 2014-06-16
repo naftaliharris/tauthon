@@ -1495,6 +1495,18 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             DISPATCH();
         }
 
+        TARGET(BINARY_MATRIX_MULTIPLY) {
+            PyObject *right = POP();
+            PyObject *left = TOP();
+            PyObject *res = PyNumber_MatrixMultiply(left, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+            SET_TOP(res);
+            if (res == NULL)
+                goto error;
+            DISPATCH();
+        }
+
         TARGET(BINARY_TRUE_DIVIDE) {
             PyObject *divisor = POP();
             PyObject *dividend = TOP();
@@ -1677,6 +1689,18 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             PyObject *right = POP();
             PyObject *left = TOP();
             PyObject *res = PyNumber_InPlaceMultiply(left, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+            SET_TOP(res);
+            if (res == NULL)
+                goto error;
+            DISPATCH();
+        }
+
+        TARGET(INPLACE_MATRIX_MULTIPLY) {
+            PyObject *right = POP();
+            PyObject *left = TOP();
+            PyObject *res = PyNumber_InPlaceMatrixMultiply(left, right);
             Py_DECREF(left);
             Py_DECREF(right);
             SET_TOP(res);
@@ -3377,10 +3401,11 @@ too_many_positional(PyCodeObject *co, int given, int defcount, PyObject **fastlo
    PyEval_EvalFrame() and PyEval_EvalCodeEx() you will need to adjust
    the test in the if statements in Misc/gdbinit (pystack and pystackv). */
 
-PyObject *
-PyEval_EvalCodeEx(PyObject *_co, PyObject *globals, PyObject *locals,
+static PyObject *
+_PyEval_EvalCodeWithName(PyObject *_co, PyObject *globals, PyObject *locals,
            PyObject **args, int argcount, PyObject **kws, int kwcount,
-           PyObject **defs, int defcount, PyObject *kwdefs, PyObject *closure)
+           PyObject **defs, int defcount, PyObject *kwdefs, PyObject *closure,
+           PyObject *name, PyObject *qualname)
 {
     PyCodeObject* co = (PyCodeObject*)_co;
     PyFrameObject *f;
@@ -3572,7 +3597,7 @@ PyEval_EvalCodeEx(PyObject *_co, PyObject *globals, PyObject *locals,
 
         /* Create a new generator that owns the ready to run frame
          * and return that as the value. */
-        return PyGen_New(f);
+        return PyGen_NewWithQualName(f, name, qualname);
     }
 
     retval = PyEval_EvalFrameEx(f,0);
@@ -3591,6 +3616,16 @@ fail: /* Jump here from prelude on failure */
     return retval;
 }
 
+PyObject *
+PyEval_EvalCodeEx(PyObject *_co, PyObject *globals, PyObject *locals,
+           PyObject **args, int argcount, PyObject **kws, int kwcount,
+           PyObject **defs, int defcount, PyObject *kwdefs, PyObject *closure)
+{
+    return _PyEval_EvalCodeWithName(_co, globals, locals,
+                                    args, argcount, kws, kwcount,
+                                    defs, defcount, kwdefs, closure,
+                                    NULL, NULL);
+}
 
 static PyObject *
 special_lookup(PyObject *o, _Py_Identifier *id)
@@ -4289,6 +4324,8 @@ fast_function(PyObject *func, PyObject ***pp_stack, int n, int na, int nk)
     PyObject *globals = PyFunction_GET_GLOBALS(func);
     PyObject *argdefs = PyFunction_GET_DEFAULTS(func);
     PyObject *kwdefs = PyFunction_GET_KW_DEFAULTS(func);
+    PyObject *name = ((PyFunctionObject *)func) -> func_name;
+    PyObject *qualname = ((PyFunctionObject *)func) -> func_qualname;
     PyObject **d = NULL;
     int nd = 0;
 
@@ -4331,10 +4368,11 @@ fast_function(PyObject *func, PyObject ***pp_stack, int n, int na, int nk)
         d = &PyTuple_GET_ITEM(argdefs, 0);
         nd = Py_SIZE(argdefs);
     }
-    return PyEval_EvalCodeEx((PyObject*)co, globals,
-                             (PyObject *)NULL, (*pp_stack)-n, na,
-                             (*pp_stack)-2*nk, nk, d, nd, kwdefs,
-                             PyFunction_GET_CLOSURE(func));
+    return _PyEval_EvalCodeWithName((PyObject*)co, globals,
+                                    (PyObject *)NULL, (*pp_stack)-n, na,
+                                    (*pp_stack)-2*nk, nk, d, nd, kwdefs,
+                                    PyFunction_GET_CLOSURE(func),
+                                    name, qualname);
 }
 
 static PyObject *
