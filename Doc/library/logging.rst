@@ -250,7 +250,7 @@ is the module's name in the Python package namespace.
    interpreted as for :meth:`debug`.
 
 
-.. method:: Logger.exception(msg, *args)
+.. method:: Logger.exception(msg, *args, **kwargs)
 
    Logs a message with level :const:`ERROR` on this logger. The arguments are
    interpreted as for :meth:`debug`. Exception info is added to the logging
@@ -992,7 +992,7 @@ functions.
    are interpreted as for :func:`debug`.
 
 
-.. function:: exception(msg, *args)
+.. function:: exception(msg, *args, **kwargs)
 
    Logs a message with level :const:`ERROR` on the root logger. The arguments are
    interpreted as for :func:`debug`. Exception info is added to the logging
@@ -1049,6 +1049,11 @@ functions.
    of the defined levels is passed in, the corresponding string representation is
    returned. Otherwise, the string 'Level %s' % lvl is returned.
 
+   .. versionchanged:: 3.4
+      In Python versions earlier than 3.4, this function could also be passed a
+      text level, and would return the corresponding numeric value of the level.
+      This undocumented behaviour was a mistake, and has been removed in Python
+      3.4.
 
 .. function:: makeLogRecord(attrdict)
 

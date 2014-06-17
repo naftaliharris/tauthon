@@ -1,4 +1,4 @@
-# Copyright 2001-2013 by Vinay Sajip. All Rights Reserved.
+# Copyright 2001-2014 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -18,12 +18,13 @@
 Logging package for Python. Based on PEP 282 and comments thereto in
 comp.lang.python.
 
-Copyright (C) 2001-2013 Vinay Sajip. All Rights Reserved.
+Copyright (C) 2001-2014 Vinay Sajip. All Rights Reserved.
 
 To use, simply 'import logging' and log away!
 """
 
-import sys, os, time, io, traceback, warnings, weakref
+import sys, os, time, io, traceback, warnings, weakref, collections
+
 from string import Template
 
 __all__ = ['BASIC_FORMAT', 'BufferingFormatter', 'CRITICAL', 'DEBUG', 'ERROR',
@@ -42,40 +43,13 @@ except ImportError: #pragma: no cover
 
 __author__  = "Vinay Sajip <vinay_sajip@red-dove.com>"
 __status__  = "production"
+# The following module attributes are no longer updated.
 __version__ = "0.5.1.2"
 __date__    = "07 February 2010"
 
 #---------------------------------------------------------------------------
 #   Miscellaneous module data
 #---------------------------------------------------------------------------
-
-#
-# _srcfile is used when walking the stack to check when we've got the first
-# caller stack frame.
-#
-if hasattr(sys, 'frozen'): #support for py2exe
-    _srcfile = "logging%s__init__%s" % (os.sep, __file__[-4:])
-else:
-    _srcfile = __file__
-_srcfile = os.path.normcase(_srcfile)
-
-
-if hasattr(sys, '_getframe'):
-    currentframe = lambda: sys._getframe(3)
-else: #pragma: no cover
-    def currentframe():
-        """Return the frame object for the caller's stack frame."""
-        try:
-            raise Exception
-        except:
-            return sys.exc_info()[2].tb_frame.f_back
-
-# _srcfile is only used in conjunction with sys._getframe().
-# To provide compatibility with older versions of Python, set _srcfile
-# to None if _getframe() is not available; this value will prevent
-# findCaller() from being called.
-#if not hasattr(sys, "_getframe"):
-#    _srcfile = None
 
 #
 #_startTime is used as the base when calculating the relative time of events
@@ -123,20 +97,22 @@ INFO = 20
 DEBUG = 10
 NOTSET = 0
 
-_levelNames = {
-    CRITICAL : 'CRITICAL',
-    ERROR : 'ERROR',
-    WARNING : 'WARNING',
-    INFO : 'INFO',
-    DEBUG : 'DEBUG',
-    NOTSET : 'NOTSET',
-    'CRITICAL' : CRITICAL,
-    'ERROR' : ERROR,
-    'WARN' : WARNING,
-    'WARNING' : WARNING,
-    'INFO' : INFO,
-    'DEBUG' : DEBUG,
-    'NOTSET' : NOTSET,
+_levelToName = {
+    CRITICAL: 'CRITICAL',
+    ERROR: 'ERROR',
+    WARNING: 'WARNING',
+    INFO: 'INFO',
+    DEBUG: 'DEBUG',
+    NOTSET: 'NOTSET',
+}
+_nameToLevel = {
+    'CRITICAL': CRITICAL,
+    'ERROR': ERROR,
+    'WARN': WARNING,
+    'WARNING': WARNING,
+    'INFO': INFO,
+    'DEBUG': DEBUG,
+    'NOTSET': NOTSET,
 }
 
 def getLevelName(level):
@@ -153,7 +129,7 @@ def getLevelName(level):
 
     Otherwise, the string "Level %s" % level is returned.
     """
-    return _levelNames.get(level, ("Level %s" % level))
+    return _levelToName.get(level, ("Level %s" % level))
 
 def addLevelName(level, levelName):
     """
@@ -163,18 +139,52 @@ def addLevelName(level, levelName):
     """
     _acquireLock()
     try:    #unlikely to cause an exception, but you never know...
-        _levelNames[level] = levelName
-        _levelNames[levelName] = level
+        _levelToName[level] = levelName
+        _nameToLevel[levelName] = level
     finally:
         _releaseLock()
+
+if hasattr(sys, '_getframe'):
+    currentframe = lambda: sys._getframe(3)
+else: #pragma: no cover
+    def currentframe():
+        """Return the frame object for the caller's stack frame."""
+        try:
+            raise Exception
+        except Exception:
+            return sys.exc_info()[2].tb_frame.f_back
+
+#
+# _srcfile is used when walking the stack to check when we've got the first
+# caller stack frame, by skipping frames whose filename is that of this
+# module's source. It therefore should contain the filename of this module's
+# source file.
+#
+# Ordinarily we would use __file__ for this, but frozen modules don't always
+# have __file__ set, for some reason (see Issue #21736). Thus, we get the
+# filename from a handy code object from a function defined in this module.
+# (There's no particular reason for picking addLevelName.)
+#
+
+_srcfile = os.path.normcase(addLevelName.__code__.co_filename)
+
+# _srcfile is only used in conjunction with sys._getframe().
+# To provide compatibility with older versions of Python, set _srcfile
+# to None if _getframe() is not available; this value will prevent
+# findCaller() from being called. You can also do this if you want to avoid
+# the overhead of fetching caller information, even when _getframe() is
+# available.
+#if not hasattr(sys, '_getframe'):
+#    _srcfile = None
+
 
 def _checkLevel(level):
     if isinstance(level, int):
         rv = level
     elif str(level) == level:
-        if level not in _levelNames:
+        if level not in _nameToLevel:
             raise ValueError("Unknown level: %r" % level)
-        rv = _levelNames[level]
+        rv = _nameToLevel[level]
     else:
         raise TypeError("Level not an integer or a valid string: %r" % level)
     return rv
@@ -250,7 +260,13 @@ class LogRecord(object):
         # 'Value is %d' instead of 'Value is 0'.
         # For the use case of passing a dictionary, this should not be a
         # problem.
-        if args and len(args) == 1 and isinstance(args[0], dict) and args[0]:
+        # Issue #21172: a request was made to relax the isinstance check
+        # to hasattr(args[0], '__getitem__'). However, the docs on string
+        # formatting still seem to suggest a mapping object is required.
+        # Thus, while not removing the isinstance check, it does now look
+        # for collections.Mapping rather than, as before, dict.
+        if (args and len(args) == 1 and isinstance(args[0], collections.Mapping)
+            and args[0]):
             args = args[0]
         self.args = args
         self.levelname = getLevelName(level)
@@ -708,16 +724,17 @@ def _removeHandlerRef(wr):
     Remove a handler reference from the internal cleanup list.
     """
     # This function can be called during module teardown, when globals are
-    # set to None. If _acquireLock is None, assume this is the case and do
-    # nothing.
-    if (_acquireLock is not None and _handlerList is not None and
-        _releaseLock is not None):
-        _acquireLock()
+    # set to None. It can also be called from another thread. So we need to
+    # pre-emptively grab the necessary globals and check if they're None,
+    # to prevent race conditions and failures during interpreter shutdown.
+    acquire, release, handlers = _acquireLock, _releaseLock, _handlerList
+    if acquire and release and handlers:
+        acquire()
         try:
-            if wr in _handlerList:
-                _handlerList.remove(wr)
+            if wr in handlers:
+                handlers.remove(wr)
         finally:
-            _releaseLock()
+            release()
 
 def _addHandlerRef(handler):
     """
@@ -882,16 +899,37 @@ class Handler(Filterer):
         The record which was being processed is passed in to this method.
         """
         if raiseExceptions and sys.stderr:  # see issue 13807
-            ei = sys.exc_info()
+            t, v, tb = sys.exc_info()
             try:
-                traceback.print_exception(ei[0], ei[1], ei[2],
-                                          None, sys.stderr)
-                sys.stderr.write('Logged from file %s, line %s\n' % (
-                                 record.filename, record.lineno))
-            except IOError: #pragma: no cover
+                sys.stderr.write('--- Logging error ---\n')
+                traceback.print_exception(t, v, tb, None, sys.stderr)
+                sys.stderr.write('Call stack:\n')
+                # Walk the stack frame up until we're out of logging,
+                # so as to print the calling context.
+                frame = tb.tb_frame
+                while (frame and os.path.dirname(frame.f_code.co_filename) ==
+                       __path__[0]):
+                    frame = frame.f_back
+                if frame:
+                    traceback.print_stack(frame, file=sys.stderr)
+                else:
+                    # couldn't find the right stack frame, for some reason
+                    sys.stderr.write('Logged from file %s, line %s\n' % (
+                                     record.filename, record.lineno))
+                # Issue 18671: output logging message and arguments
+                try:
+                    sys.stderr.write('Message: %r\n'
+                                     'Arguments: %s\n' % (record.msg,
+                                                          record.args))
+                except Exception:
+                    sys.stderr.write('Unable to print the message and arguments'
+                                     ' - possible formatting error.\nUse the'
+                                     ' traceback above to help find the error.\n'
+                                    )
+            except OSError: #pragma: no cover
                 pass    # see issue 5971
             finally:
-                del ei
+                del t, v, tb
 
 class StreamHandler(Handler):
     """
@@ -941,9 +979,7 @@ class StreamHandler(Handler):
             stream.write(msg)
             stream.write(self.terminator)
             self.flush()
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 class FileHandler(StreamHandler):
@@ -1836,7 +1872,7 @@ def shutdown(handlerList=_handlerList):
                     h.acquire()
                     h.flush()
                     h.close()
-                except (IOError, ValueError):
+                except (OSError, ValueError):
                     # Ignore errors which might be caused
                     # because handlers have been closed but
                     # references to them are still around at
@@ -1844,7 +1880,7 @@ def shutdown(handlerList=_handlerList):
                     pass
                 finally:
                     h.release()
-        except:
+        except: # ignore everything, as we're shutting down
             if raiseExceptions:
                 raise
             #else, swallow

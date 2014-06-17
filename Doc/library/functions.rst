@@ -540,8 +540,13 @@ are always available.  They are listed here in alphabetical order.
    A call to ``format(value, format_spec)`` is translated to
    ``type(value).__format__(format_spec)`` which bypasses the instance
    dictionary when searching for the value's :meth:`__format__` method.  A
-   :exc:`TypeError` exception is raised if the method is not found or if either
-   the *format_spec* or the return value are not strings.
+   :exc:`TypeError` exception is raised if the method search reaches
+   :mod:`object` and the *format_spec* is non-empty, or if either the
+   *format_spec* or the return value are not strings.
+
+   .. versionchanged:: 3.4
+      ``object().__format__(format_spec)`` raises :exc:`TypeError`
+      if *format_spec* is not an empty string.
 
 
 .. _func-frozenset:
@@ -604,6 +609,10 @@ are always available.  They are listed here in alphabetical order.
    kind of object, a help page on the object is generated.
 
    This function is added to the built-in namespace by the :mod:`site` module.
+
+   .. versionchanged:: 3.4
+      Changes to :mod:`pydoc` and :mod:`inspect` mean that the reported
+      signatures for callables are now more comprehensive and consistent.
 
 
 .. function:: hex(x)
@@ -676,6 +685,12 @@ are always available.  They are listed here in alphabetical order.
 
    The integer type is described in :ref:`typesnumeric`.
 
+   .. versionchanged:: 3.4
+      If *base* is not an instance of :class:`int` and the *base* object has a
+      :meth:`base.__index__ <object.__index__>` method, that method is called
+      to obtain an integer for the base.  Previous versions used
+      :meth:`base.__int__ <object.__int__>` instead of :meth:`base.__index__
+      <object.__index__>`.
 
 .. function:: isinstance(object, classinfo)
 
@@ -727,7 +742,8 @@ are always available.  They are listed here in alphabetical order.
 .. function:: len(s)
 
    Return the length (the number of items) of an object.  The argument may be a
-   sequence (string, tuple or list) or a mapping (dictionary).
+   sequence (such as a string, bytes, tuple, list, or range) or a collection
+   (such as a dictionary, set, or frozen set).
 
 
 .. _func-list:
@@ -758,24 +774,30 @@ are always available.  They are listed here in alphabetical order.
    already arranged into argument tuples, see :func:`itertools.starmap`\.
 
 
-.. function:: max(iterable, *[, key])
+.. function:: max(iterable, *[, key, default])
               max(arg1, arg2, *args[, key])
 
    Return the largest item in an iterable or the largest of two or more
    arguments.
 
-   If one positional argument is provided, *iterable* must be a non-empty
-   iterable (such as a non-empty string, tuple or list).  The largest item
-   in the iterable is returned.  If two or more positional arguments are
-   provided, the largest of the positional arguments is returned.
+   If one positional argument is provided, it should be an :term:`iterable`.
+   The largest item in the iterable is returned.  If two or more positional
+   arguments are provided, the largest of the positional arguments is
+   returned.
 
-   The optional keyword-only *key* argument specifies a one-argument ordering
-   function like that used for :meth:`list.sort`.
+   There are two optional keyword-only arguments. The *key* argument specifies
+   a one-argument ordering function like that used for :meth:`list.sort`. The
+   *default* argument specifies an object to return if the provided iterable is
+   empty. If the iterable is empty and *default* is not provided, a
+   :exc:`ValueError` is raised.
 
    If multiple items are maximal, the function returns the first one
    encountered.  This is consistent with other sort-stability preserving tools
    such as ``sorted(iterable, key=keyfunc, reverse=True)[0]`` and
    ``heapq.nlargest(1, iterable, key=keyfunc)``.
+
+   .. versionadded:: 3.4
+      The *default* keyword-only argument.
 
 
 .. _func-memoryview:
@@ -786,24 +808,31 @@ are always available.  They are listed here in alphabetical order.
    :ref:`typememoryview` for more information.
 
 
-.. function:: min(iterable, *[, key])
+.. function:: min(iterable, *[, key, default])
               min(arg1, arg2, *args[, key])
 
    Return the smallest item in an iterable or the smallest of two or more
    arguments.
 
-   If one positional argument is provided, *iterable* must be a non-empty
-   iterable (such as a non-empty string, tuple or list).  The smallest item
-   in the iterable is returned.  If two or more positional arguments are
-   provided, the smallest of the positional arguments is returned.
+   If one positional argument is provided, it should be an :term:`iterable`.
+   The smallest item in the iterable is returned.  If two or more positional
+   arguments are provided, the smallest of the positional arguments is
+   returned.
 
-   The optional keyword-only *key* argument specifies a one-argument ordering
-   function like that used for :meth:`list.sort`.
+   There are two optional keyword-only arguments. The *key* argument specifies
+   a one-argument ordering function like that used for :meth:`list.sort`. The
+   *default* argument specifies an object to return if the provided iterable is
+   empty. If the iterable is empty and *default* is not provided, a
+   :exc:`ValueError` is raised.
 
    If multiple items are minimal, the function returns the first one
    encountered.  This is consistent with other sort-stability preserving tools
    such as ``sorted(iterable, key=keyfunc)[0]`` and ``heapq.nsmallest(1,
    iterable, key=keyfunc)``.
+
+   .. versionadded:: 3.4
+      The *default* keyword-only argument.
+
 
 .. function:: next(iterator[, default])
 
@@ -866,8 +895,7 @@ are always available.  They are listed here in alphabetical order.
    ``'b'``   binary mode
    ``'t'``   text mode (default)
    ``'+'``   open a disk file for updating (reading and writing)
-   ``'U'``   universal newlines mode (for backwards compatibility; should
-             not be used in new code)
+   ``'U'``   :term:`universal newlines` mode (deprecated)
    ========= ===============================================================
 
    The default mode is ``'r'`` (open for reading text, synonym of ``'rt'``).
@@ -973,6 +1001,8 @@ are always available.  They are listed here in alphabetical order.
    :mod:`os.open` as *opener* results in functionality similar to passing
    ``None``).
 
+   The newly created file is :ref:`non-inheritable <fd_inheritance>`.
+
    The following example uses the :ref:`dir_fd <dir_fd>` parameter of the
    :func:`os.open` function to open a file relative to a given directory::
 
@@ -985,10 +1015,6 @@ are always available.  They are listed here in alphabetical order.
       ...     print('This will be written to somedir/spamspam.txt', file=f)
       ...
       >>> os.close(dir_fd)  # don't leak a file descriptor
-
-   .. versionchanged:: 3.3
-      The *opener* parameter was added.
-      The ``'x'`` mode was added.
 
    The type of :term:`file object` returned by the :func:`open` function
    depends on the mode.  When :func:`open` is used to open a file in a text
@@ -1016,9 +1042,17 @@ are always available.  They are listed here in alphabetical order.
    and :mod:`shutil`.
 
    .. versionchanged:: 3.3
+      The *opener* parameter was added.
+      The ``'x'`` mode was added.
       :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
       :exc:`FileExistsError` is now raised if the file opened in exclusive
       creation mode (``'x'``) already exists.
+
+   .. versionchanged:: 3.4
+      The file is now non-inheritable.
+
+   .. deprecated-removed:: 3.4 4.0
+      The ``'U'`` mode.
 
 
 .. XXX works for bytes too, but should it?

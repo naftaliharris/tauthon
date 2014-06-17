@@ -33,6 +33,17 @@ class AbstractWidgetTest:
         if not self.root.wantobjects():
             self.wantobjects = False
 
+    def tearDown(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+
+    def _str(self, value):
+        if self.wantobjects and tcl_version >= (8, 6):
+            return value
+        if isinstance(value, tuple):
+            return ' '.join(map(self._str, value))
+        return str(value)
+
     def create(self, **kwargs):
         widget = self._create(**kwargs)
         self.addCleanup(widget.destroy)
@@ -190,6 +201,16 @@ class AbstractWidgetTest:
 
     def checkVariableParam(self, widget, name, var):
         self.checkParam(widget, name, var, conv=str)
+
+    def assertIsBoundingBox(self, bbox):
+        self.assertIsNotNone(bbox)
+        self.assertIsInstance(bbox, tuple)
+        if len(bbox) != 4:
+            self.fail('Invalid bounding box: %r' % (bbox,))
+        for item in bbox:
+            if not isinstance(item, int):
+                self.fail('Invalid bounding box: %r' % (bbox,))
+                break
 
 
 class StandardOptionsTests:

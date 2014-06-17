@@ -30,7 +30,7 @@ pertaining to the last line read; nextfile() has no effect.
 
 All files are opened in text mode by default, you can override this by
 setting the mode parameter to input() or FileInput.__init__().
-If an I/O error occurs during opening or reading a file, the IOError
+If an I/O error occurs during opening or reading a file, the OSError
 exception is raised.
 
 If sys.stdin is used more than once, the second and further use will
@@ -222,6 +222,10 @@ class FileInput:
         if mode not in ('r', 'rU', 'U', 'rb'):
             raise ValueError("FileInput opening mode must be one of "
                              "'r', 'rU', 'U' and 'rb'")
+        if 'U' in mode:
+            import warnings
+            warnings.warn("'U' mode is deprecated",
+                          DeprecationWarning, 2)
         self._mode = mode
         if openhook:
             if inplace:
@@ -316,15 +320,20 @@ class FileInput:
             self._backupfilename = 0
             if self._filename == '-':
                 self._filename = '<stdin>'
-                self._file = sys.stdin
+                if 'b' in self._mode:
+                    self._file = sys.stdin.buffer
+                else:
+                    self._file = sys.stdin
                 self._isstdin = True
             else:
                 if self._inplace:
                     self._backupfilename = (
                         self._filename + (self._backup or ".bak"))
-                    try: os.unlink(self._backupfilename)
-                    except os.error: pass
-                    # The next few lines may raise IOError
+                    try:
+                        os.unlink(self._backupfilename)
+                    except OSError:
+                        pass
+                    # The next few lines may raise OSError
                     os.rename(self._filename, self._backupfilename)
                     self._file = open(self._backupfilename, self._mode)
                     try:
@@ -346,7 +355,7 @@ class FileInput:
                     self._savestdout = sys.stdout
                     sys.stdout = self._output
                 else:
-                    # This may raise IOError
+                    # This may raise OSError
                     if self._openhook:
                         self._file = self._openhook(self._filename, self._mode)
                     else:

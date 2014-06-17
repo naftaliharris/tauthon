@@ -76,6 +76,8 @@ Creating virtual environments
    without there needing to be any reference to its venv in ``PATH``.
 
 
+.. _venv-api:
+
 API
 ---
 
@@ -85,7 +87,8 @@ The high-level method described above makes use of a simple API which provides
 mechanisms for third-party virtual environment creators to customize environment
 creation according to their needs, the :class:`EnvBuilder` class.
 
-.. class:: EnvBuilder(system_site_packages=False, clear=False, symlinks=False, upgrade=False)
+.. class:: EnvBuilder(system_site_packages=False, clear=False, \
+                      symlinks=False, upgrade=False, with_pip=False)
 
     The :class:`EnvBuilder` class accepts the following keyword arguments on
     instantiation:
@@ -93,8 +96,8 @@ creation according to their needs, the :class:`EnvBuilder` class.
     * ``system_site_packages`` -- a Boolean value indicating that the system Python
       site-packages should be available to the environment (defaults to ``False``).
 
-    * ``clear`` -- a Boolean value which, if true, will delete any existing target
-      directory instead of raising an exception (defaults to ``False``).
+    * ``clear`` -- a Boolean value which, if true, will delete the contents of
+      any existing target directory, before creating the environment.
 
     * ``symlinks`` -- a Boolean value indicating whether to attempt to symlink the
       Python binary (and any necessary DLLs or other binaries,
@@ -105,6 +108,12 @@ creation according to their needs, the :class:`EnvBuilder` class.
       environment with the running Python - for use when that Python has been
       upgraded in-place (defaults to ``False``).
 
+    * ``with_pip`` -- a Boolean value which, if true, ensures pip is
+      installed in the virtual environment. This uses :mod:`ensurepip` with
+      the ``--default-pip`` option.
+
+    .. versionchanged:: 3.4
+       Added the ``with_pip`` parameter
 
 
     Creators of third-party virtual environment tools will be free to use the
@@ -188,6 +197,9 @@ creation according to their needs, the :class:`EnvBuilder` class.
         * ``__VENV_NAME__`` is replaced with the environment name (final path
           segment of environment directory).
 
+        * ``__VENV_PROMPT__`` is replaced with the prompt (the environment
+          name surrounded by parentheses and with a following space)
+
         * ``__VENV_BIN_NAME__`` is replaced with the name of the bin directory
           (either ``bin`` or ``Scripts``).
 
@@ -199,10 +211,14 @@ creation according to their needs, the :class:`EnvBuilder` class.
 
 There is also a module-level convenience function:
 
-.. function:: create(env_dir, system_site_packages=False, clear=False, symlinks=False)
+.. function:: create(env_dir, system_site_packages=False, clear=False, \
+                     symlinks=False, with_pip=False)
 
     Create an :class:`EnvBuilder` with the given keyword arguments, and call its
     :meth:`~EnvBuilder.create` method with the *env_dir* argument.
+
+    .. versionchanged:: 3.4
+       Added the ``with_pip`` parameter
 
 An example of extending ``EnvBuilder``
 --------------------------------------

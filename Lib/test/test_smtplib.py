@@ -222,7 +222,7 @@ class DebuggingServerTests(unittest.TestCase):
             self.assertEqual(smtp.source_address, ('127.0.0.1', port))
             self.assertEqual(smtp.local_hostname, 'localhost')
             smtp.quit()
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.EADDRINUSE:
                 self.skipTest("couldn't bind to port %d" % port)
             raise
@@ -524,12 +524,6 @@ class DebuggingServerTests(unittest.TestCase):
 
 class NonConnectingTests(unittest.TestCase):
 
-    def setUp(self):
-        smtplib.socket = mock_socket
-
-    def tearDown(self):
-        smtplib.socket = socket
-
     def testNotConnected(self):
         # Test various operations on an unconnected SMTP object that
         # should raise exceptions (at present the attempt in SMTP.send
@@ -541,10 +535,10 @@ class NonConnectingTests(unittest.TestCase):
                           smtp.send, 'test msg')
 
     def testNonnumericPort(self):
-        # check that non-numeric port raises socket.error
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        # check that non-numeric port raises OSError
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost", "bogus")
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost:bogus")
 
 
@@ -625,6 +619,7 @@ class SimSMTPChannel(smtpd.SMTPChannel):
     data_response = None
     rcpt_count = 0
     rset_count = 0
+    disconnect = 0
 
     def __init__(self, extra_features, *args, **kw):
         self._extrafeatures = ''.join(
@@ -690,6 +685,8 @@ class SimSMTPChannel(smtpd.SMTPChannel):
             super().smtp_MAIL(arg)
         else:
             self.push(self.mail_response)
+            if self.disconnect:
+                self.close_when_done()
 
     def smtp_RCPT(self, arg):
         if self.rcpt_response is None:
@@ -852,6 +849,15 @@ class SMTPSimTests(unittest.TestCase):
             self.assertIn(sim_auth_credentials['cram-md5'], str(err))
         smtp.close()
 
+    def testAUTH_multiple(self):
+        # Test that multiple authentication methods are tried.
+        self.serv.add_feature("AUTH BOGUS PLAIN LOGIN CRAM-MD5")
+        smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
+        try: smtp.login(sim_auth[0], sim_auth[1])
+        except smtplib.SMTPAuthenticationError as err:
+            self.assertIn(sim_auth_login_password, str(err))
+        smtp.close()
+
     def test_with_statement(self):
         with smtplib.SMTP(HOST, self.port) as smtp:
             code, message = smtp.noop()
@@ -871,6 +877,16 @@ class SMTPSimTests(unittest.TestCase):
 
     #TODO: add tests for correct AUTH method fallback now that the
     #test infrastructure can support it.
+
+    # Issue 17498: make sure _rset does not raise SMTPServerDisconnected exception
+    def test__rest_from_mail_cmd(self):
+        smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
+        smtp.noop()
+        self.serv._SMTPchannel.mail_response = '451 Requested action aborted'
+        self.serv._SMTPchannel.disconnect = True
+        with self.assertRaises(smtplib.SMTPSenderRefused):
+            smtp.sendmail('John', 'Sally', 'test message')
+        self.assertIsNone(smtp.sock)
 
     # Issue 5713: make sure close, not rset, is called if we get a 421 error
     def test_421_from_mail_cmd(self):

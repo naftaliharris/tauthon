@@ -15,9 +15,6 @@ try:
 except ImportError:
     threading = None
 
-if sys.platform in ('os2', 'riscos'):
-    raise unittest.SkipTest("Can't test signal on %s" % sys.platform)
-
 
 class HandlerBCalled(Exception):
     pass
@@ -36,7 +33,7 @@ def exit_subprocess():
 def ignoring_eintr(__func, *args, **kwargs):
     try:
         return __func(*args, **kwargs)
-    except EnvironmentError as e:
+    except OSError as e:
         if e.errno != errno.EINTR:
             raise
         return None
@@ -278,6 +275,57 @@ class WakeupSignalTests(unittest.TestCase):
 
         assert_python_ok('-c', code)
 
+    def test_wakeup_write_error(self):
+        # Issue #16105: write() errors in the C signal handler should not
+        # pass silently.
+        # Use a subprocess to have only one thread.
+        code = """if 1:
+        import errno
+        import fcntl
+        import os
+        import signal
+        import sys
+        import time
+        from test.support import captured_stderr
+
+        def handler(signum, frame):
+            1/0
+
+        signal.signal(signal.SIGALRM, handler)
+        r, w = os.pipe()
+        flags = fcntl.fcntl(r, fcntl.F_GETFL, 0)
+        fcntl.fcntl(r, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        # Set wakeup_fd a read-only file descriptor to trigger the error
+        signal.set_wakeup_fd(r)
+        try:
+            with captured_stderr() as err:
+                signal.alarm(1)
+                time.sleep(5.0)
+        except ZeroDivisionError:
+            # An ignored exception should have been printed out on stderr
+            err = err.getvalue()
+            if ('Exception ignored when trying to write to the signal wakeup fd'
+                not in err):
+                raise AssertionError(err)
+            if ('OSError: [Errno %d]' % errno.EBADF) not in err:
+                raise AssertionError(err)
+        else:
+            raise AssertionError("ZeroDivisionError not raised")
+        """
+        r, w = os.pipe()
+        try:
+            os.write(r, b'x')
+        except OSError:
+            pass
+        else:
+            self.skipTest("OS doesn't report write() error on the read end of a pipe")
+        finally:
+            os.close(r)
+            os.close(w)
+
+        assert_python_ok('-c', code)
+
     def test_wakeup_fd_early(self):
         self.check_wakeup("""def test():
             import select
@@ -315,10 +363,10 @@ class WakeupSignalTests(unittest.TestCase):
             # We attempt to get a signal during the select call
             try:
                 select.select([read], [], [], TIMEOUT_FULL)
-            except select.error:
+            except OSError:
                 pass
             else:
-                raise Exception("select.error not raised")
+                raise Exception("OSError not raised")
             after_time = time.time()
             dt = after_time - before_time
             if dt >= TIMEOUT_HALF:
@@ -406,7 +454,7 @@ class SiginterruptTest(unittest.TestCase):
                 stdout = first_line + stdout
                 exitcode = process.wait()
                 if exitcode not in (2, 3):
-                    raise Exception("Child error (exit code %s): %s"
+                    raise Exception("Child error (exit code %s): %r"
                                     % (exitcode, stdout))
                 return (exitcode == 3)
 

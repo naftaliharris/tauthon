@@ -31,7 +31,7 @@
                || c == '_'\
                || (c >= 128))
 
-extern char *PyOS_Readline(FILE *, FILE *, char *);
+extern char *PyOS_Readline(FILE *, FILE *, const char *);
 /* Return malloc'ed string including trailing \n;
    empty malloc'ed string for EOF;
    NULL if interrupted */
@@ -47,7 +47,7 @@ static void tok_backup(struct tok_state *tok, int c);
 
 /* Token names */
 
-char *_PyParser_TokenNames[] = {
+const char *_PyParser_TokenNames[] = {
     "ENDMARKER",
     "NAME",
     "NUMBER",
@@ -691,7 +691,8 @@ translate_into_utf8(const char* str, const char* enc) {
 
 static char *
 translate_newlines(const char *s, int exec_input, struct tok_state *tok) {
-    int skip_next_lf = 0, needed_length = strlen(s) + 2, final_length;
+    int skip_next_lf = 0;
+    size_t needed_length = strlen(s) + 2, final_length;
     char *buf, *current;
     char c = '\0';
     buf = PyMem_MALLOC(needed_length);
@@ -799,7 +800,7 @@ PyTokenizer_FromString(const char *str, int exec_input)
     struct tok_state *tok = tok_new();
     if (tok == NULL)
         return NULL;
-    str = (char *)decode_str(str, exec_input, tok);
+    str = decode_str(str, exec_input, tok);
     if (str == NULL) {
         PyTokenizer_Free(tok);
         return NULL;
@@ -842,7 +843,8 @@ PyTokenizer_FromUTF8(const char *str, int exec_input)
 /* Set up tokenizer for file */
 
 struct tok_state *
-PyTokenizer_FromFile(FILE *fp, char* enc, char *ps1, char *ps2)
+PyTokenizer_FromFile(FILE *fp, const char* enc,
+                     const char *ps1, const char *ps2)
 {
     struct tok_state *tok = tok_new();
     if (tok == NULL)
@@ -893,7 +895,7 @@ PyTokenizer_Free(struct tok_state *tok)
 /* Get next char, updating state; error code goes into tok->done */
 
 static int
-tok_nextc(register struct tok_state *tok)
+tok_nextc(struct tok_state *tok)
 {
     for (;;) {
         if (tok->cur != tok->inp) {
@@ -1090,7 +1092,7 @@ tok_nextc(register struct tok_state *tok)
 /* Back-up one character */
 
 static void
-tok_backup(register struct tok_state *tok, register int c)
+tok_backup(struct tok_state *tok, int c)
 {
     if (c != EOF) {
         if (--tok->cur < tok->buf)
@@ -1320,9 +1322,9 @@ verify_identifier(struct tok_state *tok)
 /* Get next token, after space stripping etc. */
 
 static int
-tok_get(register struct tok_state *tok, char **p_start, char **p_end)
+tok_get(struct tok_state *tok, char **p_start, char **p_end)
 {
-    register int c;
+    int c;
     int blankline, nonascii;
 
     *p_start = *p_end = NULL;
@@ -1332,8 +1334,8 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
 
     /* Get indentation level */
     if (tok->atbol) {
-        register int col = 0;
-        register int altcol = 0;
+        int col = 0;
+        int altcol = 0;
         tok->atbol = 0;
         for (;;) {
             c = tok_nextc(tok);
@@ -1595,15 +1597,24 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                     } while (isdigit(c));
                 }
                 if (c == 'e' || c == 'E') {
-        exponent:
+                    int e;
+                  exponent:
+                    e = c;
                     /* Exponent part */
                     c = tok_nextc(tok);
-                    if (c == '+' || c == '-')
+                    if (c == '+' || c == '-') {
                         c = tok_nextc(tok);
-                    if (!isdigit(c)) {
-                        tok->done = E_TOKEN;
+                        if (!isdigit(c)) {
+                            tok->done = E_TOKEN;
+                            tok_backup(tok, c);
+                            return ERRORTOKEN;
+                        }
+                    } else if (!isdigit(c)) {
                         tok_backup(tok, c);
-                        return ERRORTOKEN;
+                        tok_backup(tok, e);
+                        *p_start = tok->start;
+                        *p_end = tok->cur;
+                        return NUMBER;
                     }
                     do {
                         c = tok_nextc(tok);
@@ -1749,10 +1760,15 @@ PyTokenizer_FindEncodingFilename(int fd, PyObject *filename)
     FILE *fp;
     char *p_start =NULL , *p_end =NULL , *encoding = NULL;
 
+#ifndef PGEN
+    fd = _Py_dup(fd);
+#else
     fd = dup(fd);
+#endif
     if (fd < 0) {
         return NULL;
     }
+
     fp = fdopen(fd, "r");
     if (fp == NULL) {
         return NULL;
