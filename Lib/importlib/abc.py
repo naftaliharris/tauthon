@@ -126,7 +126,7 @@ class Loader(metaclass=abc.ABCMeta):
         create_module() is optional.
 
         """
-        # By default, defer to _SpecMethods.create() for the new module.
+        # By default, defer to default semantics for the new module.
         return None
 
     # We don't define exec_module() here since that would break
@@ -217,7 +217,8 @@ class InspectLoader(Loader):
         """
         raise ImportError
 
-    def source_to_code(self, data, path='<string>'):
+    @staticmethod
+    def source_to_code(data, path='<string>'):
         """Compile 'data' into a code object.
 
         The 'data' argument can be anything that compile() can handle. The'path'
