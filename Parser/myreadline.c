@@ -35,12 +35,11 @@ int (*PyOS_InputHook)(void) = NULL;
 static int
 my_fgets(char *buf, int len, FILE *fp)
 {
+#ifdef MS_WINDOWS
+    HANDLE hInterruptEvent;
+#endif
     char *p;
     int err;
-#ifdef MS_WINDOWS
-    int i;
-#endif
-
     while (1) {
         if (PyOS_InputHook != NULL)
             (void)(PyOS_InputHook)();
@@ -57,20 +56,24 @@ my_fgets(char *buf, int len, FILE *fp)
         /* Ctrl-C anywhere on the line or Ctrl-Z if the only character
            on a line will set ERROR_OPERATION_ABORTED. Under normal
            circumstances Ctrl-C will also have caused the SIGINT handler
-           to fire. This signal fires in another thread and is not
-           guaranteed to have occurred before this point in the code.
+           to fire which will have set the event object returned by
+           _PyOS_SigintEvent. This signal fires in another thread and
+           is not guaranteed to have occurred before this point in the
+           code.
 
-           Therefore: check in a small loop to see if the trigger has
-           fired, in which case assume this is a Ctrl-C event. If it
-           hasn't fired within 10ms assume that this is a Ctrl-Z on its
-           own or that the signal isn't going to fire for some other
-           reason and drop through to check for EOF.
+           Therefore: check whether the event is set with a small timeout.
+           If it is, assume this is a Ctrl-C and reset the event. If it
+           isn't set assume that this is a Ctrl-Z on its own and drop
+           through to check for EOF.
         */
         if (GetLastError()==ERROR_OPERATION_ABORTED) {
-            for (i = 0; i < 10; i++) {
-                if (PyOS_InterruptOccurred())
-                    return 1;
-            Sleep(1);
+            hInterruptEvent = _PyOS_SigintEvent();
+            switch (WaitForSingleObject(hInterruptEvent, 10)) {
+            case WAIT_OBJECT_0:
+                ResetEvent(hInterruptEvent);
+                return 1; /* Interrupt */
+            case WAIT_FAILED:
+                return -2; /* Error */
             }
         }
 #endif /* MS_WINDOWS */
@@ -90,7 +93,7 @@ my_fgets(char *buf, int len, FILE *fp)
 #endif
             if (s < 0)
                     return 1;
-	    /* try again */
+        /* try again */
             continue;
         }
 #endif
@@ -109,7 +112,7 @@ char *
 PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
 {
     size_t n;
-    char *p;
+    char *p, *pr;
     n = 100;
     if ((p = (char *)PyMem_MALLOC(n)) == NULL)
         return NULL;
@@ -132,17 +135,29 @@ PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
     n = strlen(p);
     while (n > 0 && p[n-1] != '\n') {
         size_t incr = n+2;
-        p = (char *)PyMem_REALLOC(p, n + incr);
-        if (p == NULL)
-            return NULL;
         if (incr > INT_MAX) {
+            PyMem_FREE(p);
             PyErr_SetString(PyExc_OverflowError, "input line too long");
+            return NULL;
         }
+        pr = (char *)PyMem_REALLOC(p, n + incr);
+        if (pr == NULL) {
+            PyMem_FREE(p);
+            PyErr_NoMemory();
+            return NULL;
+        }
+        p = pr;
         if (my_fgets(p+n, (int)incr, sys_stdin) != 0)
             break;
         n += strlen(p+n);
     }
-    return (char *)PyMem_REALLOC(p, n+1);
+    pr = (char *)PyMem_REALLOC(p, n+1);
+    if (pr == NULL) {
+        PyMem_FREE(p);
+        PyErr_NoMemory();
+        return NULL;
+    }
+    return pr;
 }
 
 

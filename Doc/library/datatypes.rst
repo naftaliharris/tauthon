@@ -21,11 +21,10 @@ The following modules are documented in this chapter:
    datetime.rst
    calendar.rst
    collections.rst
+   collections.abc.rst
    heapq.rst
    bisect.rst
    array.rst
-   sched.rst
-   queue.rst
    weakref.rst
    types.rst
    copy.rst
