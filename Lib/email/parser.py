@@ -4,19 +4,18 @@
 
 """A parser of RFC 2822 and MIME email messages."""
 
-__all__ = ['Parser', 'HeaderParser', 'BytesParser', 'BytesHeaderParser']
+__all__ = ['Parser', 'HeaderParser', 'BytesParser', 'BytesHeaderParser',
+           'FeedParser', 'BytesFeedParser']
 
-import warnings
 from io import StringIO, TextIOWrapper
 
 from email.feedparser import FeedParser, BytesFeedParser
-from email.message import Message
 from email._policybase import compat32
 
 
 
 class Parser:
-    def __init__(self, _class=Message, *, policy=compat32):
+    def __init__(self, _class=None, *, policy=compat32):
         """Parser of RFC 2822 and MIME email messages.
 
         Creates an in-memory object tree representing the email message, which

@@ -126,8 +126,7 @@ PyDoc_STRVAR(open_doc,
 "'b'       binary mode\n"
 "'t'       text mode (default)\n"
 "'+'       open a disk file for updating (reading and writing)\n"
-"'U'       universal newline mode (for backwards compatibility; unneeded\n"
-"          for new code)\n"
+"'U'       universal newline mode (deprecated)\n"
 "========= ===============================================================\n"
 "\n"
 "The default mode is 'rt' (open for reading text). For binary random\n"
@@ -142,6 +141,10 @@ PyDoc_STRVAR(open_doc,
 "'t' is appended to the mode argument), the contents of the file are\n"
 "returned as strings, the bytes having been first decoded using a\n"
 "platform-dependent encoding or using the specified encoding if given.\n"
+"\n"
+"'U' mode is deprecated and will raise an exception in future versions\n"
+"of Python.  It has no effect in Python 3.  Use newline to control\n"
+"universal newlines mode.\n"
 "\n"
 "buffering is an optional integer used to set the buffering policy.\n"
 "Pass 0 to switch buffering off (only allowed in binary mode), 1 to select\n"
@@ -232,11 +235,12 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
     char rawmode[6], *m;
     int line_buffering, isatty;
 
-    PyObject *raw, *modeobj = NULL, *buffer = NULL, *wrapper = NULL;
+    PyObject *raw, *modeobj = NULL, *buffer, *wrapper, *result = NULL;
 
     _Py_IDENTIFIER(isatty);
     _Py_IDENTIFIER(fileno);
     _Py_IDENTIFIER(mode);
+    _Py_IDENTIFIER(close);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|sizzziO:open", kwlist,
                                      &file, &mode, &buffering,
@@ -310,6 +314,9 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
                             "can't use U and writing mode at once");
             return NULL;
         }
+        if (PyErr_WarnEx(PyExc_DeprecationWarning,
+                         "'U' mode is deprecated", 1) < 0)
+            return NULL;
         reading = 1;
     }
 
@@ -348,6 +355,7 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
                                 "OsiO", file, rawmode, closefd, opener);
     if (raw == NULL)
         return NULL;
+    result = raw;
 
     modeobj = PyUnicode_FromString(mode);
     if (modeobj == NULL)
@@ -406,7 +414,7 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         }
 
         Py_DECREF(modeobj);
-        return raw;
+        return result;
     }
 
     /* wraps into a buffered file */
@@ -427,15 +435,16 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
 
         buffer = PyObject_CallFunction(Buffered_class, "Oi", raw, buffering);
     }
-    Py_CLEAR(raw);
     if (buffer == NULL)
         goto error;
+    result = buffer;
+    Py_DECREF(raw);
 
 
     /* if binary, returns the buffered file */
     if (binary) {
         Py_DECREF(modeobj);
-        return buffer;
+        return result;
     }
 
     /* wraps into a TextIOWrapper */
@@ -444,20 +453,35 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
 				    buffer,
 				    encoding, errors, newline,
 				    line_buffering);
-    Py_CLEAR(buffer);
     if (wrapper == NULL)
         goto error;
+    result = wrapper;
+    Py_DECREF(buffer);
 
     if (_PyObject_SetAttrId(wrapper, &PyId_mode, modeobj) < 0)
         goto error;
     Py_DECREF(modeobj);
-    return wrapper;
+    return result;
 
   error:
-    Py_XDECREF(raw);
+    if (result != NULL) {
+        PyObject *exc, *val, *tb;
+        PyErr_Fetch(&exc, &val, &tb);
+        if (_PyObject_CallMethodId(result, &PyId_close, NULL) != NULL)
+            PyErr_Restore(exc, val, tb);
+        else {
+            PyObject *exc2, *val2, *tb2;
+            PyErr_Fetch(&exc2, &val2, &tb2);
+            PyErr_NormalizeException(&exc, &val, &tb);
+            Py_XDECREF(exc);
+            Py_XDECREF(tb);
+            PyErr_NormalizeException(&exc2, &val2, &tb2);
+            PyException_SetContext(val2, val);
+            PyErr_Restore(exc2, val2, tb2);
+        }
+        Py_DECREF(result);
+    }
     Py_XDECREF(modeobj);
-    Py_XDECREF(buffer);
-    Py_XDECREF(wrapper);
     return NULL;
 }
 
@@ -530,6 +554,45 @@ _PyIO_ConvertSsize_t(PyObject *obj, void *result) {
     }
     *((Py_ssize_t *)result) = limit;
     return 1;
+}
+
+
+_PyIO_State *
+_PyIO_get_module_state(void)
+{
+    PyObject *mod = PyState_FindModule(&_PyIO_Module);
+    _PyIO_State *state;
+    if (mod == NULL || (state = IO_MOD_STATE(mod)) == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "could not find io module state "
+                        "(interpreter shutdown?)");
+        return NULL;
+    }
+    return state;
+}
+
+PyObject *
+_PyIO_get_locale_module(_PyIO_State *state)
+{
+    PyObject *mod;
+    if (state->locale_module != NULL) {
+        assert(PyWeakref_CheckRef(state->locale_module));
+        mod = PyWeakref_GET_OBJECT(state->locale_module);
+        if (mod != Py_None) {
+            Py_INCREF(mod);
+            return mod;
+        }
+        Py_CLEAR(state->locale_module);
+    }
+    mod = PyImport_ImportModule("_bootlocale");
+    if (mod == NULL)
+        return NULL;
+    state->locale_module = PyWeakref_NewRef(mod, NULL);
+    if (state->locale_module == NULL) {
+        Py_DECREF(mod);
+        return NULL;
+    }
+    return mod;
 }
 
 

@@ -133,6 +133,50 @@ class TclTest(unittest.TestCase):
         tcl = self.interp
         self.assertRaises(TclError,tcl.unsetvar,'a')
 
+    def test_getint(self):
+        tcl = self.interp.tk
+        self.assertEqual(tcl.getint(' 42 '), 42)
+        self.assertEqual(tcl.getint(42), 42)
+        self.assertRaises(TypeError, tcl.getint)
+        self.assertRaises(TypeError, tcl.getint, '42', '10')
+        self.assertRaises(TypeError, tcl.getint, b'42')
+        self.assertRaises(TypeError, tcl.getint, 42.0)
+        self.assertRaises(TclError, tcl.getint, 'a')
+        self.assertRaises((TypeError, ValueError, TclError),
+                          tcl.getint, '42\0')
+        self.assertRaises((UnicodeEncodeError, ValueError, TclError),
+                          tcl.getint, '42\ud800')
+
+    def test_getdouble(self):
+        tcl = self.interp.tk
+        self.assertEqual(tcl.getdouble(' 42 '), 42.0)
+        self.assertEqual(tcl.getdouble(' 42.5 '), 42.5)
+        self.assertEqual(tcl.getdouble(42.5), 42.5)
+        self.assertRaises(TypeError, tcl.getdouble)
+        self.assertRaises(TypeError, tcl.getdouble, '42.5', '10')
+        self.assertRaises(TypeError, tcl.getdouble, b'42.5')
+        self.assertRaises(TypeError, tcl.getdouble, 42)
+        self.assertRaises(TclError, tcl.getdouble, 'a')
+        self.assertRaises((TypeError, ValueError, TclError),
+                          tcl.getdouble, '42.5\0')
+        self.assertRaises((UnicodeEncodeError, ValueError, TclError),
+                          tcl.getdouble, '42.5\ud800')
+
+    def test_getboolean(self):
+        tcl = self.interp.tk
+        self.assertIs(tcl.getboolean('on'), True)
+        self.assertIs(tcl.getboolean('1'), True)
+        self.assertEqual(tcl.getboolean(42), 42)
+        self.assertRaises(TypeError, tcl.getboolean)
+        self.assertRaises(TypeError, tcl.getboolean, 'on', '1')
+        self.assertRaises(TypeError, tcl.getboolean, b'on')
+        self.assertRaises(TypeError, tcl.getboolean, 1.0)
+        self.assertRaises(TclError, tcl.getboolean, 'a')
+        self.assertRaises((TypeError, ValueError, TclError),
+                          tcl.getboolean, 'on\0')
+        self.assertRaises((UnicodeEncodeError, ValueError, TclError),
+                          tcl.getboolean, 'on\ud800')
+
     def testEvalFile(self):
         tcl = self.interp
         with open(support.TESTFN, 'w') as f:
@@ -504,40 +548,6 @@ class TclTest(unittest.TestCase):
         for arg, res in testcases:
             self.assertEqual(split(arg), res, msg=arg)
 
-    def test_merge(self):
-        with support.check_warnings(('merge is deprecated',
-                                     DeprecationWarning)):
-            merge = self.interp.tk.merge
-            call = self.interp.tk.call
-            testcases = [
-                ((), ''),
-                (('a',), 'a'),
-                ((2,), '2'),
-                (('',), '{}'),
-                ('{', '\\{'),
-                (('a', 'b', 'c'), 'a b c'),
-                ((' ', '\t', '\r', '\n'), '{ } {\t} {\r} {\n}'),
-                (('a', ' ', 'c'), 'a { } c'),
-                (('a', '€'), 'a €'),
-                (('a', '\U000104a2'), 'a \U000104a2'),
-                (('a', b'\xe2\x82\xac'), 'a €'),
-                (('a', ('b', 'c')), 'a {b c}'),
-                (('a', 2), 'a 2'),
-                (('a', 3.4), 'a 3.4'),
-                (('a', (2, 3.4)), 'a {2 3.4}'),
-                ((), ''),
-                ((call('list', 1, '2', (3.4,)),), '{1 2 3.4}'),
-            ]
-            if tcl_version >= (8, 5):
-                testcases += [
-                    ((call('dict', 'create', 12, '\u20ac', b'\xe2\x82\xac', (3.4,)),),
-                     '{12 € € 3.4}'),
-                ]
-            for args, res in testcases:
-                self.assertEqual(merge(*args), res, msg=args)
-            self.assertRaises(UnicodeDecodeError, merge, b'\x80')
-            self.assertRaises(UnicodeEncodeError, merge, '\udc80')
-
 
 class BigmemTclTest(unittest.TestCase):
 
@@ -547,9 +557,34 @@ class BigmemTclTest(unittest.TestCase):
     @support.cpython_only
     @unittest.skipUnless(INT_MAX < PY_SSIZE_T_MAX, "needs UINT_MAX < SIZE_MAX")
     @support.bigmemtest(size=INT_MAX + 1, memuse=5, dry_run=False)
-    def test_huge_string(self, size):
+    def test_huge_string_call(self, size):
         value = ' ' * size
         self.assertRaises(OverflowError, self.interp.call, 'set', '_', value)
+
+    @support.cpython_only
+    @unittest.skipUnless(INT_MAX < PY_SSIZE_T_MAX, "needs UINT_MAX < SIZE_MAX")
+    @support.bigmemtest(size=INT_MAX + 1, memuse=9, dry_run=False)
+    def test_huge_string_builtins(self, size):
+        value = '1' + ' ' * size
+        self.assertRaises(OverflowError, self.interp.tk.getint, value)
+        self.assertRaises(OverflowError, self.interp.tk.getdouble, value)
+        self.assertRaises(OverflowError, self.interp.tk.getboolean, value)
+        self.assertRaises(OverflowError, self.interp.eval, value)
+        self.assertRaises(OverflowError, self.interp.evalfile, value)
+        self.assertRaises(OverflowError, self.interp.record, value)
+        self.assertRaises(OverflowError, self.interp.adderrorinfo, value)
+        self.assertRaises(OverflowError, self.interp.setvar, value, 'x', 'a')
+        self.assertRaises(OverflowError, self.interp.setvar, 'x', value, 'a')
+        self.assertRaises(OverflowError, self.interp.unsetvar, value)
+        self.assertRaises(OverflowError, self.interp.unsetvar, 'x', value)
+        self.assertRaises(OverflowError, self.interp.adderrorinfo, value)
+        self.assertRaises(OverflowError, self.interp.exprstring, value)
+        self.assertRaises(OverflowError, self.interp.exprlong, value)
+        self.assertRaises(OverflowError, self.interp.exprboolean, value)
+        self.assertRaises(OverflowError, self.interp.splitlist, value)
+        self.assertRaises(OverflowError, self.interp.split, value)
+        self.assertRaises(OverflowError, self.interp.createcommand, value, max)
+        self.assertRaises(OverflowError, self.interp.deletecommand, value)
 
 
 def setUpModule():

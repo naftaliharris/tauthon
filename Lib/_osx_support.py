@@ -38,7 +38,7 @@ def _find_executable(executable, path=None):
     paths = path.split(os.pathsep)
     base, ext = os.path.splitext(executable)
 
-    if (sys.platform == 'win32' or os.name == 'os2') and (ext != '.exe'):
+    if (sys.platform == 'win32') and (ext != '.exe'):
         executable = executable + '.exe'
 
     if not os.path.isfile(executable):
@@ -94,7 +94,7 @@ def _get_system_version():
         _SYSTEM_VERSION = ''
         try:
             f = open('/System/Library/CoreServices/SystemVersion.plist')
-        except IOError:
+        except OSError:
             # We're on a plain darwin box, fall back to the default
             # behaviour.
             pass
@@ -182,7 +182,7 @@ def _find_appropriate_compiler(_config_vars):
         # Compiler is GCC, check if it is LLVM-GCC
         data = _read_output("'%s' --version"
                              % (cc.replace("'", "'\"'\"'"),))
-        if 'llvm-gcc' in data:
+        if data and 'llvm-gcc' in data:
             # Found LLVM-GCC, fall back to clang
             cc = _find_build_tool('clang')
 

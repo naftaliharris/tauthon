@@ -12,10 +12,11 @@ always available.
 
 .. data:: abiflags
 
-   On POSIX systems where Python is build with the standard ``configure``
+   On POSIX systems where Python was built with the standard ``configure``
    script, this contains the ABI flags as specified by :pep:`3149`.
 
    .. versionadded:: 3.2
+
 
 .. data:: argv
 
@@ -382,6 +383,21 @@ always available.
    .. versionadded:: 3.1
 
 
+.. function:: getallocatedblocks()
+
+   Return the number of memory blocks currently allocated by the interpreter,
+   regardless of their size.  This function is mainly useful for tracking
+   and debugging memory leaks.  Because of the interpreter's internal
+   caches, the result can vary from call to call; you may have to call
+   :func:`_clear_type_cache()` and :func:`gc.collect()` to get more
+   predictable results.
+
+   If a Python build or implementation cannot reasonably compute this
+   information, :func:`getallocatedblocks()` is allowed to return 0 instead.
+
+   .. versionadded:: 3.4
+
+
 .. function:: getcheckinterval()
 
    Return the interpreter's "check interval"; see :func:`setcheckinterval`.
@@ -398,9 +414,10 @@ always available.
 
 .. function:: getdlopenflags()
 
-   Return the current value of the flags that are used for :c:func:`dlopen` calls.
-   The flag constants are defined in the :mod:`ctypes` and :mod:`DLFCN` modules.
-   Availability: Unix.
+   Return the current value of the flags that are used for
+   :c:func:`dlopen` calls.  Symbolic names for the flag values can be
+   found in the :mod:`os` module (``RTLD_xxx`` constants, e.g.
+   :data:`os.RTLD_LAZY`).  Availability: Unix.
 
 
 .. function:: getfilesystemencoding()
@@ -579,8 +596,19 @@ always available.
    | :const:`imag`       | multiplier used for the imaginary part of a      |
    |                     | complex number                                   |
    +---------------------+--------------------------------------------------+
+   | :const:`algorithm`  | name of the algorithm for hashing of str, bytes, |
+   |                     | and memoryview                                   |
+   +---------------------+--------------------------------------------------+
+   | :const:`hash_bits`  | internal output size of the hash algorithm       |
+   +---------------------+--------------------------------------------------+
+   | :const:`seed_bits`  | size of the seed key of the hash algorithm       |
+   +---------------------+--------------------------------------------------+
+
 
    .. versionadded:: 3.2
+
+   .. versionchanged:: 3.4
+      Added *algorithm*, *hash_bits* and *seed_bits*
 
 
 .. data:: hexversion
@@ -663,6 +691,17 @@ always available.
    +-------------------------+----------------------------------------------+
 
    .. versionadded:: 3.1
+
+
+.. data:: __interactivehook__
+
+   When this attribute exists, its value is automatically called (with no
+   arguments) when the interpreter is launched in :ref:`interactive mode
+   <tut-interactive>`.  This is done after the :envvar:`PYTHONSTARTUP` file is
+   read, so that you can set this hook there.  The :mod:`site` module
+   :ref:`sets this <rlcompleter-config>`.
+
+   .. versionadded:: 3.4
 
 
 .. function:: intern(string)
@@ -812,8 +851,6 @@ always available.
    Windows          ``'win32'``
    Windows/Cygwin   ``'cygwin'``
    Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
    ================ ===========================
 
    .. versionchanged:: 3.3
@@ -884,7 +921,7 @@ always available.
    the interpreter loads extension modules.  Among other things, this will enable a
    lazy resolving of symbols when importing a module, if called as
    ``sys.setdlopenflags(0)``.  To share symbols across extension modules, call as
-   ``sys.setdlopenflags(os.RTLD_GLOBAL)``.  Symbolic names for the flag modules
+   ``sys.setdlopenflags(os.RTLD_GLOBAL)``.  Symbolic names for the flag values
    can be found in the :mod:`os` module (``RTLD_xxx`` constants, e.g.
    :data:`os.RTLD_LAZY`).
 
@@ -1029,8 +1066,9 @@ always available.
      statements and for the prompts of :func:`input`;
    * The interpreter's own prompts and its error messages go to ``stderr``.
 
-   By default, these streams are regular text streams as returned by the
-   :func:`open` function.  Their parameters are chosen as follows:
+   These streams are regular :term:`text files <text file>` like those
+   returned by the :func:`open` function.  Their parameters are chosen as
+   follows:
 
    * The character encoding is platform-dependent.  Under Windows, if the stream
      is interactive (that is, if its :meth:`isatty` method returns ``True``), the
@@ -1038,26 +1076,22 @@ always available.
      platforms, the locale encoding is used (see :meth:`locale.getpreferredencoding`).
 
      Under all platforms though, you can override this value by setting the
-     :envvar:`PYTHONIOENCODING` environment variable.
+     :envvar:`PYTHONIOENCODING` environment variable before starting Python.
 
    * When interactive, standard streams are line-buffered.  Otherwise, they
      are block-buffered like regular text files.  You can override this
      value with the :option:`-u` command-line option.
 
-   To write or read binary data from/to the standard streams, use the
-   underlying binary :data:`~io.TextIOBase.buffer`.  For example, to write
-   bytes to :data:`stdout`, use ``sys.stdout.buffer.write(b'abc')``.  Using
-   :meth:`io.TextIOBase.detach`, streams can be made binary by default.  This
-   function sets :data:`stdin` and :data:`stdout` to binary::
+   .. note::
 
-      def make_streams_binary():
-          sys.stdin = sys.stdin.detach()
-          sys.stdout = sys.stdout.detach()
+      To write or read binary data from/to the standard streams, use the
+      underlying binary :data:`~io.TextIOBase.buffer` object.  For example, to
+      write bytes to :data:`stdout`, use ``sys.stdout.buffer.write(b'abc')``.
 
-   Note that the streams may be replaced with objects (like :class:`io.StringIO`)
-   that do not support the :attr:`~io.BufferedIOBase.buffer` attribute or the
-   :meth:`~io.BufferedIOBase.detach` method and can raise :exc:`AttributeError`
-   or :exc:`io.UnsupportedOperation`.
+      However, if you are writing a library (and do not control in which
+      context its code will be executed), be aware that the standard streams
+      may be replaced with file-like objects like :class:`io.StringIO` which
+      do not support the :attr:`~io.BufferedIOBase.buffer` attribute.
 
 
 .. data:: __stdin__
@@ -1094,7 +1128,6 @@ always available.
    | :const:`name`    | Name of the thread implementation:                      |
    |                  |                                                         |
    |                  |  * ``'nt'``: Windows threads                            |
-   |                  |  * ``'os2'``: OS/2 threads                              |
    |                  |  * ``'pthread'``: POSIX threads                         |
    |                  |  * ``'solaris'``: Solaris threads                       |
    +------------------+---------------------------------------------------------+

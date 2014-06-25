@@ -67,7 +67,7 @@ _MAXLINE = 8192 # more than 8 times larger than RFC 821, 4.5.3
 OLDSTYLE_AUTH = re.compile(r"auth=(.*)", re.I)
 
 # Exception classes used by this module.
-class SMTPException(Exception):
+class SMTPException(OSError):
     """Base class for all exceptions raised by this module."""
 
 class SMTPServerDisconnected(SMTPException):
@@ -233,6 +233,7 @@ class SMTP:
         will be used.
 
         """
+        self._host = host
         self.timeout = timeout
         self.esmtp_features = {}
         self.source_address = source_address
@@ -312,7 +313,7 @@ class SMTP:
                 try:
                     port = int(port)
                 except ValueError:
-                    raise socket.error("nonnumeric port")
+                    raise OSError("nonnumeric port")
         if not port:
             port = self.default_port
         if self.debuglevel > 0:
@@ -333,7 +334,7 @@ class SMTP:
                 s = s.encode("ascii")
             try:
                 self.sock.sendall(s)
-            except socket.error:
+            except OSError:
                 self.close()
                 raise SMTPServerDisconnected('Server not connected')
         else:
@@ -366,7 +367,7 @@ class SMTP:
         while 1:
             try:
                 line = self.file.readline(_MAXLINE + 1)
-            except socket.error as e:
+            except OSError as e:
                 self.close()
                 raise SMTPServerDisconnected("Connection unexpectedly closed: "
                                              + str(e))
@@ -376,6 +377,7 @@ class SMTP:
             if self.debuglevel > 0:
                 print('reply:', repr(line), file=stderr)
             if len(line) > _MAXLINE:
+                self.close()
                 raise SMTPResponseException(500, "Line too long.")
             resp.append(line[4:].strip(b' \t\r\n'))
             code = line[:3]
@@ -476,6 +478,18 @@ class SMTP:
     def rset(self):
         """SMTP 'rset' command -- resets session."""
         return self.docmd("rset")
+
+    def _rset(self):
+        """Internal 'rset' command which ignores any SMTPServerDisconnected error.
+
+        Used internally in the library, since the server disconnected error
+        should appear to the application when the *next* command is issued, if
+        we are doing an internal "safety" reset.
+        """
+        try:
+            self.rset()
+        except SMTPServerDisconnected:
+            pass
 
     def noop(self):
         """SMTP 'noop' command -- doesn't do anything :>"""
@@ -582,7 +596,7 @@ class SMTP:
         def encode_cram_md5(challenge, user, password):
             challenge = base64.decodebytes(challenge)
             response = user + " " + hmac.HMAC(password.encode('ascii'),
-                                              challenge).hexdigest()
+                                              challenge, 'md5').hexdigest()
             return encode_base64(response.encode('ascii'), eol='')
 
         def encode_plain(user, password):
@@ -667,10 +681,12 @@ class SMTP:
             if context is not None and certfile is not None:
                 raise ValueError("context and certfile arguments are mutually "
                                  "exclusive")
-            if context is not None:
-                self.sock = context.wrap_socket(self.sock)
-            else:
-                self.sock = ssl.wrap_socket(self.sock, keyfile, certfile)
+            if context is None:
+                context = ssl._create_stdlib_context(certfile=certfile,
+                                                     keyfile=keyfile)
+            server_hostname = self._host if ssl.HAS_SNI else None
+            self.sock = context.wrap_socket(self.sock,
+                                            server_hostname=server_hostname)
             self.file = None
             # RFC 3207:
             # The client MUST discard any knowledge obtained from
@@ -759,7 +775,7 @@ class SMTP:
             if code == 421:
                 self.close()
             else:
-                self.rset()
+                self._rset()
             raise SMTPSenderRefused(code, resp, from_addr)
         senderrs = {}
         if isinstance(to_addrs, str):
@@ -773,14 +789,14 @@ class SMTP:
                 raise SMTPRecipientsRefused(senderrs)
         if len(senderrs) == len(to_addrs):
             # the server refused all our recipients
-            self.rset()
+            self._rset()
             raise SMTPRecipientsRefused(senderrs)
         (code, resp) = self.data(msg)
         if code != 250:
             if code == 421:
                 self.close()
             else:
-                self.rset()
+                self._rset()
             raise SMTPDataError(code, resp)
         #if we got here then somebody got our mail
         return senderrs
@@ -883,6 +899,9 @@ if _have_ssl:
                                  "exclusive")
             self.keyfile = keyfile
             self.certfile = certfile
+            if context is None:
+                context = ssl._create_stdlib_context(certfile=certfile,
+                                                     keyfile=keyfile)
             self.context = context
             SMTP.__init__(self, host, port, local_hostname, timeout,
                     source_address)
@@ -892,10 +911,9 @@ if _have_ssl:
                 print('connect:', (host, port), file=stderr)
             new_socket = socket.create_connection((host, port), timeout,
                     self.source_address)
-            if self.context is not None:
-                new_socket = self.context.wrap_socket(new_socket)
-            else:
-                new_socket = ssl.wrap_socket(new_socket, self.keyfile, self.certfile)
+            server_hostname = self._host if ssl.HAS_SNI else None
+            new_socket = self.context.wrap_socket(new_socket,
+                                                  server_hostname=server_hostname)
             return new_socket
 
     __all__.append("SMTP_SSL")
@@ -937,7 +955,7 @@ class LMTP(SMTP):
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.file = None
             self.sock.connect(host)
-        except socket.error:
+        except OSError:
             if self.debuglevel > 0:
                 print('connect fail:', host, file=stderr)
             if self.sock:

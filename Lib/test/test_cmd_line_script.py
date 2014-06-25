@@ -1,5 +1,6 @@
 # tests command line execution of scripts
 
+import contextlib
 import importlib
 import importlib.machinery
 import zipimport
@@ -8,6 +9,7 @@ import sys
 import os
 import os.path
 import py_compile
+import subprocess
 
 import textwrap
 from test import support
@@ -41,11 +43,28 @@ from importlib.machinery import BuiltinImporter
 _loader = __loader__ if __loader__ is BuiltinImporter else type(__loader__)
 print('__loader__==%a' % _loader)
 print('__file__==%a' % __file__)
-assertEqual(__cached__, None)
+print('__cached__==%a' % __cached__)
 print('__package__==%r' % __package__)
+# Check PEP 451 details
+import os.path
+if __package__ is not None:
+    print('__main__ was located through the import system')
+    assertIdentical(__spec__.loader, __loader__)
+    expected_spec_name = os.path.splitext(os.path.basename(__file__))[0]
+    if __package__:
+        expected_spec_name = __package__ + "." + expected_spec_name
+    assertEqual(__spec__.name, expected_spec_name)
+    assertEqual(__spec__.parent, __package__)
+    assertIdentical(__spec__.submodule_search_locations, None)
+    assertEqual(__spec__.origin, __file__)
+    if __spec__.cached is not None:
+        assertEqual(__spec__.cached, __cached__)
 # Check the sys module
 import sys
 assertIdentical(globals(), sys.modules[__name__].__dict__)
+if __spec__ is not None:
+    # XXX: We're not currently making __main__ available under its real name
+    pass # assertIdentical(globals(), sys.modules[__spec__.name].__dict__)
 from test import test_cmd_line_script
 example_args_list = test_cmd_line_script.example_args
 assertEqual(sys.argv[1:], example_args_list)
@@ -123,7 +142,7 @@ class CmdLineTest(unittest.TestCase):
         if not __debug__:
             cmd_line_switches += ('-' + 'O' * sys.flags.optimize,)
         run_args = cmd_line_switches + (script_name,) + tuple(example_args)
-        rc, out, err = assert_python_ok(*run_args)
+        rc, out, err = assert_python_ok(*run_args, __isolated=False)
         self._check_output(script_name, rc, out + err, expected_file,
                            expected_argv0, expected_path0,
                            expected_package, expected_loader)
@@ -155,6 +174,53 @@ class CmdLineTest(unittest.TestCase):
             out = kill_python(p)
         expected = repr(importlib.machinery.BuiltinImporter).encode("utf-8")
         self.assertIn(expected, out)
+
+    @contextlib.contextmanager
+    def interactive_python(self, separate_stderr=False):
+        if separate_stderr:
+            p = spawn_python('-i', bufsize=1, stderr=subprocess.PIPE)
+            stderr = p.stderr
+        else:
+            p = spawn_python('-i', bufsize=1, stderr=subprocess.STDOUT)
+            stderr = p.stdout
+        try:
+            # Drain stderr until prompt
+            while True:
+                data = stderr.read(4)
+                if data == b">>> ":
+                    break
+                stderr.readline()
+            yield p
+        finally:
+            kill_python(p)
+            stderr.close()
+
+    def check_repl_stdout_flush(self, separate_stderr=False):
+        with self.interactive_python(separate_stderr) as p:
+            p.stdin.write(b"print('foo')\n")
+            p.stdin.flush()
+            self.assertEqual(b'foo', p.stdout.readline().strip())
+
+    def check_repl_stderr_flush(self, separate_stderr=False):
+        with self.interactive_python(separate_stderr) as p:
+            p.stdin.write(b"1/0\n")
+            p.stdin.flush()
+            stderr = p.stderr if separate_stderr else p.stdout
+            self.assertIn(b'Traceback ', stderr.readline())
+            self.assertIn(b'File "<stdin>"', stderr.readline())
+            self.assertIn(b'ZeroDivisionError', stderr.readline())
+
+    def test_repl_stdout_flush(self):
+        self.check_repl_stdout_flush()
+
+    def test_repl_stdout_flush_separate_stderr(self):
+        self.check_repl_stdout_flush(True)
+
+    def test_repl_stderr_flush(self):
+        self.check_repl_stderr_flush()
+
+    def test_repl_stderr_flush_separate_stderr(self):
+        self.check_repl_stderr_flush(True)
 
     def test_basic_script(self):
         with temp_dir() as script_dir:
@@ -294,7 +360,7 @@ class CmdLineTest(unittest.TestCase):
                 pkg_dir = os.path.join(script_dir, 'test_pkg')
                 make_pkg(pkg_dir, "import sys; print('init_argv0==%r' % sys.argv[0])")
                 script_name = _make_test_script(pkg_dir, 'script')
-                rc, out, err = assert_python_ok('-m', 'test_pkg.script', *example_args)
+                rc, out, err = assert_python_ok('-m', 'test_pkg.script', *example_args, __isolated=False)
                 if verbose > 1:
                     print(out)
                 expected = "init_argv0==%r" % '-m'
@@ -311,7 +377,8 @@ class CmdLineTest(unittest.TestCase):
                 with open("-c", "w") as f:
                     f.write("data")
                     rc, out, err = assert_python_ok('-c',
-                        'import sys; print("sys.path[0]==%r" % sys.path[0])')
+                        'import sys; print("sys.path[0]==%r" % sys.path[0])',
+                        __isolated=False)
                     if verbose > 1:
                         print(out)
                     expected = "sys.path[0]==%r" % ''
@@ -325,7 +392,8 @@ class CmdLineTest(unittest.TestCase):
             with support.change_cwd(path=script_dir):
                 with open("-m", "w") as f:
                     f.write("data")
-                    rc, out, err = assert_python_ok('-m', 'other', *example_args)
+                    rc, out, err = assert_python_ok('-m', 'other', *example_args,
+                                                    __isolated=False)
                     self._check_output(script_name, rc, out,
                                       script_name, script_name, '', '',
                                       importlib.machinery.SourceFileLoader)
@@ -385,6 +453,24 @@ class CmdLineTest(unittest.TestCase):
             stdout.rstrip().decode('ascii'),
             'stdout=%r stderr=%r' % (stdout, stderr))
         self.assertEqual(0, rc)
+
+    def test_issue20500_exit_with_exception_value(self):
+        script = textwrap.dedent("""\
+            import sys
+            error = None
+            try:
+                raise ValueError('some text')
+            except ValueError as err:
+                error = err
+
+            if error:
+                sys.exit(error)
+            """)
+        with temp_dir() as script_dir:
+            script_name = _make_test_script(script_dir, 'script', script)
+            exitcode, stdout, stderr = assert_python_failure(script_name)
+            text = stderr.decode('ascii')
+            self.assertEqual(text, "some text")
 
 
 def test_main():

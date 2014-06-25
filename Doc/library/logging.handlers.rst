@@ -300,7 +300,7 @@ The :class:`TimedRotatingFileHandler` class, located in the
 timed intervals.
 
 
-.. class:: TimedRotatingFileHandler(filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False)
+.. class:: TimedRotatingFileHandler(filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None)
 
    Returns a new instance of the :class:`TimedRotatingFileHandler` class. The
    specified file is opened and used as the stream for logging. On rotating it also
@@ -350,6 +350,12 @@ timed intervals.
    If *delay* is true, then file opening is deferred until the first call to
    :meth:`emit`.
 
+   If *atTime* is not ``None``, it must be a ``datetime.time`` instance which
+   specifies the time of day when rollover occurs, for the cases where rollover
+   is set to happen "at midnight" or "on a particular weekday".
+
+   .. versionchanged:: 3.4
+      *atTime* parameter was added.
 
    .. method:: doRollover()
 
@@ -375,6 +381,9 @@ sends logging output to a network socket. The base class uses a TCP socket.
    Returns a new instance of the :class:`SocketHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: close()
 
@@ -460,6 +469,9 @@ over UDP sockets.
    Returns a new instance of the :class:`DatagramHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: emit()
 
@@ -838,10 +850,27 @@ supports sending logging messages to a Web server, using either ``GET`` or
    credentials, you should also specify secure=True so that your userid and
    password are not passed in cleartext across the wire.
 
+   .. method:: mapLogRecord(record)
+
+      Provides a dictionary, based on ``record``, which is to be URL-encoded
+      and sent to the web server. The default implementation just returns
+      ``record.__dict__``. This method can be overridden if e.g. only a
+      subset of :class:`~logging.LogRecord` is to be sent to the web server, or
+      if more specific customization of what's sent to the server is required.
 
    .. method:: emit(record)
 
-      Sends the record to the Web server as a percent-encoded dictionary.
+      Sends the record to the Web server as an URL-encoded dictionary. The
+      :meth:`mapLogRecord` method is used to convert the record to the
+      dictionary to be sent.
+
+   .. note:: Since preparing a record for sending it to a Web server is not
+      the same as a generic formatting operation, using
+      :meth:`~logging.Handler.setFormatter` to specify a
+      :class:`~logging.Formatter` for a :class:`HTTPHandler` has no effect.
+      Instead of calling :meth:`~logging.Handler.format`, this handler calls
+      :meth:`mapLogRecord` and then :func:`urllib.parse.urlencode` to encode the
+      dictionary in a form suitable for sending to a Web server.
 
 
 .. _queue-handler:

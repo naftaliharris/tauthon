@@ -14,6 +14,7 @@ import argparse
 from io import StringIO
 
 from test import support
+from unittest import mock
 class StdIOBuffer(StringIO):
     pass
 
@@ -46,6 +47,9 @@ class TempDirMixin(object):
 
     def tearDown(self):
         os.chdir(self.old_dir)
+        for root, dirs, files in os.walk(self.temp_dir, topdown=False):
+            for name in files:
+                os.chmod(os.path.join(self.temp_dir, name), stat.S_IWRITE)
         shutil.rmtree(self.temp_dir, True)
 
     def create_readonly_file(self, filename):
@@ -1421,6 +1425,19 @@ class TestFileTypeRepr(TestCase):
         type = argparse.FileType('wb', 1)
         self.assertEqual("FileType('wb', 1)", repr(type))
 
+    def test_r_latin(self):
+        type = argparse.FileType('r', encoding='latin_1')
+        self.assertEqual("FileType('r', encoding='latin_1')", repr(type))
+
+    def test_w_big5_ignore(self):
+        type = argparse.FileType('w', encoding='big5', errors='ignore')
+        self.assertEqual("FileType('w', encoding='big5', errors='ignore')",
+                         repr(type))
+
+    def test_r_1_replace(self):
+        type = argparse.FileType('r', 1, errors='replace')
+        self.assertEqual("FileType('r', 1, errors='replace')", repr(type))
+
 
 class RFile(object):
     seen = {}
@@ -1555,6 +1572,24 @@ class TestFileTypeWB(TempDirMixin, ParserTestCase):
         ('bar -x foo', NS(x=WFile('foo'), spam=WFile('bar'))),
         ('-x - -', NS(x=sys.stdout, spam=sys.stdout)),
     ]
+
+
+class TestFileTypeOpenArgs(TestCase):
+    """Test that open (the builtin) is correctly called"""
+
+    def test_open_args(self):
+        FT = argparse.FileType
+        cases = [
+            (FT('rb'), ('rb', -1, None, None)),
+            (FT('w', 1), ('w', 1, None, None)),
+            (FT('w', errors='replace'), ('w', -1, None, 'replace')),
+            (FT('wb', encoding='big5'), ('wb', -1, 'big5', None)),
+            (FT('w', 0, 'l1', 'strict'), ('w', 0, 'l1', 'strict')),
+        ]
+        with mock.patch('builtins.open') as m:
+            for type, args in cases:
+                type('foo')
+                m.assert_called_with('foo', *args)
 
 
 class TestTypeCallable(ParserTestCase):
@@ -4381,7 +4416,7 @@ class TestOptionalsHelpVersionActions(TestCase):
     def test_version_format(self):
         parser = ErrorRaisingArgumentParser(prog='PPP')
         parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.5')
-        msg = self._get_error(parser.parse_args, ['-v']).stderr
+        msg = self._get_error(parser.parse_args, ['-v']).stdout
         self.assertEqual('PPP 3.5\n', msg)
 
     def test_version_no_help(self):
@@ -4394,7 +4429,7 @@ class TestOptionalsHelpVersionActions(TestCase):
     def test_version_action(self):
         parser = ErrorRaisingArgumentParser(prog='XXX')
         parser.add_argument('-V', action='version', version='%(prog)s 3.7')
-        msg = self._get_error(parser.parse_args, ['-V']).stderr
+        msg = self._get_error(parser.parse_args, ['-V']).stdout
         self.assertEqual('XXX 3.7\n', msg)
 
     def test_no_help(self):
@@ -4515,6 +4550,12 @@ class TestNamespace(TestCase):
         self.assertTrue(ns1 != ns4)
         self.assertTrue(ns2 != ns3)
         self.assertTrue(ns2 != ns4)
+
+    def test_equality_returns_notimplemeted(self):
+        # See issue 21481
+        ns = argparse.Namespace(a=1, b=2)
+        self.assertIs(ns.__eq__(None), NotImplemented)
+        self.assertIs(ns.__ne__(None), NotImplemented)
 
 
 # ===================

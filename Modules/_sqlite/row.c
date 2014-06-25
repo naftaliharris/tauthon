@@ -23,7 +23,6 @@
 
 #include "row.h"
 #include "cursor.h"
-#include "sqlitecompat.h"
 
 void pysqlite_row_dealloc(pysqlite_Row* self)
 {
@@ -64,11 +63,18 @@ int pysqlite_row_init(pysqlite_Row* self, PyObject* args, PyObject* kwargs)
     return 0;
 }
 
+PyObject* pysqlite_row_item(pysqlite_Row* self, Py_ssize_t idx)
+{
+   PyObject* item = PyTuple_GetItem(self->data, idx);
+   Py_XINCREF(item);
+   return item;
+}
+
 PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
 {
-    long _idx;
+    Py_ssize_t _idx;
     char* key;
-    int nitems, i;
+    Py_ssize_t nitems, i;
     char* compare_key;
 
     char* p1;
@@ -77,7 +83,11 @@ PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
     PyObject* item;
 
     if (PyLong_Check(idx)) {
-        _idx = PyLong_AsLong(idx);
+        _idx = PyNumber_AsSsize_t(idx, PyExc_IndexError);
+        if (_idx == -1 && PyErr_Occurred())
+            return NULL;
+        if (_idx < 0)
+           _idx += PyTuple_GET_SIZE(self->data);
         item = PyTuple_GetItem(self->data, _idx);
         Py_XINCREF(item);
         return item;
@@ -89,7 +99,10 @@ PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
         nitems = PyTuple_Size(self->description);
 
         for (i = 0; i < nitems; i++) {
-            compare_key = _PyUnicode_AsString(PyTuple_GET_ITEM(PyTuple_GET_ITEM(self->description, i), 0));
+            PyObject *obj;
+            obj = PyTuple_GET_ITEM(self->description, i);
+            obj = PyTuple_GET_ITEM(obj, 0);
+            compare_key = _PyUnicode_AsString(obj);
             if (!compare_key) {
                 return NULL;
             }
@@ -121,10 +134,12 @@ PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
 
         PyErr_SetString(PyExc_IndexError, "No item with that key");
         return NULL;
-    } else if (PySlice_Check(idx)) {
+    }
+    else if (PySlice_Check(idx)) {
         PyErr_SetString(PyExc_ValueError, "slices not implemented, yet");
         return NULL;
-    } else {
+    }
+    else {
         PyErr_SetString(PyExc_IndexError, "Index must be int or string");
         return NULL;
     }
@@ -194,6 +209,14 @@ PyMappingMethods pysqlite_row_as_mapping = {
     /* mp_ass_subscript */ (objobjargproc)0,
 };
 
+static PySequenceMethods pysqlite_row_as_sequence = {
+   /* sq_length */         (lenfunc)pysqlite_row_length,
+   /* sq_concat */         0,
+   /* sq_repeat */         0,
+   /* sq_item */           (ssizeargfunc)pysqlite_row_item,
+};
+
+
 static PyMethodDef pysqlite_row_methods[] = {
     {"keys", (PyCFunction)pysqlite_row_keys, METH_NOARGS,
         PyDoc_STR("Returns the keys of the row.")},
@@ -247,5 +270,6 @@ extern int pysqlite_row_setup_types(void)
 {
     pysqlite_RowType.tp_new = PyType_GenericNew;
     pysqlite_RowType.tp_as_mapping = &pysqlite_row_as_mapping;
+    pysqlite_RowType.tp_as_sequence = &pysqlite_row_as_sequence;
     return PyType_Ready(&pysqlite_RowType);
 }

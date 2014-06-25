@@ -401,7 +401,7 @@ static PyTypeObject _grouper_type = {
 typedef struct {
     PyObject_HEAD
     PyObject *it;
-    int numread;
+    int numread;  /* 0 <= numread <= LINKCELLS */
     PyObject *nextlink;
     PyObject *(values[LINKCELLS]);
 } teedataobject;
@@ -409,7 +409,7 @@ typedef struct {
 typedef struct {
     PyObject_HEAD
     teedataobject *dataobj;
-    int index;
+    int index;    /* 0 <= index <= LINKCELLS */
     PyObject *weakreflist;
 } teeobject;
 
@@ -1492,19 +1492,22 @@ islice_next(isliceobject *lz)
     Py_ssize_t oldnext;
     PyObject *(*iternext)(PyObject *);
 
+    if (it == NULL)
+        return NULL;
+
     iternext = *Py_TYPE(it)->tp_iternext;
     while (lz->cnt < lz->next) {
         item = iternext(it);
         if (item == NULL)
-            return NULL;
+            goto empty;
         Py_DECREF(item);
         lz->cnt++;
     }
     if (stop != -1 && lz->cnt >= stop)
-        return NULL;
+        goto empty;
     item = iternext(it);
     if (item == NULL)
-        return NULL;
+        goto empty;
     lz->cnt++;
     oldnext = lz->next;
     /* The (size_t) cast below avoids the danger of undefined
@@ -1513,6 +1516,10 @@ islice_next(isliceobject *lz)
     if (lz->next < oldnext || (stop != -1 && lz->next > stop))
         lz->next = stop;
     return item;
+
+empty:
+    Py_CLEAR(lz->it);
+    return NULL;
 }
 
 static PyObject *
@@ -1522,6 +1529,18 @@ islice_reduce(isliceobject *lz)
      * then 'setstate' with the next and count
      */
     PyObject *stop;
+    if (lz->it == NULL) {
+        PyObject *empty_list;
+        PyObject *empty_it;
+        empty_list = PyList_New(0);
+        if (empty_list == NULL)
+            return NULL;
+        empty_it = PyObject_GetIter(empty_list);
+        Py_DECREF(empty_list);
+        if (empty_it == NULL)
+            return NULL;
+        return Py_BuildValue("O(Nn)n", Py_TYPE(lz), empty_it, 0, 0);
+    }
     if (lz->stop == -1) {
         stop = Py_None;
         Py_INCREF(stop);
@@ -2057,6 +2076,18 @@ product_dealloc(productobject *lz)
     Py_TYPE(lz)->tp_free(lz);
 }
 
+static PyObject *
+product_sizeof(productobject *lz, void *unused)
+{
+    Py_ssize_t res;
+
+    res = sizeof(productobject);
+    res += PyTuple_GET_SIZE(lz->pools) * sizeof(Py_ssize_t);
+    return PyLong_FromSsize_t(res);
+}
+
+PyDoc_STRVAR(sizeof_doc, "Returns size in memory, in bytes.");
+
 static int
 product_traverse(productobject *lz, visitproc visit, void *arg)
 {
@@ -2226,6 +2257,8 @@ static PyMethodDef product_methods[] = {
      reduce_doc},
     {"__setstate__",    (PyCFunction)product_setstate,    METH_O,
      setstate_doc},
+    {"__sizeof__",      (PyCFunction)product_sizeof,      METH_NOARGS,
+     sizeof_doc},
     {NULL,              NULL}   /* sentinel */
 };
 
@@ -2364,6 +2397,16 @@ combinations_dealloc(combinationsobject *co)
     if (co->indices != NULL)
         PyMem_Free(co->indices);
     Py_TYPE(co)->tp_free(co);
+}
+
+static PyObject *
+combinations_sizeof(combinationsobject *co, void *unused)
+{
+    Py_ssize_t res;
+
+    res = sizeof(combinationsobject);
+    res += co->r * sizeof(Py_ssize_t);
+    return PyLong_FromSsize_t(res);
 }
 
 static int
@@ -2537,6 +2580,8 @@ static PyMethodDef combinations_methods[] = {
      reduce_doc},
     {"__setstate__",    (PyCFunction)combinations_setstate,    METH_O,
      setstate_doc},
+    {"__sizeof__",      (PyCFunction)combinations_sizeof,      METH_NOARGS,
+     sizeof_doc},
     {NULL,              NULL}   /* sentinel */
 };
 
@@ -2693,6 +2738,16 @@ cwr_dealloc(cwrobject *co)
     if (co->indices != NULL)
         PyMem_Free(co->indices);
     Py_TYPE(co)->tp_free(co);
+}
+
+static PyObject *
+cwr_sizeof(cwrobject *co, void *unused)
+{
+    Py_ssize_t res;
+
+    res = sizeof(cwrobject);
+    res += co->r * sizeof(Py_ssize_t);
+    return PyLong_FromSsize_t(res);
 }
 
 static int
@@ -2854,6 +2909,8 @@ static PyMethodDef cwr_methods[] = {
      reduce_doc},
     {"__setstate__",    (PyCFunction)cwr_setstate,    METH_O,
      setstate_doc},
+    {"__sizeof__",      (PyCFunction)cwr_sizeof,      METH_NOARGS,
+     sizeof_doc},
     {NULL,              NULL}   /* sentinel */
 };
 
@@ -3028,6 +3085,17 @@ permutations_dealloc(permutationsobject *po)
     PyMem_Free(po->indices);
     PyMem_Free(po->cycles);
     Py_TYPE(po)->tp_free(po);
+}
+
+static PyObject *
+permutations_sizeof(permutationsobject *po, void *unused)
+{
+    Py_ssize_t res;
+
+    res = sizeof(permutationsobject);
+    res += PyTuple_GET_SIZE(po->pool) * sizeof(Py_ssize_t);
+    res += po->r * sizeof(Py_ssize_t);
+    return PyLong_FromSsize_t(res);
 }
 
 static int
@@ -3235,6 +3303,8 @@ static PyMethodDef permuations_methods[] = {
      reduce_doc},
     {"__setstate__",    (PyCFunction)permutations_setstate,    METH_O,
      setstate_doc},
+    {"__sizeof__",      (PyCFunction)permutations_sizeof,      METH_NOARGS,
+     sizeof_doc},
     {NULL,              NULL}   /* sentinel */
 };
 
@@ -4039,14 +4109,17 @@ repeat_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     repeatobject *ro;
     PyObject *element;
-    Py_ssize_t cnt = -1;
+    Py_ssize_t cnt = -1, n_kwds = 0;
     static char *kwargs[] = {"object", "times", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|n:repeat", kwargs,
                                      &element, &cnt))
         return NULL;
 
-    if (PyTuple_Size(args) == 2 && cnt < 0)
+    if (kwds != NULL)
+        n_kwds = PyDict_Size(kwds);
+    /* Does user supply times argument? */
+    if ((PyTuple_Size(args) + n_kwds == 2) && cnt < 0)
         cnt = 0;
 
     ro = (repeatobject *)type->tp_alloc(type, 0);

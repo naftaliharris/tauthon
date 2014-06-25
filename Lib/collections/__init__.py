@@ -3,16 +3,16 @@ __all__ = ['deque', 'defaultdict', 'namedtuple', 'UserDict', 'UserList',
 
 # For backwards compatibility, continue to make the collections ABCs
 # available through the collections module.
-from collections.abc import *
-import collections.abc
-__all__ += collections.abc.__all__
+from _collections_abc import *
+import _collections_abc
+__all__ += _collections_abc.__all__
 
 from _collections import deque, defaultdict
 from operator import itemgetter as _itemgetter, eq as _eq
 from keyword import iskeyword as _iskeyword
 import sys as _sys
 import heapq as _heapq
-from weakref import proxy as _proxy
+from _weakref import proxy as _proxy
 from itertools import repeat as _repeat, chain as _chain, starmap as _starmap
 from reprlib import recursive_repr as _recursive_repr
 
@@ -199,13 +199,10 @@ class OrderedDict(dict):
 
     def __reduce__(self):
         'Return state information for pickling'
-        items = [[k, self[k]] for k in self]
         inst_dict = vars(self).copy()
         for k in vars(OrderedDict()):
             inst_dict.pop(k, None)
-        if inst_dict:
-            return (self.__class__, (items,), inst_dict)
-        return self.__class__, (items,)
+        return self.__class__, (), inst_dict or None, None, iter(self.items())
 
     def copy(self):
         'od.copy() -> a shallow copy of od'
@@ -277,9 +274,7 @@ class {typename}(tuple):
         return OrderedDict(zip(self._fields, self))
 
     def _asdict(self):
-        '''Return a new OrderedDict which maps field names to their values.
-           This method is obsolete.  Use vars(nt) or nt.__dict__ instead.
-        '''
+        'Return a new OrderedDict which maps field names to their values.'
         return self.__dict__
 
     def __getnewargs__(self):
@@ -328,6 +323,7 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
     if isinstance(field_names, str):
         field_names = field_names.replace(',', ' ').split()
     field_names = list(map(str, field_names))
+    typename = str(typename)
     if rename:
         seen = set()
         for index, name in enumerate(field_names):
@@ -338,6 +334,8 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
                 field_names[index] = '_%d' % index
             seen.add(name)
     for name in [typename] + field_names:
+        if type(name) != str:
+            raise TypeError('Type names and field names must be strings')
         if not name.isidentifier():
             raise ValueError('Type names and field names must be valid '
                              'identifiers: %r' % name)
@@ -822,9 +820,14 @@ class ChainMap(MutableMapping):
 
     __copy__ = copy
 
-    def new_child(self):                        # like Django's Context.push()
-        'New ChainMap with a new dict followed by all previous maps.'
-        return self.__class__({}, *self.maps)
+    def new_child(self, m=None):                # like Django's Context.push()
+        '''
+        New ChainMap with a new map followed by all previous maps. If no
+        map is provided, an empty dict is used.
+        '''
+        if m is None:
+            m = {}
+        return self.__class__(m, *self.maps)
 
     @property
     def parents(self):                          # like Django's Context.pop()

@@ -142,7 +142,6 @@ __version__ = '1.70'    # Highest version of the spec this complies with
                         # See http://speleotrove.com/decimal/
 __libmpdec_version__ = "2.4.0" # compatible libmpdec version
 
-import copy as _copy
 import math as _math
 import numbers as _numbers
 import sys
@@ -704,8 +703,7 @@ class Decimal(object):
 
         raise TypeError("Cannot convert %r to Decimal" % value)
 
-    # @classmethod, but @decorator is not valid Python 2.3 syntax, so
-    # don't use it (see notes on Py2.3 compatibility at top of file)
+    @classmethod
     def from_float(cls, f):
         """Converts a float to a decimal number, exactly.
 
@@ -744,7 +742,6 @@ class Decimal(object):
             return result
         else:
             return cls(result)
-    from_float = classmethod(from_float)
 
     def _isnan(self):
         """Returns whether the number is not actually one.

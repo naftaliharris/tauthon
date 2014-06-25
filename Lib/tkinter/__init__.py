@@ -35,8 +35,6 @@ if sys.platform == "win32":
     # Attempt to configure Tcl/Tk without requiring PATH
     from tkinter import _fix
 
-import warnings
-
 import _tkinter # If this fails your Python may not be configured for Tk
 TclError = _tkinter.TclError
 from tkinter.constants import *
@@ -2199,45 +2197,6 @@ class Button(Widget):
         """
         return self.tk.call(self._w, 'invoke')
 
-
-# Indices:
-# XXX I don't like these -- take them away
-def AtEnd():
-    warnings.warn("tkinter.AtEnd will be removed in 3.4",
-                  DeprecationWarning, stacklevel=2)
-    return 'end'
-
-
-def AtInsert(*args):
-    warnings.warn("tkinter.AtInsert will be removed in 3.4",
-                  DeprecationWarning, stacklevel=2)
-    s = 'insert'
-    for a in args:
-        if a: s = s + (' ' + a)
-    return s
-
-
-def AtSelFirst():
-    warnings.warn("tkinter.AtSelFirst will be removed in 3.4",
-                  DeprecationWarning, stacklevel=2)
-    return 'sel.first'
-
-
-def AtSelLast():
-    warnings.warn("tkinter.AtSelLast will be removed in 3.4",
-                  DeprecationWarning, stacklevel=2)
-    return 'sel.last'
-
-
-def At(x, y=None):
-    warnings.warn("tkinter.At will be removed in 3.4",
-                  DeprecationWarning, stacklevel=2)
-    if y is None:
-        return '@%r' % (x,)
-    else:
-        return '@%r,%r' % (x, y)
-
-
 class Canvas(Widget, XView, YView):
     """Canvas widget to display graphical elements like lines or text."""
     def __init__(self, master=None, cnf={}, **kw):
@@ -2627,22 +2586,19 @@ class Listbox(Widget, XView, YView):
     def activate(self, index):
         """Activate item identified by INDEX."""
         self.tk.call(self._w, 'activate', index)
-    def bbox(self, *args):
+    def bbox(self, index):
         """Return a tuple of X1,Y1,X2,Y2 coordinates for a rectangle
-        which encloses the item identified by index in ARGS."""
-        return self._getints(
-            self.tk.call((self._w, 'bbox') + args)) or None
+        which encloses the item identified by the given index."""
+        return self._getints(self.tk.call(self._w, 'bbox', index)) or None
     def curselection(self):
-        """Return list of indices of currently selected item."""
-        # XXX Ought to apply self._getints()...
-        return self.tk.splitlist(self.tk.call(
-            self._w, 'curselection'))
+        """Return the indices of currently selected item."""
+        return self._getints(self.tk.call(self._w, 'curselection')) or ()
     def delete(self, first, last=None):
-        """Delete items from FIRST to LAST (not included)."""
+        """Delete items from FIRST to LAST (included)."""
         self.tk.call(self._w, 'delete', first, last)
     def get(self, first, last=None):
-        """Get list of items from FIRST to LAST (not included)."""
-        if last:
+        """Get list of items from FIRST to LAST (included)."""
+        if last is not None:
             return self.tk.splitlist(self.tk.call(
                 self._w, 'get', first, last))
         else:
@@ -2675,7 +2631,7 @@ class Listbox(Widget, XView, YView):
         self.tk.call(self._w, 'selection', 'anchor', index)
     select_anchor = selection_anchor
     def selection_clear(self, first, last=None):
-        """Clear the selection from FIRST to LAST (not included)."""
+        """Clear the selection from FIRST to LAST (included)."""
         self.tk.call(self._w,
                  'selection', 'clear', first, last)
     select_clear = selection_clear
@@ -2685,7 +2641,7 @@ class Listbox(Widget, XView, YView):
             self._w, 'selection', 'includes', index))
     select_includes = selection_includes
     def selection_set(self, first, last=None):
-        """Set the selection from FIRST to LAST (not included) without
+        """Set the selection from FIRST to LAST (included) without
         changing the currently selected elements."""
         self.tk.call(self._w, 'selection', 'set', first, last)
     select_set = selection_set
@@ -2968,11 +2924,11 @@ class Text(Widget, XView, YView):
 
         """
         Widget.__init__(self, master, 'text', cnf, kw)
-    def bbox(self, *args):
+    def bbox(self, index):
         """Return a tuple of (x,y,width,height) which gives the bounding
-        box of the visible part of the character at the index in ARGS."""
+        box of the visible part of the character at the given index."""
         return self._getints(
-            self.tk.call((self._w, 'bbox') + args)) or None
+                self.tk.call(self._w, 'bbox', index)) or None
     def tk_textSelectTo(self, index):
         self.tk.call('tk_textSelectTo', self._w, index)
     def tk_textBackspace(self):

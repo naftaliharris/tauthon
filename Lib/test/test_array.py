@@ -353,12 +353,12 @@ class BaseTest:
             support.unlink(support.TESTFN)
 
     def test_fromfile_ioerror(self):
-        # Issue #5395: Check if fromfile raises a proper IOError
+        # Issue #5395: Check if fromfile raises a proper OSError
         # instead of EOFError.
         a = array.array(self.typecode)
         f = open(support.TESTFN, 'wb')
         try:
-            self.assertRaises(IOError, a.fromfile, f, len(self.example))
+            self.assertRaises(OSError, a.fromfile, f, len(self.example))
         finally:
             f.close()
             support.unlink(support.TESTFN)
@@ -1025,6 +1025,18 @@ class BaseTest:
         a = array.array(self.typecode)
         basesize = support.calcvobjsize('Pn2Pi')
         support.check_sizeof(self, a, basesize)
+
+    def test_initialize_with_unicode(self):
+        if self.typecode != 'u':
+            with self.assertRaises(TypeError) as cm:
+                a = array.array(self.typecode, 'foo')
+            self.assertIn("cannot use a str", str(cm.exception))
+            with self.assertRaises(TypeError) as cm:
+                a = array.array(self.typecode, array.array('u', 'foo'))
+            self.assertIn("cannot use a unicode array", str(cm.exception))
+        else:
+            a = array.array(self.typecode, "foo")
+            a = array.array(self.typecode, array.array('u', 'foo'))
 
 
 class StringTest(BaseTest):
