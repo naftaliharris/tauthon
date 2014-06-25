@@ -7,13 +7,18 @@ import asyncore
 
 
 class DummyServer(smtpd.SMTPServer):
-    def __init__(self, localaddr, remoteaddr):
-        smtpd.SMTPServer.__init__(self, localaddr, remoteaddr)
+    def __init__(self, localaddr, remoteaddr, decode_data=True):
+        smtpd.SMTPServer.__init__(self, localaddr, remoteaddr,
+                                  decode_data=decode_data)
         self.messages = []
+        if decode_data:
+            self.return_status = 'return status'
+        else:
+            self.return_status = b'return status'
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         self.messages.append((peer, mailfrom, rcpttos, data))
-        if data == 'return status':
+        if data == self.return_status:
             return '250 Okish'
 
 
@@ -31,9 +36,10 @@ class SMTPDServerTest(unittest.TestCase):
         smtpd.socket = asyncore.socket = mock_socket
 
     def test_process_message_unimplemented(self):
-        server = smtpd.SMTPServer('a', 'b')
+        server = smtpd.SMTPServer((support.HOST, 0), ('b', 0),
+                                  decode_data=True)
         conn, addr = server.accept()
-        channel = smtpd.SMTPChannel(server, conn, addr)
+        channel = smtpd.SMTPChannel(server, conn, addr, decode_data=True)
 
         def write_line(line):
             channel.socket.queue_recv(line)
@@ -45,9 +51,33 @@ class SMTPDServerTest(unittest.TestCase):
         write_line(b'DATA')
         self.assertRaises(NotImplementedError, write_line, b'spam\r\n.\r\n')
 
+    def test_decode_data_default_warns(self):
+        with self.assertWarns(DeprecationWarning):
+            smtpd.SMTPServer((support.HOST, 0), ('b', 0))
+
     def tearDown(self):
         asyncore.close_all()
         asyncore.socket = smtpd.socket = socket
+
+
+class TestFamilyDetection(unittest.TestCase):
+    def setUp(self):
+        smtpd.socket = asyncore.socket = mock_socket
+
+    def tearDown(self):
+        asyncore.close_all()
+        asyncore.socket = smtpd.socket = socket
+
+    @unittest.skipUnless(support.IPV6_ENABLED, "IPv6 not enabled")
+    def test_socket_uses_IPv6(self):
+        server = smtpd.SMTPServer((support.HOSTv6, 0), (support.HOST, 0),
+                                  decode_data=False)
+        self.assertEqual(server.socket.family, socket.AF_INET6)
+
+    def test_socket_uses_IPv4(self):
+        server = smtpd.SMTPServer((support.HOST, 0), (support.HOSTv6, 0),
+                                  decode_data=False)
+        self.assertEqual(server.socket.family, socket.AF_INET)
 
 
 class SMTPDChannelTest(unittest.TestCase):
@@ -55,9 +85,10 @@ class SMTPDChannelTest(unittest.TestCase):
         smtpd.socket = asyncore.socket = mock_socket
         self.old_debugstream = smtpd.DEBUGSTREAM
         self.debug = smtpd.DEBUGSTREAM = io.StringIO()
-        self.server = DummyServer('a', 'b')
+        self.server = DummyServer((support.HOST, 0), ('b', 0))
         conn, addr = self.server.accept()
-        self.channel = smtpd.SMTPChannel(self.server, conn, addr)
+        self.channel = smtpd.SMTPChannel(self.server, conn, addr,
+                                         decode_data=True)
 
     def tearDown(self):
         asyncore.close_all()
@@ -69,7 +100,9 @@ class SMTPDChannelTest(unittest.TestCase):
         self.channel.handle_read()
 
     def test_broken_connect(self):
-        self.assertRaises(DummyDispatcherBroken, BrokenDummyServer, 'a', 'b')
+        self.assertRaises(
+            DummyDispatcherBroken, BrokenDummyServer,
+            (support.HOST, 0), ('b', 0))
 
     def test_server_accept(self):
         self.server.handle_accept()
@@ -502,6 +535,22 @@ class SMTPDChannelTest(unittest.TestCase):
         with support.check_warnings(('', DeprecationWarning)):
             self.channel._SMTPChannel__addr = 'spam'
 
+    def test_decode_data_default_warning(self):
+        server = DummyServer((support.HOST, 0), ('b', 0))
+        conn, addr = self.server.accept()
+        with self.assertWarns(DeprecationWarning):
+            smtpd.SMTPChannel(server, conn, addr)
+
+@unittest.skipUnless(support.IPV6_ENABLED, "IPv6 not enabled")
+class SMTPDChannelIPv6Test(SMTPDChannelTest):
+    def setUp(self):
+        smtpd.socket = asyncore.socket = mock_socket
+        self.old_debugstream = smtpd.DEBUGSTREAM
+        self.debug = smtpd.DEBUGSTREAM = io.StringIO()
+        self.server = DummyServer((support.HOSTv6, 0), ('b', 0))
+        conn, addr = self.server.accept()
+        self.channel = smtpd.SMTPChannel(self.server, conn, addr,
+                                         decode_data=True)
 
 class SMTPDChannelWithDataSizeLimitTest(unittest.TestCase):
 
@@ -509,10 +558,11 @@ class SMTPDChannelWithDataSizeLimitTest(unittest.TestCase):
         smtpd.socket = asyncore.socket = mock_socket
         self.old_debugstream = smtpd.DEBUGSTREAM
         self.debug = smtpd.DEBUGSTREAM = io.StringIO()
-        self.server = DummyServer('a', 'b')
+        self.server = DummyServer((support.HOST, 0), ('b', 0))
         conn, addr = self.server.accept()
         # Set DATA size limit to 32 bytes for easy testing
-        self.channel = smtpd.SMTPChannel(self.server, conn, addr, 32)
+        self.channel = smtpd.SMTPChannel(self.server, conn, addr, 32,
+                                         decode_data=True)
 
     def tearDown(self):
         asyncore.close_all()
@@ -551,6 +601,95 @@ class SMTPDChannelWithDataSizeLimitTest(unittest.TestCase):
         self.write_line(b'This message is longer than 32 bytes\r\n.')
         self.assertEqual(self.channel.socket.last,
                          b'552 Error: Too much mail data\r\n')
+
+
+class SMTPDChannelWithDecodeDataFalse(unittest.TestCase):
+
+    def setUp(self):
+        smtpd.socket = asyncore.socket = mock_socket
+        self.old_debugstream = smtpd.DEBUGSTREAM
+        self.debug = smtpd.DEBUGSTREAM = io.StringIO()
+        self.server = DummyServer((support.HOST, 0), ('b', 0),
+                                  decode_data=False)
+        conn, addr = self.server.accept()
+        # Set decode_data to False
+        self.channel = smtpd.SMTPChannel(self.server, conn, addr,
+                decode_data=False)
+
+    def tearDown(self):
+        asyncore.close_all()
+        asyncore.socket = smtpd.socket = socket
+        smtpd.DEBUGSTREAM = self.old_debugstream
+
+    def write_line(self, line):
+        self.channel.socket.queue_recv(line)
+        self.channel.handle_read()
+
+    def test_ascii_data(self):
+        self.write_line(b'HELO example')
+        self.write_line(b'MAIL From:eggs@example')
+        self.write_line(b'RCPT To:spam@example')
+        self.write_line(b'DATA')
+        self.write_line(b'plain ascii text')
+        self.write_line(b'.')
+        self.assertEqual(self.channel.received_data, b'plain ascii text')
+
+    def test_utf8_data(self):
+        self.write_line(b'HELO example')
+        self.write_line(b'MAIL From:eggs@example')
+        self.write_line(b'RCPT To:spam@example')
+        self.write_line(b'DATA')
+        self.write_line(b'utf8 enriched text: \xc5\xbc\xc5\xba\xc4\x87')
+        self.write_line(b'and some plain ascii')
+        self.write_line(b'.')
+        self.assertEqual(
+            self.channel.received_data,
+            b'utf8 enriched text: \xc5\xbc\xc5\xba\xc4\x87\n'
+                b'and some plain ascii')
+
+
+class SMTPDChannelWithDecodeDataTrue(unittest.TestCase):
+
+    def setUp(self):
+        smtpd.socket = asyncore.socket = mock_socket
+        self.old_debugstream = smtpd.DEBUGSTREAM
+        self.debug = smtpd.DEBUGSTREAM = io.StringIO()
+        self.server = DummyServer((support.HOST, 0), ('b', 0),
+                                  decode_data=True)
+        conn, addr = self.server.accept()
+        # Set decode_data to True
+        self.channel = smtpd.SMTPChannel(self.server, conn, addr,
+                decode_data=True)
+
+    def tearDown(self):
+        asyncore.close_all()
+        asyncore.socket = smtpd.socket = socket
+        smtpd.DEBUGSTREAM = self.old_debugstream
+
+    def write_line(self, line):
+        self.channel.socket.queue_recv(line)
+        self.channel.handle_read()
+
+    def test_ascii_data(self):
+        self.write_line(b'HELO example')
+        self.write_line(b'MAIL From:eggs@example')
+        self.write_line(b'RCPT To:spam@example')
+        self.write_line(b'DATA')
+        self.write_line(b'plain ascii text')
+        self.write_line(b'.')
+        self.assertEqual(self.channel.received_data, 'plain ascii text')
+
+    def test_utf8_data(self):
+        self.write_line(b'HELO example')
+        self.write_line(b'MAIL From:eggs@example')
+        self.write_line(b'RCPT To:spam@example')
+        self.write_line(b'DATA')
+        self.write_line(b'utf8 enriched text: \xc5\xbc\xc5\xba\xc4\x87')
+        self.write_line(b'and some plain ascii')
+        self.write_line(b'.')
+        self.assertEqual(
+            self.channel.received_data,
+            'utf8 enriched text: żźć\nand some plain ascii')
 
 
 if __name__ == "__main__":
