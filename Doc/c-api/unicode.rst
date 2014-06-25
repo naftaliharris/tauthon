@@ -526,11 +526,22 @@ APIs:
       The `"%lld"` and `"%llu"` format specifiers are only available
       when :const:`HAVE_LONG_LONG` is defined.
 
+   .. note::
+      The width formatter unit is number of characters rather than bytes.
+      The precision formatter unit is number of bytes for ``"%s"`` and
+      ``"%V"`` (if the ``PyObject*`` argument is NULL), and a number of
+      characters for ``"%A"``, ``"%U"``, ``"%S"``, ``"%R"`` and ``"%V"``
+      (if the ``PyObject*`` argument is not NULL).
+
    .. versionchanged:: 3.2
       Support for ``"%lld"`` and ``"%llu"`` added.
 
    .. versionchanged:: 3.3
       Support for ``"%li"``, ``"%lli"`` and ``"%zi"`` added.
+
+   .. versionchanged:: 3.4
+      Support width and precision formatter for ``"%s"``, ``"%A"``, ``"%U"``,
+      ``"%V"``, ``"%S"``, ``"%R"`` added.
 
 
 .. c:function:: PyObject* PyUnicode_FromFormatV(const char *format, va_list vargs)
@@ -1613,7 +1624,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
    Compare a unicode object, *uni*, with *string* and return -1, 0, 1 for less
    than, equal, and greater than, respectively. It is best to pass only
    ASCII-encoded strings, but the function interprets the input string as
-   ISO-8859-1 if it contains non-ASCII characters".
+   ISO-8859-1 if it contains non-ASCII characters.
 
 
 .. c:function:: PyObject* PyUnicode_RichCompare(PyObject *left,  PyObject *right,  int op)

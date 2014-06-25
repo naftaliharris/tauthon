@@ -21,20 +21,27 @@ CACERT_svn_python_org = os.path.join(here, 'https_svn_python_org_root.pem')
 HOST = support.HOST
 
 class FakeSocket:
-    def __init__(self, text, fileclass=io.BytesIO):
+    def __init__(self, text, fileclass=io.BytesIO, host=None, port=None):
         if isinstance(text, str):
             text = text.encode("ascii")
         self.text = text
         self.fileclass = fileclass
         self.data = b''
+        self.sendall_calls = 0
+        self.host = host
+        self.port = port
 
     def sendall(self, data):
+        self.sendall_calls += 1
         self.data += data
 
     def makefile(self, mode, bufsize=None):
         if mode != 'r' and mode != 'rb':
             raise client.UnimplementedFileMode()
         return self.fileclass(self.text)
+
+    def close(self):
+        pass
 
 class EPipeSocket(FakeSocket):
 
@@ -45,7 +52,7 @@ class EPipeSocket(FakeSocket):
 
     def sendall(self, data):
         if self.pipe_trigger in data:
-            raise socket.error(errno.EPIPE, "gotcha")
+            raise OSError(errno.EPIPE, "gotcha")
         self.data += data
 
     def close(self):
@@ -600,7 +607,7 @@ class BasicTest(TestCase):
             b"Content-Length")
         conn = client.HTTPConnection("example.com")
         conn.sock = sock
-        self.assertRaises(socket.error,
+        self.assertRaises(OSError,
                           lambda: conn.request("PUT", "/url", "body"))
         resp = conn.getresponse()
         self.assertEqual(401, resp.status)
@@ -645,6 +652,28 @@ class BasicTest(TestCase):
         self.assertFalse(resp.closed)
         resp.close()
         self.assertTrue(resp.closed)
+
+    def test_delayed_ack_opt(self):
+        # Test that Nagle/delayed_ack optimistaion works correctly.
+
+        # For small payloads, it should coalesce the body with
+        # headers, resulting in a single sendall() call
+        conn = client.HTTPConnection('example.com')
+        sock = FakeSocket(None)
+        conn.sock = sock
+        body = b'x' * (conn.mss - 1)
+        conn.request('POST', '/', body)
+        self.assertEqual(sock.sendall_calls, 1)
+
+        # For large payloads, it should send the headers and
+        # then the body, resulting in more than one sendall()
+        # call
+        conn = client.HTTPConnection('example.com')
+        sock = FakeSocket(None)
+        conn.sock = sock
+        body = b'x' * conn.mss
+        conn.request('POST', '/', body)
+        self.assertGreater(sock.sendall_calls, 1)
 
 class OfflineTest(TestCase):
     def test_responses(self):
@@ -736,7 +765,7 @@ class HTTPSTest(TestCase):
 
     def make_server(self, certfile):
         from test.ssl_servers import make_https_server
-        return make_https_server(self, certfile)
+        return make_https_server(self, certfile=certfile)
 
     def test_attributes(self):
         # simple test to check it's storing the timeout
@@ -946,10 +975,51 @@ class HTTPResponseTest(TestCase):
         header = self.resp.getheader('No-Such-Header',default=42)
         self.assertEqual(header, 42)
 
+class TunnelTests(TestCase):
+
+    def test_connect(self):
+        response_text = (
+            'HTTP/1.0 200 OK\r\n\r\n' # Reply to CONNECT
+            'HTTP/1.1 200 OK\r\n' # Reply to HEAD
+            'Content-Length: 42\r\n\r\n'
+        )
+
+        def create_connection(address, timeout=None, source_address=None):
+            return FakeSocket(response_text, host=address[0],
+                              port=address[1])
+
+        conn = client.HTTPConnection('proxy.com')
+        conn._create_connection = create_connection
+
+        # Once connected, we shouldn't be able to tunnel anymore
+        conn.connect()
+        self.assertRaises(RuntimeError, conn.set_tunnel,
+                          'destination.com')
+
+        # But if we close the connection, we're good
+        conn.close()
+        conn.set_tunnel('destination.com')
+        conn.request('HEAD', '/', '')
+
+        self.assertEqual(conn.sock.host, 'proxy.com')
+        self.assertEqual(conn.sock.port, 80)
+        self.assertTrue(b'CONNECT destination.com' in conn.sock.data)
+        self.assertTrue(b'Host: destination.com' in conn.sock.data)
+
+        # This test should be removed when CONNECT gets the HTTP/1.1 blessing
+        self.assertTrue(b'Host: proxy.com' not in conn.sock.data)
+
+        conn.close()
+        conn.request('PUT', '/', '')
+        self.assertEqual(conn.sock.host, 'proxy.com')
+        self.assertEqual(conn.sock.port, 80)
+        self.assertTrue(b'CONNECT destination.com' in conn.sock.data)
+        self.assertTrue(b'Host: destination.com' in conn.sock.data)
+
 def test_main(verbose=None):
     support.run_unittest(HeaderTests, OfflineTest, BasicTest, TimeoutTest,
                          HTTPSTest, RequestBodyTest, SourceAddressTest,
-                         HTTPResponseTest)
+                         HTTPResponseTest, TunnelTests)
 
 if __name__ == '__main__':
     test_main()

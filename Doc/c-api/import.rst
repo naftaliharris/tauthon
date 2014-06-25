@@ -118,7 +118,7 @@ Importing Modules
    encoded string instead of a Unicode object.
 
 
-.. c:function:: PyObject* PyImport_ExecCodeModule(char *name, PyObject *co)
+.. c:function:: PyObject* PyImport_ExecCodeModule(const char *name, PyObject *co)
 
    .. index:: builtin: compile
 
@@ -132,8 +132,14 @@ Importing Modules
    such modules have no way to know that the module object is an unknown (and
    probably damaged with respect to the module author's intents) state.
 
+   The module's :attr:`__spec__` and :attr:`__loader__` will be set, if
+   not set already, with the appropriate values.  The spec's loader will
+   be set to the module's ``__loader__`` (if set) and to an instance of
+   :class:`SourceFileLoader` otherwise.
+
    The module's :attr:`__file__` attribute will be set to the code object's
-   :c:member:`co_filename`.
+   :c:member:`co_filename`.  If applicable, :attr:`__cached__` will also
+   be set.
 
    This function will reload the module if it was already imported.  See
    :c:func:`PyImport_ReloadModule` for the intended way to reload a module.
@@ -145,7 +151,7 @@ Importing Modules
    :c:func:`PyImport_ExecCodeModuleWithPathnames`.
 
 
-.. c:function:: PyObject* PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
+.. c:function:: PyObject* PyImport_ExecCodeModuleEx(const char *name, PyObject *co, const char *pathname)
 
    Like :c:func:`PyImport_ExecCodeModule`, but the :attr:`__file__` attribute of
    the module object is set to *pathname* if it is non-``NULL``.
@@ -162,7 +168,7 @@ Importing Modules
    .. versionadded:: 3.3
 
 
-.. c:function:: PyObject* PyImport_ExecCodeModuleWithPathnames(char *name, PyObject *co, char *pathname, char *cpathname)
+.. c:function:: PyObject* PyImport_ExecCodeModuleWithPathnames(const char *name, PyObject *co, const char *pathname, const char *cpathname)
 
    Like :c:func:`PyImport_ExecCodeModuleObject`, but *name*, *pathname* and
    *cpathname* are UTF-8 encoded strings. Attempts are also made to figure out
@@ -245,8 +251,11 @@ Importing Modules
 
    .. versionadded:: 3.3
 
+   .. versionchanged:: 3.4
+      The ``__file__`` attribute is no longer set on the module.
 
-.. c:function:: int PyImport_ImportFrozenModule(char *name)
+
+.. c:function:: int PyImport_ImportFrozenModule(const char *name)
 
    Similar to :c:func:`PyImport_ImportFrozenModuleObject`, but the name is a
    UTF-8 encoded string instead of a Unicode object.

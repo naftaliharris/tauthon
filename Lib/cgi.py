@@ -82,7 +82,7 @@ def initlog(*allargs):
     if logfile and not logfp:
         try:
             logfp = open(logfile, "a")
-        except IOError:
+        except OSError:
             pass
     if not logfp:
         log = nolog
@@ -560,6 +560,12 @@ class FieldStorage:
         else:
             self.read_single()
 
+    def __del__(self):
+        try:
+            self.file.close()
+        except AttributeError:
+            pass
+
     def __repr__(self):
         """Return a printable representation."""
         return "FieldStorage(%r, %r, %r)" % (
@@ -680,7 +686,6 @@ class FieldStorage:
                 encoding=self.encoding, errors=self.errors)
             for key, value in query:
                 self.list.append(MiniFieldStorage(key, value))
-            FieldStorageClass = None
 
         klass = self.FieldStorageClass or self.__class__
         first_line = self.fp.readline() # bytes
@@ -968,8 +973,8 @@ def print_directory():
     print("<H3>Current Working Directory:</H3>")
     try:
         pwd = os.getcwd()
-    except os.error as msg:
-        print("os.error:", html.escape(str(msg)))
+    except OSError as msg:
+        print("OSError:", html.escape(str(msg)))
     else:
         print(html.escape(pwd))
     print()
@@ -1040,7 +1045,7 @@ def escape(s, quote=None):
     return s
 
 
-def valid_boundary(s, _vb_pattern=None):
+def valid_boundary(s):
     import re
     if isinstance(s, bytes):
         _vb_pattern = b"^[ -~]{0,200}[!-~]$"

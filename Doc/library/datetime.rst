@@ -170,10 +170,12 @@ dates or times.
    * ``0 <= seconds < 3600*24`` (the number of seconds in one day)
    * ``-999999999 <= days <= 999999999``
 
-   If any argument is a float and there are fractional microseconds, the fractional
-   microseconds left over from all arguments are combined and their sum is rounded
-   to the nearest microsecond.  If no argument is a float, the conversion and
-   normalization processes are exact (no information is lost).
+   If any argument is a float and there are fractional microseconds,
+   the fractional microseconds left over from all arguments are
+   combined and their sum is rounded to the nearest microsecond using
+   round-half-to-even tiebreaker.  If no argument is a float, the
+   conversion and normalization processes are exact (no information is
+   lost).
 
    If the normalized value of days lies outside the indicated range,
    :exc:`OverflowError` is raised.
@@ -1685,11 +1687,11 @@ only EST (fixed offset -5 hours), or only EDT (fixed offset -4 hours)).
 .. seealso::
 
    `pytz <http://pypi.python.org/pypi/pytz/>`_
-      The standard library has no :class:`tzinfo` instances except for UTC, but
-      there exists a third-party library which brings the *IANA timezone
-      database* (also known as the Olson database) to Python: *pytz*.
+      The standard library has :class:`timezone` class for handling arbitrary
+      fixed offsets from UTC and :attr:`timezone.utc` as UTC timezone instance.
 
-      *pytz* contains up-to-date information and its usage is recommended.
+      *pytz* library brings the *IANA timezone database* (also known as the
+      Olson database) to Python and its usage is recommended.
 
    `IANA timezone database <http://www.iana.org/time-zones>`_
       The Time Zone Database (often called tz or zoneinfo) contains code and
@@ -1725,6 +1727,8 @@ made to civil time.
   ``tzname(dt)`` returns a string 'UTCsHH:MM', where s is the sign of
   *offset*, HH and MM are two digits of ``offset.hours`` and
   ``offset.minutes`` respectively.
+
+  .. versionadded:: 3.2
 
 .. method:: timezone.utcoffset(dt)
 

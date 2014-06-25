@@ -6,7 +6,7 @@ one of the other *util.py modules.
 
 import os
 import re
-import imp
+import importlib.util
 import sys
 import string
 from distutils.errors import DistutilsPlatformError
@@ -151,12 +151,6 @@ def change_root (new_root, pathname):
     elif os.name == 'nt':
         (drive, path) = os.path.splitdrive(pathname)
         if path[0] == '\\':
-            path = path[1:]
-        return os.path.join(new_root, path)
-
-    elif os.name == 'os2':
-        (drive, path) = os.path.splitdrive(pathname)
-        if path[0] == os.sep:
             path = path[1:]
         return os.path.join(new_root, path)
 
@@ -444,9 +438,10 @@ byte_compile(files, optimize=%r, force=%r,
             #   cfile - byte-compiled file
             #   dfile - purported source filename (same as 'file' by default)
             if optimize >= 0:
-                cfile = imp.cache_from_source(file, debug_override=not optimize)
+                cfile = importlib.util.cache_from_source(
+                    file, debug_override=not optimize)
             else:
-                cfile = imp.cache_from_source(file)
+                cfile = importlib.util.cache_from_source(file)
             dfile = file
             if prefix:
                 if file[:len(prefix)] != prefix:

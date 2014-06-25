@@ -1526,7 +1526,7 @@ expression support in the :mod:`re` module).
    at that position.
 
 
-.. method:: str.expandtabs([tabsize])
+.. method:: str.expandtabs(tabsize=8)
 
    Return a copy of the string where all tab characters are replaced by one or
    more spaces, depending on the current column and the given tab size.  Tab
@@ -2462,6 +2462,10 @@ copying.
    .. versionchanged:: 3.3
       One-dimensional memoryviews with formats 'B', 'b' or 'c' are now hashable.
 
+   .. versionchanged:: 3.4
+      memoryview is now registered automatically with
+      :class:`collections.abc.Sequence`
+
    :class:`memoryview` has several methods:
 
    .. method:: __eq__(exporter)
@@ -3027,8 +3031,8 @@ pairs within braces, for example: ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098:
    If no positional argument is given, an empty dictionary is created.
    If a positional argument is given and it is a mapping object, a dictionary
    is created with the same key-value pairs as the mapping object.  Otherwise,
-   the positional argument must be an :term:`iterator` object.  Each item in
-   the iterable must itself be an iterator with exactly two objects.  The
+   the positional argument must be an :term:`iterable` object.  Each item in
+   the iterable must itself be an iterable with exactly two objects.  The
    first object of each item becomes a key in the new dictionary, and the
    second object the corresponding value.  If a key occurs more than once, the
    last value for that key becomes the corresponding value in the new

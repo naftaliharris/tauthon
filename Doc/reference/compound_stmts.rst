@@ -22,14 +22,14 @@ also syntactically compound statements.
    single: clause
    single: suite
 
-Compound statements consist of one or more 'clauses.'  A clause consists of a
+A compound statement consists of one or more 'clauses.'  A clause consists of a
 header and a 'suite.'  The clause headers of a particular compound statement are
 all at the same indentation level. Each clause header begins with a uniquely
 identifying keyword and ends with a colon.  A suite is a group of statements
 controlled by a clause.  A suite can be one or more semicolon-separated simple
 statements on the same line as the header, following the header's colon, or it
 can be one or more indented statements on subsequent lines.  Only the latter
-form of suite can contain nested compound statements; the following is illegal,
+form of a suite can contain nested compound statements; the following is illegal,
 mostly because it wouldn't be clear to which :keyword:`if` clause a following
 :keyword:`else` clause would belong::
 
@@ -156,8 +156,8 @@ The :keyword:`for` statement is used to iterate over the elements of a sequence
 
 The expression list is evaluated once; it should yield an iterable object.  An
 iterator is created for the result of the ``expression_list``.  The suite is
-then executed once for each item provided by the iterator, in the order of
-ascending indices.  Each item in turn is assigned to the target list using the
+then executed once for each item provided by the iterator, in the order returned
+by the iterator.  Each item in turn is assigned to the target list using the
 standard rules for assignments (see :ref:`assignment`), and then the suite is
 executed.  When the items are exhausted (which is immediately when the sequence
 is empty or an iterator raises a :exc:`StopIteration` exception), the suite in
@@ -170,17 +170,25 @@ the :keyword:`else` clause, if present, is executed, and the loop terminates.
 A :keyword:`break` statement executed in the first suite terminates the loop
 without executing the :keyword:`else` clause's suite.  A :keyword:`continue`
 statement executed in the first suite skips the rest of the suite and continues
-with the next item, or with the :keyword:`else` clause if there was no next
+with the next item, or with the :keyword:`else` clause if there is no next
 item.
 
-The suite may assign to the variable(s) in the target list; this does not affect
-the next item assigned to it.
+The for-loop makes assignments to the variables(s) in the target list.
+This overwrites all previous assignments to those variables including
+those made in the suite of the for-loop::
+
+   for i in range(10):
+       print(i)
+       i = 5             # this will not affect the for-loop
+                         # because i will be overwritten with the next
+                         # index in the range
+
 
 .. index::
    builtin: range
 
 Names in the target list are not deleted when the loop is finished, but if the
-sequence is empty, it will not have been assigned to at all by the loop.  Hint:
+sequence is empty, they will not have been assigned to at all by the loop.  Hint:
 the built-in function :func:`range` returns an iterator of integers suitable to
 emulate the effect of Pascal's ``for i := a to b do``; e.g., ``list(range(3))``
 returns the list ``[0, 1, 2]``.
@@ -284,7 +292,7 @@ keeping all locals in that frame alive until the next garbage collection occurs.
    object: traceback
 
 Before an except clause's suite is executed, details about the exception are
-stored in the :mod:`sys` module and can be access via :func:`sys.exc_info`.
+stored in the :mod:`sys` module and can be accessed via :func:`sys.exc_info`.
 :func:`sys.exc_info` returns a 3-tuple consisting of the exception class, the
 exception instance and a traceback object (see section :ref:`types`) identifying
 the point in the program where the exception occurred.  :func:`sys.exc_info`
@@ -313,14 +321,14 @@ exception, the saved exception is set as the context of the new exception.
 If the :keyword:`finally` clause executes a :keyword:`return` or :keyword:`break`
 statement, the saved exception is discarded::
 
-    def f():
-        try:
-            1/0
-        finally:
-            return 42
-
-    >>> f()
-    42
+   >>> def f():
+   ...     try:
+   ...         1/0
+   ...     finally:
+   ...         return 42
+   ...
+   >>> f()
+   42
 
 The exception information is not available to the program during execution of
 the :keyword:`finally` clause.
@@ -337,6 +345,20 @@ statement, the :keyword:`finally` clause is also executed 'on the way out.' A
 reason is a problem with the current implementation --- this restriction may be
 lifted in the future).
 
+The return value of a function is determined by the last :keyword:`return`
+statement executed.  Since the :keyword:`finally` clause always executes, a
+:keyword:`return` statement executed in the :keyword:`finally` clause will
+always be the last one executed::
+
+   >>> def foo():
+   ...     try:
+   ...         return 'try'
+   ...     finally:
+   ...         return 'finally'
+   ...
+   >>> foo()
+   'finally'
+
 Additional information on exceptions can be found in section :ref:`exceptions`,
 and information on using the :keyword:`raise` statement to generate exceptions
 may be found in section :ref:`raise`.
@@ -348,7 +370,9 @@ may be found in section :ref:`raise`.
 The :keyword:`with` statement
 =============================
 
-.. index:: statement: with
+.. index::
+    statement: with
+    single: as; with statement
 
 The :keyword:`with` statement is used to wrap the execution of a block with
 methods defined by a context manager (see section :ref:`context-managers`).
@@ -445,7 +469,7 @@ A function definition defines a user-defined function object (see section
    decorator: "@" `dotted_name` ["(" [`parameter_list` [","]] ")"] NEWLINE
    dotted_name: `identifier` ("." `identifier`)*
    parameter_list: (`defparameter` ",")*
-                 : ( "*" [`parameter`] ("," `defparameter`)* ["," "**" `parameter`]
+                 : | "*" [`parameter`] ("," `defparameter`)* ["," "**" `parameter`]
                  : | "**" `parameter`
                  : | `defparameter` [","] )
    parameter: `identifier` [":" `expression`]
@@ -493,14 +517,15 @@ case the parameter's default value is substituted.  If a parameter has a default
 value, all following parameters up until the "``*``" must also have a default
 value --- this is a syntactic restriction that is not expressed by the grammar.
 
-**Default parameter values are evaluated when the function definition is
-executed.** This means that the expression is evaluated once, when the function
-is defined, and that the same "pre-computed" value is used for each call.  This
-is especially important to understand when a default parameter is a mutable
-object, such as a list or a dictionary: if the function modifies the object
-(e.g. by appending an item to a list), the default value is in effect modified.
-This is generally not what was intended.  A way around this is to use ``None``
-as the default, and explicitly test for it in the body of the function, e.g.::
+**Default parameter values are evaluated from left to right when the function
+definition is executed.** This means that the expression is evaluated once, when
+the function is defined, and that the same "pre-computed" value is used for each
+call.  This is especially important to understand when a default parameter is a
+mutable object, such as a list or a dictionary: if the function modifies the
+object (e.g. by appending an item to a list), the default value is in effect
+modified.  This is generally not what was intended.  A way around this is to use
+``None`` as the default, and explicitly test for it in the body of the function,
+e.g.::
 
    def whats_on_the_telly(penguin=None):
        if penguin is None:

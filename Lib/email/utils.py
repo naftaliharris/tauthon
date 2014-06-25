@@ -25,13 +25,10 @@ __all__ = [
 import os
 import re
 import time
-import base64
 import random
 import socket
 import datetime
 import urllib.parse
-import warnings
-from io import StringIO
 
 from email._parseaddr import quote
 from email._parseaddr import AddressList as _AddressList
@@ -39,10 +36,7 @@ from email._parseaddr import mktime_tz
 
 from email._parseaddr import parsedate, parsedate_tz, _parsedate_tz
 
-from quopri import decodestring as _qdecode
-
 # Intrapackage imports
-from email.encoders import _bencode, _qencode
 from email.charset import Charset
 
 COMMASPACE = ', '
@@ -54,17 +48,27 @@ TICK = "'"
 specialsre = re.compile(r'[][\\()<>@,:;".]')
 escapesre = re.compile(r'[\\"]')
 
-# How to figure out if we are processing strings that come from a byte
-# source with undecodable characters.
-_has_surrogates = re.compile(
-    '([^\ud800-\udbff]|\A)[\udc00-\udfff]([^\udc00-\udfff]|\Z)').search
+def _has_surrogates(s):
+    """Return True if s contains surrogate-escaped binary data."""
+    # This check is based on the fact that unless there are surrogates, utf8
+    # (Python's default encoding) can encode any string.  This is the fastest
+    # way to check for surrogates, see issue 11454 for timings.
+    try:
+        s.encode()
+        return False
+    except UnicodeEncodeError:
+        return True
 
 # How to deal with a string containing bytes before handing it to the
 # application through the 'normal' interface.
 def _sanitize(string):
-    # Turn any escaped bytes into unicode 'unknown' char.
-    original_bytes = string.encode('ascii', 'surrogateescape')
-    return original_bytes.decode('ascii', 'replace')
+    # Turn any escaped bytes into unicode 'unknown' char.  If the escaped
+    # bytes happen to be utf-8 they will instead get decoded, even if they
+    # were invalid in the charset the source was supposed to be in.  This
+    # seems like it is not a bad thing; a defect was still registered.
+    original_bytes = string.encode('utf-8', 'surrogateescape')
+    return original_bytes.decode('utf-8', 'replace')
+
 
 
 # Helpers

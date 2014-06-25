@@ -1079,7 +1079,7 @@ class LongTest(unittest.TestCase):
         self.assertRaises(OverflowError, (256).to_bytes, 1, 'big', signed=True)
         self.assertRaises(OverflowError, (256).to_bytes, 1, 'little', signed=False)
         self.assertRaises(OverflowError, (256).to_bytes, 1, 'little', signed=True)
-        self.assertRaises(OverflowError, (-1).to_bytes, 2, 'big', signed=False),
+        self.assertRaises(OverflowError, (-1).to_bytes, 2, 'big', signed=False)
         self.assertRaises(OverflowError, (-1).to_bytes, 2, 'little', signed=False)
         self.assertEqual((0).to_bytes(0, 'big'), b'')
         self.assertEqual((1).to_bytes(5, 'big'), b'\x00\x00\x00\x00\x01')
@@ -1234,6 +1234,13 @@ class LongTest(unittest.TestCase):
         integers = [Integer(0) for i in range(1000)]
         for n in map(int, integers):
             self.assertEqual(n, 0)
+
+    def test_shift_bool(self):
+        # Issue #21422: ensure that bool << int and bool >> int return int
+        for value in (True, False):
+            for shift in (0, 2):
+                self.assertEqual(type(value << shift), int)
+                self.assertEqual(type(value >> shift), int)
 
 
 def test_main():

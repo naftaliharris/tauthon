@@ -81,6 +81,10 @@ Some facts and figures:
    If *fileobj* is specified, it is used as an alternative to a :term:`file object`
    opened in binary mode for *name*. It is supposed to be at position 0.
 
+   For modes ``'w:gz'``, ``'r:gz'``, ``'w:bz2'``, ``'r:bz2'``, :func:`tarfile.open`
+   accepts the keyword argument *compresslevel* to specify the compression level of
+   the file.
+
    For special purposes, there is a second format for *mode*:
    ``'filemode|[compression]'``.  :func:`tarfile.open` will return a :class:`TarFile`
    object that processes its data as a stream of blocks.  No random seeking will
@@ -292,7 +296,7 @@ be finalized; only the internally used file object will be closed. See the
    will be added as a pax global header if *format* is :const:`PAX_FORMAT`.
 
 
-.. method:: TarFile.open(...)
+.. classmethod:: TarFile.open(...)
 
    Alternative constructor. The :func:`tarfile.open` function is actually a
    shortcut to this classmethod.
@@ -509,7 +513,7 @@ A ``TarInfo`` object has the following public data attributes:
    :const:`AREGTYPE`, :const:`LNKTYPE`, :const:`SYMTYPE`, :const:`DIRTYPE`,
    :const:`FIFOTYPE`, :const:`CONTTYPE`, :const:`CHRTYPE`, :const:`BLKTYPE`,
    :const:`GNUTYPE_SPARSE`.  To determine the type of a :class:`TarInfo` object
-   more conveniently, use the ``is_*()`` methods below.
+   more conveniently, use the ``is*()`` methods below.
 
 
 .. attribute:: TarInfo.linkname
@@ -590,6 +594,67 @@ A :class:`TarInfo` object also provides some convenient query methods:
 
    Return :const:`True` if it is one of character device, block device or FIFO.
 
+
+.. _tarfile-commandline:
+
+Command Line Interface
+----------------------
+
+.. versionadded:: 3.4
+
+The :mod:`tarfile` module provides a simple command line interface to interact
+with tar archives.
+
+If you want to create a new tar archive, specify its name after the :option:`-c`
+option and then list the filename(s) that should be included::
+
+    $ python -m tarfile -c monty.tar  spam.txt eggs.txt
+
+Passing a directory is also acceptable::
+
+    $ python -m tarfile -c monty.tar life-of-brian_1979/
+
+If you want to extract a tar archive into the current directory, use
+the :option:`-e` option::
+
+    $ python -m tarfile -e monty.tar
+
+You can also extract a tar archive into a different directory by passing the
+directory's name::
+
+    $ python -m tarfile -e monty.tar  other-dir/
+
+For a list of the files in a tar archive, use the :option:`-l` option::
+
+    $ python -m tarfile -l monty.tar
+
+
+Command line options
+~~~~~~~~~~~~~~~~~~~~
+
+.. cmdoption:: -l <tarfile>
+               --list <tarfile>
+
+   List files in a tarfile.
+
+.. cmdoption:: -c <tarfile> <source1> <sourceN>
+               --create <tarfile> <source1> <sourceN>
+
+   Create tarfile from source files.
+
+.. cmdoption:: -e <tarfile> [<output_dir>]
+               --extract <tarfile> [<output_dir>]
+
+   Extract tarfile into the current directory if *output_dir* is not specified.
+
+.. cmdoption:: -t <tarfile>
+               --test <tarfile>
+
+   Test whether the tarfile is valid or not.
+
+.. cmdoption:: -v, --verbose
+
+   Verbose output
 
 .. _tar-examples:
 

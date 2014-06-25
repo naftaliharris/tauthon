@@ -2,7 +2,15 @@ import os, sys, unittest, getopt, time
 
 use_resources = []
 
-class ResourceDenied(Exception):
+import ctypes
+ctypes_symbols = dir(ctypes)
+
+def need_symbol(name):
+    return unittest.skipUnless(name in ctypes_symbols,
+                               '{!r} is required'.format(name))
+
+
+class ResourceDenied(unittest.SkipTest):
     """Test skipped because it requested a disallowed resource.
 
     This is raised when a test calls requires() for a resource that
@@ -37,7 +45,7 @@ def requires(resource, msg=None):
 
 def find_package_modules(package, mask):
     import fnmatch
-    if (hasattr(package, "__loader__") and
+    if (package.__loader__ is not None and
             hasattr(package.__loader__, '_files')):
         path = package.__name__.replace(".", os.path.sep)
         mask = os.path.join(path, mask)

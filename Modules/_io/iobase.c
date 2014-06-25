@@ -1,9 +1,9 @@
 /*
     An implementation of the I/O abstract base classes hierarchy
     as defined by PEP 3116 - "New I/O"
-    
+
     Classes defined here: IOBase, RawIOBase.
-    
+
     Written by Amaury Forgeot d'Arc and Antoine Pitrou
 */
 
@@ -19,7 +19,7 @@
 
 typedef struct {
     PyObject_HEAD
-    
+
     PyObject *dict;
     PyObject *weakreflist;
 } iobase;
@@ -42,8 +42,8 @@ PyDoc_STRVAR(iobase_doc,
     "bytes. bytearrays are accepted too, and in some cases (such as\n"
     "readinto) needed. Text I/O classes work with str data.\n"
     "\n"
-    "Note that calling any method (even inquiries) on a closed stream is\n"
-    "undefined. Implementations may raise IOError in this case.\n"
+    "Note that calling any method (except additional calls to close(),\n"
+    "which are ignored) on a closed stream should raise a ValueError.\n"
     "\n"
     "IOBase (and its subclasses) support the iterator protocol, meaning\n"
     "that an IOBase object can be iterated over yielding the lines in a\n"
@@ -63,11 +63,15 @@ _Py_IDENTIFIER(__IOBase_closed);
 #define IS_CLOSED(self) \
     _PyObject_HasAttrId(self, &PyId___IOBase_closed)
 
+_Py_IDENTIFIER(read);
+
 /* Internal methods */
 static PyObject *
 iobase_unsupported(const char *message)
 {
-    PyErr_SetString(IO_STATE->unsupported_operation, message);
+    _PyIO_State *state = IO_STATE();
+    if (state != NULL)
+        PyErr_SetString(state->unsupported_operation, message);
     return NULL;
 }
 
@@ -180,42 +184,44 @@ static PyObject *
 iobase_close(PyObject *self, PyObject *args)
 {
     PyObject *res;
-    _Py_IDENTIFIER(__IOBase_closed);
 
     if (IS_CLOSED(self))
         Py_RETURN_NONE;
 
     res = PyObject_CallMethodObjArgs(self, _PyIO_str_flush, NULL);
-    _PyObject_SetAttrId(self, &PyId___IOBase_closed, Py_True);
-    if (res == NULL) {
+
+    if (_PyObject_SetAttrId(self, &PyId___IOBase_closed, Py_True) < 0) {
+        Py_XDECREF(res);
         return NULL;
     }
-    Py_XDECREF(res);
+
+    if (res == NULL)
+        return NULL;
+
+    Py_DECREF(res);
     Py_RETURN_NONE;
 }
 
 /* Finalization and garbage collection support */
 
-int
-_PyIOBase_finalize(PyObject *self)
+static void
+iobase_finalize(PyObject *self)
 {
     PyObject *res;
-    PyObject *tp, *v, *tb;
-    int closed = 1;
-    int is_zombie;
+    PyObject *error_type, *error_value, *error_traceback;
+    int closed;
+    _Py_IDENTIFIER(_finalizing);
 
-    /* If _PyIOBase_finalize() is called from a destructor, we need to
-       resurrect the object as calling close() can invoke arbitrary code. */
-    is_zombie = (Py_REFCNT(self) == 0);
-    if (is_zombie) {
-        ++Py_REFCNT(self);
-    }
-    PyErr_Fetch(&tp, &v, &tb);
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
     /* If `closed` doesn't exist or can't be evaluated as bool, then the
        object is probably in an unusable state, so ignore. */
     res = PyObject_GetAttr(self, _PyIO_str_closed);
-    if (res == NULL)
+    if (res == NULL) {
         PyErr_Clear();
+        closed = -1;
+    }
     else {
         closed = PyObject_IsTrue(res);
         Py_DECREF(res);
@@ -223,6 +229,10 @@ _PyIOBase_finalize(PyObject *self)
             PyErr_Clear();
     }
     if (closed == 0) {
+        /* Signal close() that it was called as part of the object
+           finalization process. */
+        if (_PyObject_SetAttrId(self, &PyId__finalizing, Py_True))
+            PyErr_Clear();
         res = PyObject_CallMethodObjArgs((PyObject *) self, _PyIO_str_close,
                                           NULL);
         /* Silencing I/O errors is bad, but printing spurious tracebacks is
@@ -233,31 +243,25 @@ _PyIOBase_finalize(PyObject *self)
         else
             Py_DECREF(res);
     }
-    PyErr_Restore(tp, v, tb);
-    if (is_zombie) {
-        if (--Py_REFCNT(self) != 0) {
-            /* The object lives again. The following code is taken from
-               slot_tp_del in typeobject.c. */
-            Py_ssize_t refcnt = Py_REFCNT(self);
-            _Py_NewReference(self);
-            Py_REFCNT(self) = refcnt;
-            /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
-             * we need to undo that. */
-            _Py_DEC_REFTOTAL;
-            /* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
-             * chain, so no more to do there.
-             * If COUNT_ALLOCS, the original decref bumped tp_frees, and
-             * _Py_NewReference bumped tp_allocs:  both of those need to be
-             * undone.
-             */
-#ifdef COUNT_ALLOCS
-            --Py_TYPE(self)->tp_frees;
-            --Py_TYPE(self)->tp_allocs;
-#endif
-            return -1;
-        }
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+}
+
+int
+_PyIOBase_finalize(PyObject *self)
+{
+    int is_zombie;
+
+    /* If _PyIOBase_finalize() is called from a destructor, we need to
+       resurrect the object as calling close() can invoke arbitrary code. */
+    is_zombie = (Py_REFCNT(self) == 0);
+    if (is_zombie)
+        return PyObject_CallFinalizerFromDealloc(self);
+    else {
+        PyObject_CallFinalizer(self);
+        return 0;
     }
-    return 0;
 }
 
 static int
@@ -270,8 +274,6 @@ iobase_traverse(iobase *self, visitproc visit, void *arg)
 static int
 iobase_clear(iobase *self)
 {
-    if (_PyIOBase_finalize((PyObject *) self) < 0)
-        return -1;
     Py_CLEAR(self->dict);
     return 0;
 }
@@ -455,7 +457,6 @@ iobase_readline(PyObject *self, PyObject *args)
     int has_peek = 0;
     PyObject *buffer, *result;
     Py_ssize_t old_size = -1;
-    _Py_IDENTIFIER(read);
     _Py_IDENTIFIER(peek);
 
     if (!PyArg_ParseTuple(args, "|O&:readline", &_PyIO_ConvertSsize_t, &limit)) {
@@ -536,7 +537,10 @@ iobase_readline(PyObject *self, PyObject *args)
         }
 
         old_size = PyByteArray_GET_SIZE(buffer);
-        PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b));
+        if (PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b)) < 0) {
+            Py_DECREF(b);
+            goto fail;
+        }
         memcpy(PyByteArray_AS_STRING(buffer) + old_size,
                PyBytes_AS_STRING(b), PyBytes_GET_SIZE(b));
 
@@ -741,7 +745,7 @@ PyTypeObject PyIOBase_Type = {
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
-        | Py_TPFLAGS_HAVE_GC,   /*tp_flags*/
+        | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_HAVE_FINALIZE,   /*tp_flags*/
     iobase_doc,                 /* tp_doc */
     (traverseproc)iobase_traverse, /* tp_traverse */
     (inquiry)iobase_clear,      /* tp_clear */
@@ -760,6 +764,16 @@ PyTypeObject PyIOBase_Type = {
     0,                          /* tp_init */
     0,                          /* tp_alloc */
     PyType_GenericNew,          /* tp_new */
+    0,                          /* tp_free */
+    0,                          /* tp_is_gc */
+    0,                          /* tp_bases */
+    0,                          /* tp_mro */
+    0,                          /* tp_cache */
+    0,                          /* tp_subclasses */
+    0,                          /* tp_weaklist */
+    0,                          /* tp_del */
+    0,                          /* tp_version_tag */
+    (destructor)iobase_finalize, /* tp_finalize */
 };
 
 
@@ -831,12 +845,11 @@ rawiobase_readall(PyObject *self, PyObject *args)
     int r;
     PyObject *chunks = PyList_New(0);
     PyObject *result;
-    
+
     if (chunks == NULL)
         return NULL;
 
     while (1) {
-        _Py_IDENTIFIER(read);
         PyObject *data = _PyObject_CallMethodId(self, &PyId_read,
                                                 "i", DEFAULT_BUFFER_SIZE);
         if (!data) {
@@ -905,7 +918,7 @@ PyTypeObject PyRawIOBase_Type = {
     0,                          /*tp_getattro*/
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,  /*tp_flags*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_FINALIZE,  /*tp_flags*/
     rawiobase_doc,              /* tp_doc */
     0,                          /* tp_traverse */
     0,                          /* tp_clear */
@@ -924,4 +937,14 @@ PyTypeObject PyRawIOBase_Type = {
     0,                          /* tp_init */
     0,                          /* tp_alloc */
     0,                          /* tp_new */
+    0,                          /* tp_free */
+    0,                          /* tp_is_gc */
+    0,                          /* tp_bases */
+    0,                          /* tp_mro */
+    0,                          /* tp_cache */
+    0,                          /* tp_subclasses */
+    0,                          /* tp_weaklist */
+    0,                          /* tp_del */
+    0,                          /* tp_version_tag */
+    0,                          /* tp_finalize */
 };
