@@ -15,6 +15,7 @@
 #include "ast.h"
 #include "marshal.h"
 #include "osdefs.h"
+#include <locale.h>
 
 #ifdef HAVE_SIGNAL_H
 #include <signal.h>
@@ -25,7 +26,6 @@
 #endif
 
 #ifdef HAVE_LANGINFO_H
-#include <locale.h>
 #include <langinfo.h>
 #endif
 
@@ -1160,6 +1160,15 @@ initstdio(void)
     encoding = _Py_StandardStreamEncoding;
     errors = _Py_StandardStreamErrors;
     if (!encoding || !errors) {
+        if (!errors) {
+            /* When the LC_CTYPE locale is the POSIX locale ("C locale"),
+               stdin and stdout use the surrogateescape error handler by
+               default, instead of the strict error handler. */
+            char *loc = setlocale(LC_CTYPE, NULL);
+            if (loc != NULL && strcmp(loc, "C") == 0)
+                errors = "surrogateescape";
+        }
+
         pythonioencoding = Py_GETENV("PYTHONIOENCODING");
         if (pythonioencoding) {
             char *err;
@@ -1172,7 +1181,7 @@ initstdio(void)
             if (err) {
                 *err = '\0';
                 err++;
-                if (*err && !errors) {
+                if (*err && !_Py_StandardStreamErrors) {
                     errors = err;
                 }
             }
