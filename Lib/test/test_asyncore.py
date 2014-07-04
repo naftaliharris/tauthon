@@ -7,7 +7,6 @@ import sys
 import time
 import errno
 import struct
-import warnings
 
 from test import support
 from io import BytesIO
@@ -298,23 +297,6 @@ class DispatcherTests(unittest.TestCase):
                     'warning: unhandled connect event']
         self.assertEqual(lines, expected)
 
-    def test_issue_8594(self):
-        # XXX - this test is supposed to be removed in next major Python
-        # version
-        d = asyncore.dispatcher(socket.socket())
-        # make sure the error message no longer refers to the socket
-        # object but the dispatcher instance instead
-        self.assertRaisesRegex(AttributeError, 'dispatcher instance',
-                               getattr, d, 'foo')
-        # cheap inheritance with the underlying socket is supposed
-        # to still work but a DeprecationWarning is expected
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            family = d.family
-            self.assertEqual(family, socket.AF_INET)
-            self.assertEqual(len(w), 1)
-            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
-
     def test_strerror(self):
         # refers to bug #8573
         err = asyncore._strerror(errno.EPERM)
@@ -331,9 +313,8 @@ class dispatcherwithsend_noread(asyncore.dispatcher_with_send):
     def handle_connect(self):
         pass
 
-class DispatcherWithSendTests(unittest.TestCase):
-    usepoll = False
 
+class DispatcherWithSendTests(unittest.TestCase):
     def setUp(self):
         pass
 
@@ -382,10 +363,6 @@ class DispatcherWithSendTests(unittest.TestCase):
             if t.is_alive():
                 self.fail("join() timed out")
 
-
-
-class DispatcherWithSendTests_UsePoll(DispatcherWithSendTests):
-    usepoll = True
 
 @unittest.skipUnless(hasattr(asyncore, 'file_wrapper'),
                      'asyncore.file_wrapper required')
