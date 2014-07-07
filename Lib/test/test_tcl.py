@@ -413,6 +413,8 @@ class TclTest(unittest.TestCase):
             self.assertEqual(float(passValue(-float('inf'))), -float('inf'))
         self.assertEqual(passValue((1, '2', (3.4,))),
                          (1, '2', (3.4,)) if self.wantobjects else '1 2 3.4')
+        self.assertEqual(passValue(['a', ['b', 'c']]),
+                         ('a', ('b', 'c')) if self.wantobjects else 'a {b c}')
 
     def test_user_command(self):
         result = None
@@ -459,6 +461,7 @@ class TclTest(unittest.TestCase):
         check(float('nan'), 'nan', eq=starts_with)
         check((), '')
         check((1, (2,), (3, 4), '5 6', ()), '1 2 {3 4} {5 6} {}')
+        check([1, [2,], [3, 4], '5 6', []], '1 2 {3 4} {5 6} {}')
 
     def test_splitlist(self):
         splitlist = self.interp.tk.splitlist
@@ -484,6 +487,8 @@ class TclTest(unittest.TestCase):
             ('a 3.4', ('a', '3.4')),
             (('a', 3.4), ('a', 3.4)),
             ((), ()),
+            ([], ()),
+            (['a', ['b', 'c']], ('a', ['b', 'c'])),
             (call('list', 1, '2', (3.4,)),
                 (1, '2', (3.4,)) if self.wantobjects else
                 ('1', '2', '3.4')),
@@ -531,6 +536,9 @@ class TclTest(unittest.TestCase):
             (('a', 3.4), ('a', 3.4)),
             (('a', (2, 3.4)), ('a', (2, 3.4))),
             ((), ()),
+            ([], ()),
+            (['a', 'b c'], ('a', ('b', 'c'))),
+            (['a', ['b', 'c']], ('a', ('b', 'c'))),
             (call('list', 1, '2', (3.4,)),
                 (1, '2', (3.4,)) if self.wantobjects else
                 ('1', '2', '3.4')),
