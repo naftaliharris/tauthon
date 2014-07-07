@@ -33,8 +33,6 @@ def main(regrtest_args):
     # Allow user-specified interpreter options to override our defaults.
     args.extend(test.support.args_from_interpreter_flags())
 
-    # Workaround for issue #20355
-    os.environ.pop("PYTHONWARNINGS", None)
     # Workaround for issue #20361
     args.extend(['-W', 'error::BytesWarning'])
 
@@ -50,7 +48,11 @@ def main(regrtest_args):
         args.extend(['-u', 'all,-largefile,-audio,-gui'])
     args.extend(regrtest_args)
     print(' '.join(args))
-    os.execv(sys.executable, args)
+    if sys.platform == 'win32':
+        from subprocess import call
+        sys.exit(call(args))
+    else:
+        os.execv(sys.executable, args)
 
 
 if __name__ == '__main__':
