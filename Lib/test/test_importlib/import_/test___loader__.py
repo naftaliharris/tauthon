@@ -4,7 +4,6 @@ import types
 import unittest
 
 from .. import util
-from . import util as import_util
 
 
 class SpecLoaderMock:
@@ -24,8 +23,10 @@ class SpecLoaderAttributeTests:
             module = self.__import__('blah')
         self.assertEqual(loader, module.__loader__)
 
-Frozen_SpecTests, Source_SpecTests = util.test_both(
-        SpecLoaderAttributeTests, __import__=import_util.__import__)
+
+(Frozen_SpecTests,
+ Source_SpecTests
+ ) = util.test_both(SpecLoaderAttributeTests, __import__=util.__import__)
 
 
 class LoaderMock:
@@ -62,8 +63,9 @@ class LoaderAttributeTests:
         self.assertEqual(loader, module.__loader__)
 
 
-Frozen_Tests, Source_Tests = util.test_both(LoaderAttributeTests,
-                                            __import__=import_util.__import__)
+(Frozen_Tests,
+ Source_Tests
+ ) = util.test_both(LoaderAttributeTests, __import__=util.__import__)
 
 
 if __name__ == '__main__':
