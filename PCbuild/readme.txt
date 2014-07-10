@@ -1,3 +1,13 @@
+Quick Start Guide
+-----------------
+
+1.  Install Microsoft Visual C++ 2010 SP1, any edition.
+2.  Install Subversion, and make sure 'svn.exe' is on your PATH.
+3.  Install NASM, and make sure 'nasm.exe' is on your PATH.
+4.  Run "build.bat -e" to build Python in 32-bit Release configuration.
+5.  (Optional, but recommended) Run the test suite with "rt.bat -q".
+
+
 Building Python using Microsoft Visual C++
 ------------------------------------------
 
@@ -27,8 +37,8 @@ All you need to do to build is open the solution "pcbuild.sln" in Visual
 Studio, select the desired combination of configuration and platform,
 then build with "Build Solution" or the F7 keyboard shortcut.  You can
 also build from the command line using the "build.bat" script in this
-directory.  The solution is configured to build the projects in the
-correct order.
+directory; see below for details.  The solution is configured to build
+the projects in the correct order.
 
 The solution currently supports two platforms.  The Win32 platform is
 used to build standard x86-compatible 32-bit binaries, output into this
@@ -43,7 +53,7 @@ Debug
     Used to build Python with extra debugging capabilities, equivalent
     to using ./configure --with-pydebug on UNIX.  All binaries built
     using this configuration have "_d" added to their name:
-    python34_d.dll, python_d.exe, parser_d.pyd, and so on.  Both the
+    python35_d.dll, python_d.exe, parser_d.pyd, and so on.  Both the
     build and rt (run test) batch files in this directory accept a -d
     option for debug builds.  If you are building Python to help with
     development of CPython, you will most likely use this configuration.
@@ -57,6 +67,26 @@ PGInstrument, PGUpdate
 Release
     Used to build Python as it is meant to be used in production
     settings, though without PGO.
+
+
+Building Python using the build.bat script
+----------------------------------------------
+
+In this directory you can find build.bat, a script designed to make
+building Python on Windows simpler.  The only absolute requirement for
+using this script is for the VS100COMNTOOLS environment variable to be
+properly set, which should be done by Microsoft Visual C++ 2010
+installation.
+
+By default, build.bat will build Python in Release configuration for
+the 32-bit Win32 platform.  It accepts several arguments to change
+this behavior:
+
+   -c <configuration>  Set the configuration (see above)
+   -d                  Shortcut for "-c Debug"
+   -p <platform>       Set the platform to build for ("Win32" or "x64")
+   -r                  Rebuild instead of just building
+   -e                  Use get_externals.bat to fetch external sources
 
 
 Legacy support
@@ -184,30 +214,19 @@ _ssl
     you should first try to update NASM and do a full rebuild of
     OpenSSL.
 
-    If you like to use the official sources instead of the files from
-    python.org's subversion repository, Perl is required to build the
-    necessary makefiles and assembly files.  ActivePerl is available
-    from
+    The ssl sub-project expects your OpenSSL sources to have already
+    been configured and be ready to build.  If you get your sources
+    from svn.python.org as suggested in the "Getting External Sources"
+    section below, the OpenSSL source will already be ready to go.  If
+    you want to build a different version, you will need to run
+
+       PCbuild\prepare_ssl.py path\to\openssl-source-dir
+
+    That script will prepare your OpenSSL sources in the same way that
+    those available on svn.python.org have been prepared.  Note that
+    Perl must be installed and available on your PATH to configure
+    OpenSSL.  ActivePerl is recommended and is available from
         http://www.activestate.com/activeperl/
-    The svn.python.org version contains pre-built makefiles and assembly
-    files.
-
-    The build process makes sure that no patented algorithms are
-    included.  For now RC5, MDC2 and IDEA are excluded from the build.
-    You may have to manually remove $(OBJ_D)\i_*.obj from ms\nt.mak if
-    using official sources; the svn.python.org-hosted version is already
-    fixed.
-
-    The ssl.vcxproj sub-project simply invokes PCbuild/build_ssl.py,
-    which locates and builds OpenSSL.
-
-    build_ssl.py attempts to catch the most common errors (such as not
-    being able to find OpenSSL sources, or not being able to find a Perl
-    that works with OpenSSL) and give a reasonable error message.  If
-    you have a problem that doesn't seem to be handled correctly (e.g.,
-    you know you have ActivePerl but we can't find it), please take a
-    peek at build_ssl.py and suggest patches.  Note that build_ssl.py
-    should be able to be run directly from the command-line.
 
     The ssl sub-project does not have the ability to clean the OpenSSL
     build; if you need to rebuild, you'll have to clean it by hand.
@@ -220,11 +239,19 @@ _tkinter
     Homepage:
         http://www.tcl.tk/
 
-    Unlike the other external libraries listed above, Tk must be built
-    separately before the _tkinter module can be built. This means that
-    a pre-built Tcl/Tk installation is expected in ..\..\tcltk (tcltk64
-    for 64-bit) relative to this directory.  See "Getting External
-    Sources" below for the easiest method to ensure Tcl/Tk is built.
+    Tkinter's dependencies are built by the tcl.vcxproj and tk.vcxproj
+    projects.  The tix.vcxproj project also builds the Tix extended
+    widget set for use with Tkinter.
+
+    Those three projects install their respective components in a
+    directory alongside the source directories called "tcltk" on
+    Win32 and "tcltk64" on x64.  They also copy the Tcl and Tk DLLs
+    into the current output directory, which should ensure that Tkinter
+    is able to load Tcl/Tk without having to change your PATH.
+
+    The tcl, tk, and tix sub-projects do not have the ability to clean
+    their builds; if you need to rebuild, you'll have to clean them by
+    hand.
 
 
 Getting External Sources
@@ -233,45 +260,18 @@ Getting External Sources
 The last category of sub-projects listed above wrap external projects
 Python doesn't control, and as such a little more work is required in
 order to download the relevant source files for each project before they
-can be built.  The buildbots must ensure that all libraries are present
-before building, so the easiest approach is to run either external.bat
-or external-amd64.bat (depending on platform) in the ..\Tools\buildbot
-directory from ..\, i.e.:
-
-    C:\python\cpython\PCbuild>cd ..
-    C:\python\cpython>Tools\buildbot\external.bat
-
-This extracts all the external sub-projects from
+can be built.  However, a simple script is provided to make this as
+painless as possible, called "get_externals.bat" and located in this
+directory.  This script extracts all the external sub-projects from
     http://svn.python.org/projects/external
-via Subversion (so you'll need an svn.exe on your PATH) and places them
+via Subversion (so you'll need svn.exe on your PATH) and places them
 in ..\.. (relative to this directory).
 
 It is also possible to download sources from each project's homepage,
-though you may have to change the names of some folders in order to make
-things work.  For instance, if you were to download a version 5.0.7 of
-XZ Utils, you would need to extract the archive into ..\..\xz-5.0.5
-anyway, since that is where the solution is set to look for xz.  The
-same is true for all other external projects.
-
-The external(-amd64).bat scripts will also build a debug build of
-Tcl/Tk, but there aren't any equivalent batch files for building release
-versions of Tcl/Tk currently available.  If you need to build a release
-version of Tcl/Tk, just take a look at the relevant external(-amd64).bat
-file and find the two nmake lines, then call each one without the
-'DEBUG=1' parameter, i.e.:
-
-The external-amd64.bat file contains this for tcl:
-    nmake -f makefile.vc DEBUG=1 MACHINE=AMD64 INSTALLDIR=..\..\tcltk64 clean all install
-
-So for a release build, you'd call it as:
-    nmake -f makefile.vc MACHINE=AMD64 INSTALLDIR=..\..\tcltk64 clean all install
-
-Note that the above command is called from within ..\..\tcl-8.6.1.0\win
-(relative to this directory); don't forget to build Tk as well as Tcl!
-
-This will be cleaned up in the future; http://bugs.python.org/issue15968
-tracks adding a new tcltk.vcxproj file that will build Tcl/Tk and Tix
-the same way the other external projects listed above are built.
+though you may have to change folder names or pass the names to MSBuild
+as the values of certain properties in order for the build solution to
+find them.  This is an advanced topic and not necessarily fully
+supported.
 
 
 Building for AMD64
@@ -335,6 +335,7 @@ The property files used are (+-- = "also imports"):
  * pyproject (base settings for all projects, user macros like PyDllName)
  * release (release macro: NDEBUG)
  * sqlite3 (used only by sqlite3.vcxproj)
+ * tcltk (used by _tkinter, tcl, tk and tix projects)
  * x64 (AMD64 / x64 platform specific settings)
 
 The pyproject property file defines _WIN32 and x64 defines _WIN64 and
