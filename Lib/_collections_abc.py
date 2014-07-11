@@ -459,6 +459,8 @@ Mapping.register(mappingproxy)
 
 class MappingView(Sized):
 
+    __slots__ = '_mapping',
+
     def __init__(self, mapping):
         self._mapping = mapping
 
@@ -470,6 +472,8 @@ class MappingView(Sized):
 
 
 class KeysView(MappingView, Set):
+
+    __slots__ = ()
 
     @classmethod
     def _from_iterable(self, it):
@@ -485,6 +489,8 @@ KeysView.register(dict_keys)
 
 
 class ItemsView(MappingView, Set):
+
+    __slots__ = ()
 
     @classmethod
     def _from_iterable(self, it):
@@ -507,6 +513,8 @@ ItemsView.register(dict_items)
 
 
 class ValuesView(MappingView):
+
+    __slots__ = ()
 
     def __contains__(self, value):
         for key in self._mapping:
