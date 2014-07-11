@@ -11,6 +11,7 @@ import socket
 import sys
 import time
 import unittest
+import warnings
 try:
     import threading
 except ImportError:
@@ -281,7 +282,10 @@ class TestHelperFunctions(unittest.TestCase):
 
 class TestFifo(unittest.TestCase):
     def test_basic(self):
-        f = asynchat.fifo()
+        with self.assertWarns(DeprecationWarning) as cm:
+            f = asynchat.fifo()
+        self.assertEqual(str(cm.warning),
+                         "fifo class will be removed in Python 3.6")
         f.push(7)
         f.push(b'a')
         self.assertEqual(len(f), 2)
@@ -296,7 +300,10 @@ class TestFifo(unittest.TestCase):
         self.assertEqual(f.pop(), (0, None))
 
     def test_given_list(self):
-        f = asynchat.fifo([b'x', 17, 3])
+        with self.assertWarns(DeprecationWarning) as cm:
+            f = asynchat.fifo([b'x', 17, 3])
+        self.assertEqual(str(cm.warning),
+                         "fifo class will be removed in Python 3.6")
         self.assertEqual(len(f), 3)
         self.assertEqual(f.pop(), (1, b'x'))
         self.assertEqual(f.pop(), (1, 17))

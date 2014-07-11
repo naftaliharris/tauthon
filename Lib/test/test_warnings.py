@@ -5,7 +5,7 @@ from io import StringIO
 import sys
 import unittest
 from test import support
-from test.script_helper import assert_python_ok
+from test.script_helper import assert_python_ok, assert_python_failure
 
 from test import warning_tests
 
@@ -370,6 +370,41 @@ class WarnTests(BaseTest):
         with self.assertRaises(ValueError):
             self.module.warn(BadStrWarning())
 
+    def test_warning_classes(self):
+        class MyWarningClass(Warning):
+            pass
+
+        class NonWarningSubclass:
+            pass
+
+        # passing a non-subclass of Warning should raise a TypeError
+        with self.assertRaises(TypeError) as cm:
+            self.module.warn('bad warning category', '')
+        self.assertIn('category must be a Warning subclass, not ',
+                      str(cm.exception))
+
+        with self.assertRaises(TypeError) as cm:
+            self.module.warn('bad warning category', NonWarningSubclass)
+        self.assertIn('category must be a Warning subclass, not ',
+                      str(cm.exception))
+
+        # check that warning instances also raise a TypeError
+        with self.assertRaises(TypeError) as cm:
+            self.module.warn('bad warning category', MyWarningClass())
+        self.assertIn('category must be a Warning subclass, not ',
+                      str(cm.exception))
+
+        with self.assertWarns(MyWarningClass) as cm:
+            self.module.warn('good warning category', MyWarningClass)
+        self.assertEqual('good warning category', str(cm.warning))
+
+        with self.assertWarns(UserWarning) as cm:
+            self.module.warn('good warning category', None)
+        self.assertEqual('good warning category', str(cm.warning))
+
+        with self.assertWarns(MyWarningClass) as cm:
+            self.module.warn('good warning category', MyWarningClass)
+        self.assertIsInstance(cm.warning, Warning)
 
 class CWarnTests(WarnTests, unittest.TestCase):
     module = c_warnings
@@ -748,7 +783,19 @@ class EnvironmentVariableTests(BaseTest):
             "import sys; sys.stdout.write(str(sys.warnoptions))",
             PYTHONWARNINGS="ignore::DeprecationWarning")
         self.assertEqual(stdout,
-            b"['ignore::UnicodeWarning', 'ignore::DeprecationWarning']")
+            b"['ignore::DeprecationWarning', 'ignore::UnicodeWarning']")
+
+    def test_conflicting_envvar_and_command_line(self):
+        rc, stdout, stderr = assert_python_failure("-Werror::DeprecationWarning", "-c",
+            "import sys, warnings; sys.stdout.write(str(sys.warnoptions)); "
+            "warnings.warn('Message', DeprecationWarning)",
+            PYTHONWARNINGS="default::DeprecationWarning")
+        self.assertEqual(stdout,
+            b"['default::DeprecationWarning', 'error::DeprecationWarning']")
+        self.assertEqual(stderr.splitlines(),
+            [b"Traceback (most recent call last):",
+             b"  File \"<string>\", line 1, in <module>",
+             b"DeprecationWarning: Message"])
 
     @unittest.skipUnless(sys.getfilesystemencoding() != 'ascii',
                          'requires non-ascii filesystemencoding')
