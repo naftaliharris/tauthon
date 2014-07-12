@@ -27,6 +27,8 @@
 #include "Python.h"
 #ifndef MS_WINDOWS
 #include "posixmodule.h"
+#else
+#include "winreparse.h"
 #endif
 
 #ifdef __cplusplus
@@ -300,6 +302,9 @@ extern int lstat(const char *, struct stat *);
 #endif
 #ifndef IO_REPARSE_TAG_SYMLINK
 #define IO_REPARSE_TAG_SYMLINK (0xA000000CL)
+#endif
+#ifndef IO_REPARSE_TAG_MOUNT_POINT
+#define IO_REPARSE_TAG_MOUNT_POINT (0xA0000003L)
 #endif
 #include "osdefs.h"
 #include <malloc.h>
@@ -1109,41 +1114,6 @@ _PyVerify_fd_dup2(int fd1, int fd2)
 #endif
 
 #ifdef MS_WINDOWS
-/* The following structure was copied from
-   http://msdn.microsoft.com/en-us/library/ms791514.aspx as the required
-   include doesn't seem to be present in the Windows SDK (at least as included
-   with Visual Studio Express). */
-typedef struct _REPARSE_DATA_BUFFER {
-    ULONG ReparseTag;
-    USHORT ReparseDataLength;
-    USHORT Reserved;
-    union {
-        struct {
-            USHORT SubstituteNameOffset;
-            USHORT SubstituteNameLength;
-            USHORT PrintNameOffset;
-            USHORT PrintNameLength;
-            ULONG Flags;
-            WCHAR PathBuffer[1];
-        } SymbolicLinkReparseBuffer;
-
-        struct {
-            USHORT SubstituteNameOffset;
-            USHORT  SubstituteNameLength;
-            USHORT  PrintNameOffset;
-            USHORT  PrintNameLength;
-            WCHAR  PathBuffer[1];
-        } MountPointReparseBuffer;
-
-        struct {
-            UCHAR  DataBuffer[1];
-        } GenericReparseBuffer;
-    };
-} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
-
-#define REPARSE_DATA_BUFFER_HEADER_SIZE  FIELD_OFFSET(REPARSE_DATA_BUFFER,\
-                                                      GenericReparseBuffer)
-#define MAXIMUM_REPARSE_DATA_BUFFER_SIZE  ( 16 * 1024 )
 
 static int
 win32_get_reparse_tag(HANDLE reparse_point_handle, ULONG *reparse_tag)
@@ -1447,6 +1417,7 @@ win32_wchdir(LPCWSTR path)
    Therefore, we implement our own stat, based on the Win32 API directly.
 */
 #define HAVE_STAT_NSEC 1
+#define HAVE_STRUCT_STAT_ST_FILE_ATTRIBUTES 1
 
 struct win32_stat{
     unsigned long st_dev;
@@ -1463,6 +1434,7 @@ struct win32_stat{
     int st_mtime_nsec;
     time_t st_ctime;
     int st_ctime_nsec;
+    unsigned long st_file_attributes;
 };
 
 static __int64 secs_between_epochs = 11644473600; /* Seconds between 1.1.1601 and 1.1.1970 */
@@ -1527,6 +1499,7 @@ attribute_data_to_stat(BY_HANDLE_FILE_INFORMATION *info, ULONG reparse_tag, stru
         /* now set the bits that make this a symlink */
         result->st_mode |= S_IFLNK;
     }
+    result->st_file_attributes = info->dwFileAttributes;
 
     return 0;
 }
@@ -1991,6 +1964,9 @@ static PyStructSequence_Field stat_result_fields[] = {
 #ifdef HAVE_STRUCT_STAT_ST_BIRTHTIME
     {"st_birthtime",   "time of creation"},
 #endif
+#ifdef HAVE_STRUCT_STAT_ST_FILE_ATTRIBUTES
+    {"st_file_attributes", "Windows file attribute bits"},
+#endif
     {0}
 };
 
@@ -2028,6 +2004,12 @@ static PyStructSequence_Field stat_result_fields[] = {
 #define ST_BIRTHTIME_IDX (ST_GEN_IDX+1)
 #else
 #define ST_BIRTHTIME_IDX ST_GEN_IDX
+#endif
+
+#ifdef HAVE_STRUCT_STAT_ST_FILE_ATTRIBUTES
+#define ST_FILE_ATTRIBUTES_IDX (ST_BIRTHTIME_IDX+1)
+#else
+#define ST_FILE_ATTRIBUTES_IDX ST_BIRTHTIME_IDX
 #endif
 
 static PyStructSequence_Desc stat_result_desc = {
@@ -2296,6 +2278,10 @@ _pystat_fromstructstat(STRUCT_STAT *st)
 #ifdef HAVE_STRUCT_STAT_ST_FLAGS
     PyStructSequence_SET_ITEM(v, ST_FLAGS_IDX,
                               PyLong_FromLong((long)st->st_flags));
+#endif
+#ifdef HAVE_STRUCT_STAT_ST_FILE_ATTRIBUTES
+    PyStructSequence_SET_ITEM(v, ST_FILE_ATTRIBUTES_IDX,
+                              PyLong_FromUnsignedLong(st->st_file_attributes));
 #endif
 
     if (PyErr_Occurred()) {
@@ -4492,7 +4478,10 @@ BOOL WINAPI Py_DeleteFileW(LPCWSTR lpFileName)
             find_data_handle = FindFirstFileW(lpFileName, &find_data);
 
             if(find_data_handle != INVALID_HANDLE_VALUE) {
-                is_link = find_data.dwReserved0 == IO_REPARSE_TAG_SYMLINK;
+                /* IO_REPARSE_TAG_SYMLINK if it is a symlink and
+                   IO_REPARSE_TAG_MOUNT_POINT if it is a junction point. */
+                is_link = find_data.dwReserved0 == IO_REPARSE_TAG_SYMLINK ||
+                          find_data.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT;
                 FindClose(find_data_handle);
             }
         }
@@ -8000,11 +7989,18 @@ Read a file descriptor.");
 static PyObject *
 posix_read(PyObject *self, PyObject *args)
 {
-    int fd, size;
+    int fd;
+    Py_ssize_t size;
     Py_ssize_t n;
     PyObject *buffer;
-    if (!PyArg_ParseTuple(args, "ii:read", &fd, &size))
+    if (!PyArg_ParseTuple(args, "in:read", &fd, &size))
         return NULL;
+    if (!_PyVerify_fd(fd))
+        return posix_error();
+#ifdef MS_WINDOWS
+    if (size > INT_MAX)
+        size = INT_MAX;
+#endif
     if (size < 0) {
         errno = EINVAL;
         return posix_error();
@@ -8012,12 +8008,12 @@ posix_read(PyObject *self, PyObject *args)
     buffer = PyBytes_FromStringAndSize((char *)NULL, size);
     if (buffer == NULL)
         return NULL;
-    if (!_PyVerify_fd(fd)) {
-        Py_DECREF(buffer);
-        return posix_error();
-    }
     Py_BEGIN_ALLOW_THREADS
+#ifdef MS_WINDOWS
+    n = read(fd, PyBytes_AS_STRING(buffer), (int)size);
+#else
     n = read(fd, PyBytes_AS_STRING(buffer), size);
+#endif
     Py_END_ALLOW_THREADS
     if (n < 0) {
         Py_DECREF(buffer);
