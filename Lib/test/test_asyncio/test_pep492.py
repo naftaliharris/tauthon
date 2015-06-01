@@ -106,6 +106,33 @@ class CoroutineTests(BaseTest):
 
         self.assertTrue(asyncio.iscoroutine(FakeCoro()))
 
+    def test_function_returning_awaitable(self):
+        class Awaitable:
+            def __await__(self):
+                return ('spam',)
+
+        @asyncio.coroutine
+        def func():
+            return Awaitable()
+
+        coro = func()
+        self.assertEqual(coro.send(None), 'spam')
+        coro.close()
+
+    def test_async_ded_coroutines(self):
+        async def bar():
+            return 'spam'
+        async def foo():
+            return await bar()
+
+        # production mode
+        data = self.loop.run_until_complete(foo())
+        self.assertEqual(data, 'spam')
+
+        # debug mode
+        self.loop.set_debug(True)
+        data = self.loop.run_until_complete(foo())
+        self.assertEqual(data, 'spam')
 
 if __name__ == '__main__':
     unittest.main()
