@@ -93,10 +93,20 @@ Implementation improvements:
   (:issue:`19977`).
 
 * :pep:`488`, the elimination of ``.pyo`` files.
+* :pep:`489`, multi-phase initialization of extension modules.
 
 Significantly Improved Library Modules:
 
-* None yet.
+* :class:`collections.OrderedDict` is now implemented in C, which improves
+  its performance between 4x to 100x times.  Contributed by Eric Snow in
+  :issue:`16991`.
+
+* You may now pass bytes to the :mod:`tempfile` module's APIs and it will
+  return the temporary pathname as bytes instead of str.  It also accepts
+  a value of ``None`` on parameters where only str was accepted in the past to
+  do the right thing based on the types of the other inputs.  Two functions,
+  :func:`gettempdirb` and :func:`gettempprefixb`, have been added to go along
+  with this.  This behavior matches that of the :mod:`os` APIs.
 
 Security improvements:
 
@@ -121,7 +131,27 @@ Please read on for a comprehensive list of user-facing changes.
        PEP written by Carl Meyer
 
 
-PEP 461 - Adding % formatting to bytes and bytearray
+PEP 492 - Coroutines with async and await syntax
+------------------------------------------------
+
+The PEP added dedicated syntax for declaring :term:`coroutines <coroutine>`,
+:keyword:`await` expressions, new asynchronous :keyword:`async for`
+and :keyword:`async with` statements.
+
+Example::
+
+    async def read_data(db):
+        async with db.transaction():
+            data = await db.fetch('SELECT ...')
+
+PEP written and implemented by Yury Selivanov.
+
+.. seealso::
+
+   :pep:`492` -- Coroutines with async and await syntax
+
+
+PEP 461 - Formatting support for bytes and bytearray
 ----------------------------------------------------
 
 This PEP proposes adding % formatting operations similar to Python 2's ``str``
@@ -189,6 +219,27 @@ against asynchronous signal reception.
    :pep:`475` -- Retry system calls failing with EINTR
 
 
+PEP 479: Change StopIteration handling inside generators
+--------------------------------------------------------
+
+:pep:`479` changes the behavior of generators: when a :exc:`StopIteration`
+exception is raised inside a generator, it is replaced with a
+:exc:`RuntimeError`.  To enable the feature a ``__future__`` import should
+be used::
+
+    from __future__ import generator_stop
+
+Without a ``__future__`` import, a :exc:`PendingDeprecationWarning` will be
+raised.
+
+PEP written by Chris Angelico and Guido van Rossum. Implemented by
+Chris Angelico, Yury Selivanov and Nick Coghlan.
+
+.. seealso::
+
+   :pep:`479` -- Change StopIteration handling inside generators
+
+
 PEP 486: Make the Python Launcher aware of virtual environments
 ---------------------------------------------------------------
 
@@ -206,18 +257,45 @@ PEP 488: Elimination of PYO files
 ---------------------------------
 
 :pep:`488` does away with the concept of ``.pyo`` files. This means that
-``.pyc`` files represent both unoptimized and optimized bytecode. To prevent
-the need to constantly regenerate bytecode files, ``.pyc`` files now have an
-optional ``opt-`` tag in their name when the bytecode is optimized. This has
-the side-effect of no more bytecode file name clashes when running under either
-``-O`` or ``-OO``, thus allowing unoptimized, ``-O``, and ``-OO`` bytecode files
-to all exist simultaneously. :func:`importlib.util.cache_from_source` has an
-updated API to help with this change.
+``.pyc`` files represent both unoptimized and optimized bytecode. To prevent the
+need to constantly regenerate bytecode files, ``.pyc`` files now have an
+optional ``opt-`` tag in their name when the bytecode is optimized. This has the
+side-effect of no more bytecode file name clashes when running under either
+``-O`` or ``-OO``. Consequently, bytecode files generated from ``-O``, and
+``-OO`` may now exist simultaneously. :func:`importlib.util.cache_from_source`
+has an updated API to help with this change.
 
 .. seealso::
 
    :pep:`488` -- Elimination of PYO files
 
+
+PEP 489: Multi-phase extension module initialization
+----------------------------------------------------
+
+:pep:`489` updates extension module initialization to take advantage of the
+two step module loading mechanism introduced by :pep:`451` in Python 3.4.
+
+This change brings the import semantics of extension modules that opt-in to
+using the new mechanism much closer to those of Python source and bytecode
+modules, including the ability to any valid identifier as a module name,
+rather than being restricted to ASCII.
+
+.. seealso::
+
+   :pep:`488` -- Multi-phase extension module initialization
+
+PEP 485: A function for testing approximate equality
+----------------------------------------------------
+
+:pep:`485` adds the :func:`math.isclose` and :func:`cmath.isclose`
+functions which tell whether two values are approximately equal or
+"close" to each other.  Whether or not two values are considered
+close is determined according to given absolute and relative tolerances.
+
+.. seealso::
+
+   :pep:`485` -- A function for testing approximate equality
 
 Other Language Changes
 ======================
@@ -230,6 +308,16 @@ Some smaller changes made to the core Python language are:
 
 * The :option:`-b` option now affects comparisons of :class:`bytes` with
   :class:`int`.  (Contributed by Serhiy Storchaka in :issue:`23681`)
+
+* New Kazakh :ref:`codec <standard-encodings>` ``kz1048``.  (Contributed by
+  Serhiy Storchaka in :issue:`22682`.)
+
+* Property docstrings are now writable. This is especially useful for
+  :func:`collections.namedtuple` docstrings.
+  (Contributed by Berker Peksag in :issue:`24064`.)
+
+* New Tajik :ref:`codec <standard-encodings>` ``koi8_t``.  (Contributed by
+  Serhiy Storchaka in :issue:`22681`.)
 
 
 New Modules
@@ -270,12 +358,31 @@ cgi
 * :class:`~cgi.FieldStorage` now supports the context management protocol.
   (Contributed by Berker Peksag in :issue:`20289`.)
 
+cmath
+-----
+
+* :func:`cmath.isclose` function added.
+  (Contributed by Chris Barker and Tal Einat in :issue:`24270`.)
+
+
 code
 ----
 
 * The :func:`code.InteractiveInterpreter.showtraceback` method now prints
   the full chained traceback, just like the interactive interpreter.
   (Contributed by Claudiu Popa in :issue:`17442`.)
+
+collections
+-----------
+
+* You can now update docstrings produced by :func:`collections.namedtuple`::
+
+    Point = namedtuple('Point', ['x', 'y'])
+    Point.__doc__ = 'ordered pair'
+    Point.x.__doc__ = 'abscissa'
+    Point.y.__doc__ = 'ordinate'
+
+  (Contributed by Berker Peksag in :issue:`24064`.)
 
 compileall
 ----------
@@ -316,6 +423,9 @@ distutils
   option to enable parallel building of extension modules.
   (Contributed by Antoine Pitrou in :issue:`5309`.)
 
+* Added support for the LZMA compression.
+  (Contributed by Serhiy Storchaka in :issue:`16314`.)
+
 doctest
 -------
 
@@ -323,12 +433,41 @@ doctest
   *module* contains no docstrings instead of raising :exc:`ValueError`.
   (Contributed by Glenn Jones in :issue:`15916`.)
 
+email
+-----
+
+* A new policy option :attr:`~email.policy.Policy.mangle_from_` controls
+  whether or not lines that start with "From " in email bodies are prefixed with
+  a '>' character by generators.  The default is ``True`` for
+  :attr:`~email.policy.compat32` and ``False`` for all other policies.
+  (Contributed by Milan Oberkirch in :issue:`20098`.)
+
+* A new method :meth:`~email.message.Message.get_content_disposition` provides
+  easy access to a canonical value for the :mailheader:`Content-Disposition`
+  header (``None`` if there is no such header).  (Contributed by Abhilash Raj
+  in :issue:`21083`.)
+
+* A new policy option :attr:`~email.policy.EmailPolicy.utf8` can be set
+  ``True`` to encode email headers using the utf8 charset instead of using
+  encoded words.  This allows ``Messages`` to be formatted according to
+  :rfc:`6532` and used with an SMTP server that supports the :rfc:`6531`
+  ``SMTPUTF8`` extension.  (Contributed by R. David Murray in :issue:`24211`.)
+
 glob
 ----
 
 * :func:`~glob.iglob` and :func:`~glob.glob` now support recursive search in
   subdirectories using the "``**``" pattern.
   (Contributed by Serhiy Storchaka in :issue:`13968`.)
+
+idlelib and IDLE
+----------------
+
+Since idlelib implements the IDLE shell and editor and is not intended for
+import by other programs, it gets improvements with every release. See
+:file:`Lib/idlelib/NEWS.txt` for a cumulative list of changes since 3.4.0,
+as well as changes made in future 3.5.x releases. This file is also available
+from the IDLE Help -> About Idle dialog.
 
 imaplib
 -------
@@ -378,9 +517,22 @@ inspect
   picklable and hashable.  (Contributed by Yury Selivanov in :issue:`20726`
   and :issue:`20334`.)
 
+* New method :meth:`inspect.BoundArguments.apply_defaults`.  (Contributed
+  by Yury Selivanov in :issue:`24190`.)
+
 * New class method :meth:`inspect.Signature.from_callable`, which makes
   subclassing of :class:`~inspect.Signature` easier.  (Contributed
   by Yury Selivanov and Eric Snow in :issue:`17373`.)
+
+* New argument ``follow_wrapped`` for :func:`inspect.signature`.
+  (Contributed by Yury Selivanov in :issue:`20691`.)
+
+* New :func:`~inspect.iscoroutine`, :func:`~inspect.iscoroutinefunction`,
+  and :func:`~inspect.isawaitable` functions.  (Contributed by Yury Selivanov
+  in :issue:`24017`.)
+
+* New :func:`~inspect.getcoroutinelocals` and :func:`~inspect.getcoroutinestate`
+  functions.  (Contributed by Yury Selivanov in :issue:`24400`.)
 
 ipaddress
 ---------
@@ -400,6 +552,14 @@ json
 
 * JSON decoder now raises :exc:`json.JSONDecodeError` instead of
   :exc:`ValueError`.   (Contributed by Serhiy Storchaka in :issue:`19361`.)
+
+math
+----
+
+* :data:`math.inf` and :data:`math.nan` constants added.  (Contributed by Mark
+  Dickinson in :issue:`23185`.)
+* :func:`math.isclose` function added.
+  (Contributed by Chris Barker and Tal Einat in :issue:`24270`.)
 
 os
 --
@@ -427,6 +587,13 @@ pickle
   classes) now are supported with pickle protocols < 4.
   (Contributed by Serhiy Storchaka in :issue:`23611`.)
 
+poplib
+------
+
+* A new command :meth:`~poplib.POP3.utf8` enables :rfc:`6856`
+  (internationalized email) support if the POP server supports it.  (Contributed
+  by Milan OberKirch in :issue:`21804`.)
+
 re
 --
 
@@ -435,12 +602,6 @@ re
 
 * Now unmatched groups are replaced with empty strings in :func:`re.sub`
   and :func:`re.subn`.  (Contributed by Serhiy Storchaka in :issue:`1519638`.)
-
-math
-----
-
-* :data:`math.inf` and :data:`math.nan` constants added.  (Contributed by Mark
-  Dickinson in :issue:`23185`.)
 
 shutil
 ------
@@ -502,6 +663,11 @@ smtplib
   :class:`smtplib.SMTP`.  (Contributed by Gavin Chappell and Maciej Szulik in
   :issue:`16914`.)
 
+* :mod:`smtplib` now supports :rfc:`6531` (SMTPUTF8) in both the
+  :meth:`~smtplib.SMTP.sendmail` and :meth:`~smtplib.SMTP.send_message`
+  commands.  (Contributed by Milan Oberkirch and R. David Murray in
+  :issue:`22027`.)
+
 sndhdr
 ------
 
@@ -525,6 +691,12 @@ subprocess
   :class:`subprocess.CompletedProcess` object.  It Provides a more consistent
   API than :func:`~subprocess.call`, :func:`~subprocess.check_call` and
   :func:`~subprocess.check_output`.
+
+sys
+---
+
+* New :func:`~sys.set_coroutine_wrapper` and :func:`~sys.get_coroutine_wrapper`
+  functions.  (Contributed by Yury Selivanov in :issue:`24017`.)
 
 sysconfig
 ---------
@@ -551,6 +723,23 @@ time
 * The :func:`time.monotonic` function is now always available.  (Contributed by
   Victor Stinner in :issue:`22043`.)
 
+tkinter
+-------
+
+* The :mod:`tkinter._fix` module used for setting up the Tcl/Tk environment
+  on Windows has been replaced by a private function in the :mod:`_tkinter`
+  module which makes no permanent changes to environment variables.
+  (Contributed by Zachary Ware in :issue:`20035`.)
+
+types
+-----
+
+* New :func:`~types.coroutine` function.  (Contributed by Yury Selivanov
+  in :issue:`24017`.)
+
+* New :class:`~types.CoroutineType`.  (Contributed by Yury Selivanov
+  in :issue:`24400`.)
+
 urllib
 ------
 
@@ -561,6 +750,10 @@ urllib
   ``404`` response instead of a ``401`` if the ``Authorization`` header is not
   sent.  (Contributed by Matej Cepl in :issue:`19494` and Akshit Khurana in
   :issue:`7159`.)
+
+* A new :func:`~urllib.parse.urlencode` parameter *quote_via* provides a way to
+  control the encoding of query parts if needed.  (Contributed by Samwyse and
+  Arnon Yaari in :issue:`13866`.)
 
 wsgiref
 -------
@@ -629,6 +822,9 @@ The following performance enhancements have been added:
   versions 0--2 on typical data, and up to 5x in best cases).
   (Contributed by Serhiy Storchaka in :issue:`20416` and :issue:`23344`.)
 
+* The UTF-32 encoder is now 3x to 7x faster.  (Contributed by Serhiy Storchaka
+  in :issue:`15027`.)
+
 
 Build and C API Changes
 =======================
@@ -645,6 +841,14 @@ Changes to Python's build process and to the C API include:
 
 Deprecated
 ==========
+
+New Keywords
+------------
+
+``async`` and ``await`` are not recommended to be used as variable, class or
+function names.  Introduced by :pep:`492` in Python 3.5, they will become
+proper keywords in Python 3.7.
+
 
 Unsupported Operating Systems
 -----------------------------
@@ -674,6 +878,26 @@ Deprecated Python modules, functions and methods
 * Passing a format string as keyword argument *format_string* to the
   :meth:`~string.Formatter.format` method of the :class:`string.Formatter`
   class has been deprecated.
+
+* :func:`platform.dist` and :func:`platform.linux_distribution` functions are
+  now deprecated and will be removed in Python 3.7.  Linux distributions use
+  too many different ways of describing themselves, so the functionality is
+  left to a package.
+  (Contributed by Vajrasky Kok and Berker Peksag in :issue:`1322`.)
+
+* The previously undocumented ``from_function`` and ``from_builtin`` methods of
+  :class:`inspect.Signature` are deprecated.  Use new
+  :meth:`inspect.Signature.from_callable` instead. (Contributed by Yury
+  Selivanov in :issue:`24248`.)
+
+* :func:`inspect.getargspec` is deprecated and scheduled to be removed in
+  Python 3.6.  (See :issue:`20438` for details.)
+
+* :func:`~inspect.getfullargspec`, :func:`~inspect.getargvalues`,
+  :func:`~inspect.getcallargs`, :func:`~inspect.getargvalues`,
+  :func:`~inspect.formatargspec`, and :func:`~inspect.formatargvalues` are
+  deprecated in favor of :func:`inspect.signature` API.  (See :issue:`20438`
+  for details.)
 
 
 Deprecated functions and types of the C API
@@ -847,8 +1071,8 @@ Changes in the Python API
   in Python 3.5, all old `.pyo` files from previous versions of Python are
   invalid regardless of this PEP.
 
- * The :mod:`socket` module now exports the CAN_RAW_FD_FRAMES constant on linux
-   3.6 and greater.
+* The :mod:`socket` module now exports the CAN_RAW_FD_FRAMES constant on linux
+  3.6 and greater.
 
 * The `pygettext.py` Tool now uses the standard +NNNN format for timezones in
   the POT-Creation-Date header.
@@ -858,6 +1082,9 @@ Changes in the Python API
   program depends on patching the module level variable to capture the debug
   output, you will need to update it to capture sys.stderr instead.
 
+* The :meth:`str.startswith` and :meth:`str.endswith` methods no longer return
+  ``True`` when finding the empty string and the indexes are completely out of
+  range.  See :issue:`24284`.
 
 Changes in the C API
 --------------------
@@ -880,5 +1107,7 @@ Changes in the C API
   the :attr:`__module__` attribute.  Would be an AttributeError in future.
   (:issue:`20204`)
 
-* As part of PEP 492 implementation, ``tp_reserved`` slot of
-  ``PyTypeObject`` was replaced with ``tp_as_async`` slot.
+* As part of :pep:`492` implementation, ``tp_reserved`` slot of
+  :c:type:`PyTypeObject` was replaced with a
+  :c:member:`PyTypeObject.tp_as_async` slot.  Refer to :ref:`coro-objects` for
+  new types, structures and functions.
