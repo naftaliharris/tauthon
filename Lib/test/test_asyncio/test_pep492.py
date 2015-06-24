@@ -1,6 +1,7 @@
 """Tests support for new syntax introduced by PEP 492."""
 
 import collections.abc
+import types
 import unittest
 
 from test import support
@@ -133,6 +134,54 @@ class CoroutineTests(BaseTest):
         self.loop.set_debug(True)
         data = self.loop.run_until_complete(foo())
         self.assertEqual(data, 'spam')
+
+    @mock.patch('asyncio.coroutines.logger')
+    def test_async_def_wrapped(self, m_log):
+        async def foo():
+            pass
+        async def start():
+            foo_coro = foo()
+            self.assertRegex(
+                repr(foo_coro),
+                r'<CoroWrapper .*\.foo\(\) running at .*pep492.*>')
+
+            with support.check_warnings((r'.*foo.*was never',
+                                         RuntimeWarning)):
+                foo_coro = None
+                support.gc_collect()
+                self.assertTrue(m_log.error.called)
+                message = m_log.error.call_args[0][0]
+                self.assertRegex(message,
+                                 r'CoroWrapper.*foo.*was never')
+
+        self.loop.set_debug(True)
+        self.loop.run_until_complete(start())
+
+        async def start():
+            foo_coro = foo()
+            task = asyncio.ensure_future(foo_coro, loop=self.loop)
+            self.assertRegex(repr(task), r'Task.*foo.*running')
+
+        self.loop.run_until_complete(start())
+
+
+    def test_types_coroutine(self):
+        def gen():
+            yield from ()
+            return 'spam'
+
+        @types.coroutine
+        def func():
+            return gen()
+
+        async def coro():
+            wrapper = func()
+            self.assertIsInstance(wrapper, types._GeneratorWrapper)
+            return await wrapper
+
+        data = self.loop.run_until_complete(coro())
+        self.assertEqual(data, 'spam')
+
 
 if __name__ == '__main__':
     unittest.main()
