@@ -10,6 +10,12 @@ Release date: 2015-07-05
 Core and Builtins
 -----------------
 
+- Issue #24467: Fixed possible buffer over-read in bytearray. The bytearray
+  object now always allocates place for trailing null byte and it's buffer now
+  is always null-terminated.
+
+- Upgrade to Unicode 8.0.0.
+
 - Issue #24345: Add Py_tp_finalize slot for the stable ABI.
 
 - Issue #24400: Introduce a distinct type for PEP 492 coroutines; add
@@ -18,14 +24,42 @@ Core and Builtins
   works only for 'async def' coroutines; inspect.iscoroutine no longer
   uses collections.abc.Coroutine, it's intended to test for pure 'async def'
   coroutines only; add new opcode: GET_YIELD_FROM_ITER; fix generators wrapper
-  used in types.coroutine to be instance of collections.abc.Generator.
-
+  used in types.coroutine to be instance of collections.abc.Generator;
+  collections.abc.Awaitable and collections.abc.Coroutine can no longer
+  be used to detect generator-based coroutines--use inspect.isawaitable
+  instead.
 
 - Issue #24450: Add gi_yieldfrom to generators and cr_await to coroutines.
   Contributed by Benno Leslie and Yury Selivanov.
 
+- Issue #19235: Add new RecursionError exception. Patch by Georg Brandl.
+
 Library
 -------
+
+- Issue #24552: Fix use after free in an error case of the _pickle module.
+
+- Issue #24514: tarfile now tolerates number fields consisting of only
+  whitespace.
+
+- Issue #19176: Fixed doctype() related bugs in C implementation of ElementTree.
+  A deprecation warning no longer issued by XMLParser subclass with default
+  doctype() method.  Direct call of doctype() now issues a warning.  Parser's
+  doctype() now is not called if target's doctype() is called.  Based on patch
+  by Martin Panter.
+
+- Issue #20387: Restore semantic round-trip correctness in tokenize/untokenize
+  for tab-indented blocks.
+
+- Issue #24456: Fixed possible buffer over-read in adpcm2lin() and lin2adpcm()
+  functions of the audioop module.
+
+- Issue #24336: The contextmanager decorator now works with functions with
+  keyword arguments called "func" and "self".  Patch by Martin Panter.
+
+- Issue #24522: Fix possible integer overflow in json accelerator module.
+
+- Issue #24489: ensure a previously set C errno doesn't disturb cmath.polar().
 
 - Issue #24408: Fixed AttributeError in measure() and metrics() methods of
   tkinter.Font.
@@ -59,6 +93,9 @@ Tests
 
 Documentation
 -------------
+
+- Issue #24458: Update documentation to cover multi-phase initialization for
+  extension modules (PEP 489). Patch by Petr Viktorin.
 
 - Issue #24351: Clarify what is meant by "identifier" in the context of
   string.Template instances.
@@ -444,6 +481,8 @@ Library
 - Issue #21217: inspect.getsourcelines() now tries to compute the start and end
   lines from the code object, fixing an issue when a lambda function is used as
   decorator argument. Patch by Thomas Ballinger and Allison Kaptur.
+
+- Issue #24521: Fix possible integer overflows in the pickle module.
 
 - Issue #22931: Allow '[' and ']' in cookie values.
 
