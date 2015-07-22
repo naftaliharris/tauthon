@@ -1050,10 +1050,7 @@ class GrammarTests(unittest.TestCase):
 
         async def test():
             def sum():
-                async = 1
-                await = 41
-                return async + await
-
+                pass
             if 1:
                 await someobj()
 
