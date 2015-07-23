@@ -25,6 +25,8 @@ Core and Builtins
 Library
 -------
 
+- Issue #22153: Improve unittest docs. Patch from Martin Panter and evilzero.
+
 - Issue #24580: Symbolic group references to open group in re patterns now are
   explicitly forbidden as well as numeric group references.
 
@@ -50,6 +52,13 @@ Library
 
 - Issue #24669: Fix inspect.getsource() for 'async def' functions.
   Patch by Kai Groner.
+
+- Issue #24688: ast.get_docstring() for 'async def' functions.
+
+Build
+-----
+
+- Issue #24603: Update the Windows build to use OpenSSL 1.0.2d.
 
 
 What's New in Python 3.5.0 beta 3?
