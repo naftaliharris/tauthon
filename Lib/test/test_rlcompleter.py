@@ -78,8 +78,13 @@ class TestRlcompleter(unittest.TestCase):
         self.assertEqual(completer.complete('f.b', 0), 'f.bar')
         self.assertEqual(f.calls, 1)
 
-def test_main():
-    support.run_unittest(TestRlcompleter)
+    def test_complete(self):
+        completer = rlcompleter.Completer()
+        self.assertEqual(completer.complete('', 0), '\t')
+        self.assertEqual(completer.complete('a', 0), 'and')
+        self.assertEqual(completer.complete('a', 1), 'as')
+        self.assertEqual(completer.complete('as', 2), 'assert')
+        self.assertEqual(completer.complete('an', 0), 'and')
 
     def test_duplicate_globals(self):
         namespace = {
@@ -102,6 +107,9 @@ def test_main():
         self.assertEqual(completer.complete('Ellipsis', 0), 'Ellipsis(')
         self.assertIsNone(completer.complete('Ellipsis', 1))
 
+
+def test_main():
+    support.run_unittest(TestRlcompleter)
 
 if __name__ == '__main__':
     test_main()
