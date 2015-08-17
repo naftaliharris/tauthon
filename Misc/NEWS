@@ -2,6 +2,103 @@
 Python News
 +++++++++++
 
+What's New in Python 3.5.0 release candidate 2?
+===============================================
+
+Release date: 2015-08-23
+
+Core and Builtins
+-----------------
+
+Library
+-------
+
+- Issue #24839: platform._syscmd_ver raises DeprecationWarning
+
+What's New in Python 3.5.0 release candidate 1?
+===============================================
+
+Release date: 2015-08-09
+
+Core and Builtins
+-----------------
+
+- Issue #24492: A "package" lacking a __name__ attribute when trying to perform
+  a ``from .. import ...`` statement will trigger an ImportError instead of an
+  AttributeError.
+
+- Issue #24667: Resize odict in all cases that the underlying dict resizes.
+
+Library
+-------
+
+- Issue #24824: Signatures of codecs.encode() and codecs.decode() now are
+  compatible with pydoc.
+
+- Issue #24634: Importing uuid should not try to load libc on Windows
+
+- Issue #24798: _msvccompiler.py doesn't properly support manifests
+
+- Issue #4395: Better testing and documentation of binary operators.
+  Patch by Martin Panter.
+
+- Issue #23973: Update typing.py from GitHub repo.
+
+- Issue #23004: mock_open() now reads binary data correctly when the type of
+  read_data is bytes.  Initial patch by Aaron Hill.
+
+- Issue #23888: Handle fractional time in cookie expiry. Patch by ssh.
+
+- Issue #23652: Make it possible to compile the select module against the
+  libc headers from the Linux Standard Base, which do not include some
+  EPOLL macros.  Patch by Matt Frank.
+
+- Issue #22932: Fix timezones in email.utils.formatdate.
+  Patch from Dmitry Shachnev.
+
+- Issue #23779: imaplib raises TypeError if authenticator tries to abort.
+  Patch from Craig Holmquist.
+
+- Issue #23319: Fix ctypes.BigEndianStructure, swap correctly bytes. Patch
+  written by Matthieu Gautier.
+
+- Issue #23254: Document how to close the TCPServer listening socket.
+  Patch from Martin Panter.
+
+- Issue #19450: Update Windows and OS X installer builds to use SQLite 3.8.11.
+
+- Issue #17527: Add PATCH to wsgiref.validator. Patch from Luca Sbardella.
+
+- Issue #23812: Fix asyncio.Queue.get() to avoid loosing items on cancellation.
+  Patch by Gustavo J. A. M. Carneiro.
+
+- Issue #24791: Fix grammar regression for call syntax: 'g(*a or b)'.
+
+- Issue #24867: Fix Task.get_stack() for 'async def' coroutines
+
+Documentation
+-------------
+
+- Issue #24129: Clarify the reference documentation for name resolution.
+  This includes removing the assumption that readers will be familiar with the
+  name resolution scheme Python used prior to the introduction of lexical
+  scoping for function namespaces. Patch by Ivan Levkivskyi.
+
+- Issue #20769: Improve reload() docs. Patch by Dorian Pula.
+
+- Issue #23589: Remove duplicate sentence from the FAQ.  Patch by Yongzhi Pan.
+
+- Issue #24729: Correct IO tutorial to match implementation regarding
+  encoding parameter to open function.
+
+Tests
+-----
+
+- Issue #24751: When running regrtest with the ``-w`` command line option,
+  a test run is no longer marked as a failure if all tests succeed when
+  re-run.
+
+
 What's New in Python 3.5.0 beta 4?
 ==================================
 
@@ -25,8 +122,32 @@ Core and Builtins
 - Issue #24687: Plug refleak on SyntaxError in function parameters
   annotations.
 
+- Issue #15944: memoryview: Allow arbitrary formats when casting to bytes.
+  Patch by Martin Panter.
+
 Library
 -------
+
+- Issue #23441: rcompleter now prints a tab character instead of displaying
+  possible completions for an empty word.  Initial patch by Martin Sekera.
+
+- Issue #24683: Fixed crashes in _json functions called with arguments of
+  inappropriate type.
+
+- Issue #21697: shutil.copytree() now correctly handles symbolic links that
+  point to directories.  Patch by Eduardo Seabra and Thomas Kluyver.
+
+- Issue #14373: Fixed segmentation fault when gc.collect() is called during
+  constructing lru_cache (C implementation).
+
+- Issue #24695: Fix a regression in traceback.print_exception().  If
+  exc_traceback is None we shouldn't print a traceback header like described
+  in the documentation.
+
+- Issue #24620: Random.setstate() now validates the value of state last element.
+
+- Issue #22485: Fixed an issue that caused `inspect.getsource` to return
+  incorrect results on nested functions.
 
 - Issue #22153: Improve unittest docs. Patch from Martin Panter and evilzero.
 
@@ -61,7 +182,8 @@ Library
 Build
 -----
 
-- Issue #24603: Update the Windows build to use OpenSSL 1.0.2d.
+- Issue #24603: Update Windows builds and OS X 10.5 installer to use OpenSSL
+  1.0.2d.
 
 
 What's New in Python 3.5.0 beta 3?
@@ -243,7 +365,7 @@ Core and Builtins
 
 - Issue #15027: The UTF-32 encoder is now 3x to 7x faster.
 
-- Issue #23290:  Optimize set_merge() for cases where the target is empty.
+- Issue #23290: Optimize set_merge() for cases where the target is empty.
   (Contributed by Serhiy Storchaka.)
 
 - Issue #2292: PEP 448: Additional Unpacking Generalizations.
@@ -798,7 +920,7 @@ Library
   unnecessary copying of memoryview in gzip.GzipFile.write().
   Original patch by Wolfgang Maier.
 
-- Issue #23252:  Added support for writing ZIP files to unseekable streams.
+- Issue #23252: Added support for writing ZIP files to unseekable streams.
 
 - Issue #23647: Increase impalib's MAXLINE to accommodate modern mailbox sizes.
 
@@ -1519,10 +1641,10 @@ Library
 
 - Issue #21650: Add an `--sort-keys` option to json.tool CLI.
 
-- Issue #22824:  Updated reprlib output format for sets to use set literals.
+- Issue #22824: Updated reprlib output format for sets to use set literals.
   Patch contributed by Berker Peksag.
 
-- Issue #22824:  Updated reprlib output format for arrays to display empty
+- Issue #22824: Updated reprlib output format for arrays to display empty
   arrays without an unnecessary empty list.  Suggested by Serhiy Storchaka.
 
 - Issue #22406: Fixed the uu_codec codec incorrectly ported to 3.x.
@@ -1861,7 +1983,7 @@ Library
 - Issue #21448: Changed FeedParser feed() to avoid O(N**2) behavior when
   parsing long line.  Original patch by Raymond Hettinger.
 
-- Issue #22184:  The functools LRU Cache decorator factory now gives an earlier
+- Issue #22184: The functools LRU Cache decorator factory now gives an earlier
   and clearer error message when the user forgets the required parameters.
 
 - Issue #17923: glob() patterns ending with a slash no longer match non-dirs on
@@ -2036,7 +2158,7 @@ Library
 - Issue #21719: Added the ``st_file_attributes`` field to os.stat_result on
   Windows.
 
-- Issue #21832:  Require named tuple inputs to be exact strings.
+- Issue #21832: Require named tuple inputs to be exact strings.
 
 - Issue #21722: The distutils "upload" command now exits with a non-zero
   return code when uploading fails.  Patch by Martin Dengler.
@@ -2094,7 +2216,7 @@ Library
   error bubble up as this "bad data" appears in many real world zip files in
   the wild and is ignored by other zip tools.
 
-- Issue #13742:  Added "key" and "reverse" parameters to heapq.merge().
+- Issue #13742: Added "key" and "reverse" parameters to heapq.merge().
   (First draft of patch contributed by Simon Sapin.)
 
 - Issue #21402: tkinter.ttk now works when default root window is not set.
@@ -2125,7 +2247,7 @@ Library
 
 - Issue #21525: Most Tkinter methods which accepted tuples now accept lists too.
 
-- Issue #22166:  with the assistance of a new internal _codecs._forget_codec
+- Issue #22166: With the assistance of a new internal _codecs._forget_codec
   helping function, test_codecs now clears the encoding caches to avoid the
   appearance of a reference leak
 
@@ -2185,7 +2307,7 @@ Library
   Decimal.quantize() method in the Python version.  It had never been
   present in the C version.
 
-- Issue #21469:  Reduced the risk of false positives in robotparser by
+- Issue #21469: Reduced the risk of false positives in robotparser by
   checking to make sure that robots.txt has been read or does not exist
   prior to returning True in can_fetch().
 
@@ -2476,7 +2598,7 @@ IDLE
 - Issue #16233: A module browser (File : Class Browser, Alt+C) requires a
   editor window with a filename.  When Class Browser is requested otherwise,
   from a shell, output window, or 'Untitled' editor, Idle no longer displays
-  an error box.  It now pops up an  Open Module box (Alt+M). If a valid name
+  an error box.  It now pops up an Open Module box (Alt+M). If a valid name
   is entered and a module is opened, a corresponding browser is also opened.
 
 - Issue #4832: Save As to type Python files automatically adds .py to the
@@ -3405,7 +3527,7 @@ Tools/Demos
   "{dirname}/clinic/{basename}.h".
 
 - Issue #20390: Argument Clinic's "class" directive syntax has been extended
-  with two new required  arguments: "typedef" and "type_object".
+  with two new required arguments: "typedef" and "type_object".
 
 - Issue #20390: Argument Clinic: If __new__ or __init__ functions didn't use
   kwargs (or args), the PyArg_NoKeywords (or PyArg_NoPositional) calls
@@ -4472,10 +4594,10 @@ Library
 - Issue #9548: Add a minimal "_bootlocale" module that is imported by the
   _io module instead of the full locale module.
 
-- Issue #18764: remove the 'print' alias for the PDB 'p' command so that it no
+- Issue #18764: Remove the 'print' alias for the PDB 'p' command so that it no
   longer shadows the print function.
 
-- Issue #19158:  a rare race in BoundedSemaphore could allow .release() too
+- Issue #19158: A rare race in BoundedSemaphore could allow .release() too
   often.
 
 - Issue #15805: Add contextlib.redirect_stdout().
