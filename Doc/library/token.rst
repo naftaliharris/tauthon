@@ -94,6 +94,7 @@ The token constants are:
           DOUBLESLASH
           DOUBLESLASHEQUAL
           AT
+          ATEQUAL
           OP
           ERRORTOKEN
           N_TOKENS
