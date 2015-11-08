@@ -270,6 +270,9 @@ typedef struct {
 
     /* Added in release 2.5 */
     unaryfunc nb_index;
+
+    binaryfunc nb_matrix_multiply;
+    binaryfunc nb_inplace_matrix_multiply;
 } PyNumberMethods;
 
 typedef struct {

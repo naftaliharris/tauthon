@@ -58,6 +58,9 @@ def_op('UNARY_CONVERT', 13)
 
 def_op('UNARY_INVERT', 15)
 
+def_op('BINARY_MATRIX_MULTIPLY', 16)
+def_op('INPLACE_MATRIX_MULTIPLY', 17)
+
 def_op('BINARY_POWER', 19)
 def_op('BINARY_MULTIPLY', 20)
 def_op('BINARY_DIVIDE', 21)

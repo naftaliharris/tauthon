@@ -1404,6 +1404,18 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             break;
         }
 
+        TARGET_NOARG(BINARY_MATRIX_MULTIPLY)
+        {
+            w = POP();
+            v = TOP();
+            x = PyNumber_MatrixMultiply(v, w);
+            Py_DECREF(v);
+            Py_DECREF(w);
+            SET_TOP(x);
+            if(x!=NULL) DISPATCH();
+            break;
+        }
+
         TARGET_NOARG(BINARY_DIVIDE)
         {
             if (!_Py_QnewFlag) {
@@ -1647,6 +1659,18 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             w = POP();
             v = TOP();
             x = PyNumber_InPlaceMultiply(v, w);
+            Py_DECREF(v);
+            Py_DECREF(w);
+            SET_TOP(x);
+            if (x != NULL) DISPATCH();
+            break;
+        }
+
+        TARGET_NOARG(INPLACE_MATRIX_MULTIPLY)
+        {
+            w = POP();
+            v = TOP();
+            x = PyNumber_InPlaceMatrixMultiply(v, w);
             Py_DECREF(v);
             Py_DECREF(w);
             SET_TOP(x);

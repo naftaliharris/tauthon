@@ -3842,6 +3842,8 @@ inherit_slots(PyTypeObject *type, PyTypeObject *base)
         if (base->tp_flags & Py_TPFLAGS_HAVE_INDEX) {
             COPYNUM(nb_index);
         }
+        COPYNUM(nb_matrix_multiply);
+        COPYNUM(nb_inplace_matrix_multiply);
     }
 
     if (type->tp_as_sequence != NULL && base->tp_as_sequence != NULL) {
@@ -5130,6 +5132,7 @@ slot_mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value)
 SLOT1BIN(slot_nb_add, nb_add, "__add__", "__radd__")
 SLOT1BIN(slot_nb_subtract, nb_subtract, "__sub__", "__rsub__")
 SLOT1BIN(slot_nb_multiply, nb_multiply, "__mul__", "__rmul__")
+SLOT1BIN(slot_nb_matrix_multiply, nb_matrix_multiply, "__matmul__", "__rmatmul__")
 SLOT1BIN(slot_nb_divide, nb_divide, "__div__", "__rdiv__")
 SLOT1BIN(slot_nb_remainder, nb_remainder, "__mod__", "__rmod__")
 SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
@@ -5284,6 +5287,7 @@ SLOT0(slot_nb_hex, "__hex__")
 SLOT1(slot_nb_inplace_add, "__iadd__", PyObject *, "O")
 SLOT1(slot_nb_inplace_subtract, "__isub__", PyObject *, "O")
 SLOT1(slot_nb_inplace_multiply, "__imul__", PyObject *, "O")
+SLOT1(slot_nb_inplace_matrix_multiply, "__imatmul__", PyObject *, "O")
 SLOT1(slot_nb_inplace_divide, "__idiv__", PyObject *, "O")
 SLOT1(slot_nb_inplace_remainder, "__imod__", PyObject *, "O")
 /* Can't use SLOT1 here, because nb_inplace_power is ternary */
@@ -6014,6 +6018,12 @@ static slotdef slotdefs[] = {
            slot_nb_inplace_true_divide, wrap_binaryfunc, "/="),
     NBSLOT("__index__", nb_index, slot_nb_index, wrap_unaryfunc,
            "x[y:z] <==> x[y.__index__():z.__index__()]"),
+    BINSLOT("__matmul__", nb_matrix_multiply, slot_nb_matrix_multiply,
+            "@"),
+    RBINSLOT("__rmatmul__", nb_matrix_multiply, slot_nb_matrix_multiply,
+             "@"),
+    IBSLOT("__imatmul__", nb_inplace_matrix_multiply, slot_nb_inplace_matrix_multiply,
+           wrap_binaryfunc, "@="),
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc,
            "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript,

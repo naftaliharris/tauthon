@@ -685,6 +685,12 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
+     PyAPI_FUNC(PyObject *) PyNumber_MatrixMultiply(PyObject *o1, PyObject *o2);
+
+       /*
+     This is the equivalent of the Python expression: o1 @ o2.
+       */
+
      PyAPI_FUNC(PyObject *) PyNumber_Divide(PyObject *o1, PyObject *o2);
 
        /*
@@ -933,6 +939,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      null on failure.  This is the equivalent of the Python expression:
      o1 *= o2.
 
+       */
+
+
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceMatrixMultiply(PyObject *o1, PyObject *o2);
+
+       /*
+     This is the equivalent of the Python expression: o1 @= o2.
        */
 
      PyAPI_FUNC(PyObject *) PyNumber_InPlaceDivide(PyObject *o1, PyObject *o2);
