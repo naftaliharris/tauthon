@@ -242,6 +242,14 @@ class OperatorTestCase(unittest.TestCase):
         self.assertRaises(TypeError, operator.mul, None, None)
         self.assertTrue(operator.mul(5, 2) == 10)
 
+    def test_matmul(self):
+        self.assertRaises(TypeError, operator.matmul)
+        self.assertRaises(TypeError, operator.matmul, 42, 42)
+        class M:
+            def __matmul__(self, other):
+                return other - 1
+        self.assertEqual(operator.matmul(M(), 42), 41)
+
     def test_neg(self):
         self.assertRaises(TypeError, operator.neg)
         self.assertRaises(TypeError, operator.neg, None)
@@ -471,6 +479,7 @@ class OperatorTestCase(unittest.TestCase):
             def __ilshift__  (self, other): return "ilshift"
             def __imod__     (self, other): return "imod"
             def __imul__     (self, other): return "imul"
+            def __imatmul__  (self, other): return "imatmul"
             def __ior__      (self, other): return "ior"
             def __ipow__     (self, other): return "ipow"
             def __irshift__  (self, other): return "irshift"
@@ -486,6 +495,7 @@ class OperatorTestCase(unittest.TestCase):
         self.assertEqual(operator.ilshift  (c, 5), "ilshift")
         self.assertEqual(operator.imod     (c, 5), "imod")
         self.assertEqual(operator.imul     (c, 5), "imul")
+        self.assertEqual(operator.imatmul  (c, 5), "imatmul")
         self.assertEqual(operator.ior      (c, 5), "ior")
         self.assertEqual(operator.ipow     (c, 5), "ipow")
         self.assertEqual(operator.irshift  (c, 5), "irshift")
@@ -501,6 +511,7 @@ class OperatorTestCase(unittest.TestCase):
         self.assertEqual(operator.__ilshift__  (c, 5), "ilshift")
         self.assertEqual(operator.__imod__     (c, 5), "imod")
         self.assertEqual(operator.__imul__     (c, 5), "imul")
+        self.assertEqual(operator.__imatmul__  (c, 5), "imatmul")
         self.assertEqual(operator.__ior__      (c, 5), "ior")
         self.assertEqual(operator.__ipow__     (c, 5), "ipow")
         self.assertEqual(operator.__irshift__  (c, 5), "irshift")

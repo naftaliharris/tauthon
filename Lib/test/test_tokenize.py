@@ -393,7 +393,7 @@ def k(x):
 
     def test_multiplicative(self):
         # Multiplicative
-        self.check_tokenize("x = 1//1*1/5*12%0x12", """\
+        self.check_tokenize("x = 1//1*1/5*12%0x12@42", """\
     NAME       'x'           (1, 0) (1, 1)
     OP         '='           (1, 2) (1, 3)
     NUMBER     '1'           (1, 4) (1, 5)
@@ -407,6 +407,8 @@ def k(x):
     NUMBER     '12'          (1, 13) (1, 15)
     OP         '%'           (1, 15) (1, 16)
     NUMBER     '0x12'        (1, 16) (1, 20)
+    OP         '@'           (1, 20) (1, 21)
+    NUMBER     '42'          (1, 21) (1, 23)
     """)
 
     def test_unary(self):
