@@ -1640,6 +1640,7 @@ BINARY(instance_rshift, "rshift", PyNumber_Rshift)
 BINARY(instance_add, "add", PyNumber_Add)
 BINARY(instance_sub, "sub", PyNumber_Subtract)
 BINARY(instance_mul, "mul", PyNumber_Multiply)
+BINARY(instance_matmul, "matmul", PyNumber_MatrixMultiply)
 BINARY(instance_div, "div", PyNumber_Divide)
 BINARY(instance_mod, "mod", PyNumber_Remainder)
 BINARY(instance_divmod, "divmod", PyNumber_Divmod)
@@ -1654,6 +1655,7 @@ BINARY_INPLACE(instance_irshift, "rshift", PyNumber_InPlaceRshift)
 BINARY_INPLACE(instance_iadd, "add", PyNumber_InPlaceAdd)
 BINARY_INPLACE(instance_isub, "sub", PyNumber_InPlaceSubtract)
 BINARY_INPLACE(instance_imul, "mul", PyNumber_InPlaceMultiply)
+BINARY_INPLACE(instance_imatmul, "imatmul", PyNumber_InPlaceMatrixMultiply)
 BINARY_INPLACE(instance_idiv, "div", PyNumber_InPlaceDivide)
 BINARY_INPLACE(instance_imod, "mod", PyNumber_InPlaceRemainder)
 BINARY_INPLACE(instance_ifloordiv, "floordiv", PyNumber_InPlaceFloorDivide)
@@ -2198,6 +2200,8 @@ static PyNumberMethods instance_as_number = {
     instance_ifloordiv,                 /* nb_inplace_floor_divide */
     instance_itruediv,                  /* nb_inplace_true_divide */
     (unaryfunc)instance_index,          /* nb_index */
+    instance_matmul,                    /* nb_matmul */
+    instance_imatmul,                   /* nb_inplace_matmul */
 };
 
 PyTypeObject PyInstance_Type = {
