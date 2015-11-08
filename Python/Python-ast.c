@@ -6709,8 +6709,8 @@ init_ast(void)
         if (PyDict_SetItemString(d, "Add", (PyObject*)Add_type) < 0) return;
         if (PyDict_SetItemString(d, "Sub", (PyObject*)Sub_type) < 0) return;
         if (PyDict_SetItemString(d, "Mult", (PyObject*)Mult_type) < 0) return;
-        if (PyDict_SetItemString(d, "MatMult", (PyObject*)MatMult_type) < 0) return
-            NULL;
+        if (PyDict_SetItemString(d, "MatMult", (PyObject*)MatMult_type) < 0)
+            return;
         if (PyDict_SetItemString(d, "Div", (PyObject*)Div_type) < 0) return;
         if (PyDict_SetItemString(d, "Mod", (PyObject*)Mod_type) < 0) return;
         if (PyDict_SetItemString(d, "Pow", (PyObject*)Pow_type) < 0) return;
