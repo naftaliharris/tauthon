@@ -238,6 +238,11 @@ result back on the stack.
    not in effect.
 
 
+.. opcode:: BINARY_MATRIX_MULTIPLY ()
+
+   Implements ``TOS = TOS1 @ TOS``.
+
+
 .. opcode:: BINARY_FLOOR_DIVIDE ()
 
    Implements ``TOS = TOS1 // TOS``.
@@ -313,6 +318,11 @@ the original TOS1.
 
    Implements in-place ``TOS = TOS1 / TOS`` when ``from __future__ import
    division`` is not in effect.
+
+
+.. opcode:: INPLACE_MATRIX_MULTIPLY ()
+
+   Implements in-place ``TOS = TOS1 @ TOS``.
 
 
 .. opcode:: INPLACE_FLOOR_DIVIDE ()

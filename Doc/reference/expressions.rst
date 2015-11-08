@@ -931,8 +931,9 @@ from the power operator, there are only two levels, one for multiplicative
 operators and one for additive operators:
 
 .. productionlist::
-   m_expr: `u_expr` | `m_expr` "*" `u_expr` | `m_expr` "//" `u_expr` | `m_expr` "/" `u_expr`
-         : | `m_expr` "%" `u_expr`
+   m_expr: `u_expr` | `m_expr` "*" `u_expr` | `m_expr` "@" `m_expr` |
+         : `m_expr` "//" `u_expr`| `m_expr` "/" `u_expr` |
+         : `m_expr` "%" `u_expr`
    a_expr: `m_expr` | `a_expr` "+" `m_expr` | `a_expr` "-" `m_expr`
 
 .. index:: single: multiplication
@@ -943,6 +944,13 @@ or long) and the other must be a sequence. In the former case, the numbers are
 converted to a common type and then multiplied together.  In the latter case,
 sequence repetition is performed; a negative repetition factor yields an empty
 sequence.
+
+.. index:: single: matrix multiplication
+
+The ``@`` (at) operator is intended to be used for matrix multiplication.  No
+builtin Python types implement this operator.
+
+.. versionadded:: 2.8
 
 .. index::
    exception: ZeroDivisionError
@@ -1382,8 +1390,9 @@ groups from right to left).
 +-----------------------------------------------+-------------------------------------+
 | ``+``, ``-``                                  | Addition and subtraction            |
 +-----------------------------------------------+-------------------------------------+
-| ``*``, ``/``, ``//``, ``%``                   | Multiplication, division, remainder |
-|                                               | [#]_                                |
+| ``*``, ``@``, ``/``, ``//``, ``%``            | Multiplication, matrix              |
+|                                               | multiplication division,            |
+|                                               | remainder [#]_                      |
 +-----------------------------------------------+-------------------------------------+
 | ``+x``, ``-x``, ``~x``                        | Positive, negative, bitwise NOT     |
 +-----------------------------------------------+-------------------------------------+

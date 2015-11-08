@@ -154,6 +154,14 @@ The mathematical and bitwise operations are the most numerous:
    Return ``a * b``, for *a* and *b* numbers.
 
 
+.. function:: matmul(a, b)
+              __matmul__(a, b)
+
+   Return ``a @ b``.
+
+   .. versionadded:: 3.5
+
+
 .. function:: neg(obj)
               __neg__(obj)
 
@@ -655,6 +663,8 @@ Python syntax and the functions in the :mod:`operator` module.
 +-----------------------+-------------------------+---------------------------------------+
 | Multiplication        | ``a * b``               | ``mul(a, b)``                         |
 +-----------------------+-------------------------+---------------------------------------+
+| Matrix Multiplication | ``a @ b``               | ``matmul(a, b)``                      |
++-----------------------+-------------------------+---------------------------------------+
 | Negation (Arithmetic) | ``- a``                 | ``neg(a)``                            |
 +-----------------------+-------------------------+---------------------------------------+
 | Negation (Logical)    | ``not a``               | ``not_(a)``                           |
@@ -689,4 +699,3 @@ Python syntax and the functions in the :mod:`operator` module.
 +-----------------------+-------------------------+---------------------------------------+
 | Ordering              | ``a > b``               | ``gt(a, b)``                          |
 +-----------------------+-------------------------+---------------------------------------+
-
