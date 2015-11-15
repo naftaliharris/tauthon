@@ -944,7 +944,7 @@ class TestPEP380Operation(unittest.TestCase):
 
     def test_custom_iterator_return(self):
         # See issue #15568
-        class MyIter:
+        class MyIter(object):  # RSI: make this work for old-style classes
             def __iter__(self):
                 return self
             def next(self):

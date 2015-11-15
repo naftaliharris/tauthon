@@ -2115,6 +2115,14 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
 
         TARGET_NOARG(YIELD_FROM)
+        {
+            static PyObject *send;
+            if (send == NULL) {
+                send = PyString_InternFromString("send");
+                if (send == NULL) {
+                    return NULL;  /* RSI: handle this error */
+                }
+            }
             u = POP();
             x = TOP();
             /* send u to x */
@@ -2124,7 +2132,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 if (u == Py_None)
                     retval = Py_TYPE(x)->tp_iternext(x);
                 else
-                    retval = PyObject_CallMethod(x, "send", "O", u);  /* RSI : Fix the bug this introduces */
+                    retval = PyObject_CallMethodObjArgs(x, send, u);
             }
             Py_DECREF(u);
             if (!retval) {
@@ -2146,6 +2154,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             /* and repeat... */
             f->f_lasti--;
             goto fast_yield;
+        }
 
         TARGET_NOARG(YIELD_VALUE)
         {
