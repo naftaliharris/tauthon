@@ -1837,10 +1837,11 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (PyGen_CheckExact(x)) {
                 retval = _PyGen_Send((PyGenObject *)x, u);
             } else {
+                PyObject *send = PyUnicode_FromString("send");
                 if (u == Py_None)
                     retval = Py_TYPE(x)->tp_iternext(x);
                 else
-                    retval = PyObject_CallMethodObjArgs(x, "send", u, NULL);
+                    retval = PyObject_CallMethodObjArgs(x, send, u, NULL);
             }
             Py_DECREF(u);
             if (!retval) {

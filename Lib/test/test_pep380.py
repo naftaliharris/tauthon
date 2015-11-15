@@ -13,7 +13,7 @@ import sys
 import inspect
 import parser
 
-from test.support import captured_stderr
+from test.support import captured_stderr, disable_gc, gc_collect
 
 class TestPEP380Operation(unittest.TestCase):
     """
