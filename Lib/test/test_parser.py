@@ -51,6 +51,10 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         self.check_suite("def f(): (yield 1)*2")
         self.check_suite("def f(): return; yield 1")
         self.check_suite("def f(): yield 1; return")
+        self.check_suite("def f(): yield from 1")
+        self.check_suite("def f(): x = yield from 1")
+        self.check_suite("def f(): f((yield from 1))")
+        self.check_suite("def f(): yield 1; return 1")
         self.check_suite("def f():\n"
                          "    for x in range(30):\n"
                          "        yield x\n")

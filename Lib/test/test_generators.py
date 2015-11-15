@@ -729,29 +729,6 @@ Ye olde Fibonacci generator, tee style.
 
 syntax_tests = """
 
->>> def f():
-...     return 22
-...     yield 1
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[0]>, line 3)
-
->>> def f():
-...     yield 1
-...     return 22
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[1]>, line 3)
-
-"return None" is not the same as "return" in a generator:
-
->>> def f():
-...     yield 1
-...     return None
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[2]>, line 3)
-
 These are fine:
 
 >>> def f():
@@ -867,19 +844,6 @@ These are fine:
 >>> type(f())
 <type 'generator'>
 
-
->>> def f():
-...     if 0:
-...         lambda x:  x        # shouldn't trigger here
-...         return              # or here
-...         def f(i):
-...             return 2*i      # or here
-...         if 0:
-...             return 3        # but *this* sucks (line 8)
-...     if 0:
-...         yield 2             # because it's a generator (line 10)
-Traceback (most recent call last):
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[24]>, line 10)
 
 This one caused a crash (see SF bug 567538):
 
@@ -1567,11 +1531,6 @@ Traceback (most recent call last):
   ...
   File "<doctest test.test_generators.__test__.coroutine[21]>", line 1
 SyntaxError: 'yield' outside function
-
->>> def f(): return lambda x=(yield): 1
-Traceback (most recent call last):
-  ...
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.coroutine[22]>, line 1)
 
 >>> def f(): x = yield = y
 Traceback (most recent call last):
