@@ -5,6 +5,8 @@ Test suite for PEP 380 implementation
 
 adapted from original tests written by Greg Ewing
 see <http://www.cosc.canterbury.ac.nz/greg.ewing/python/yield-from/YieldFrom-Python3.1.2-rev5.zip>
+
+Note: Statements requiring python3 feaures are commented out with "python3"
 """
 
 import unittest
@@ -288,7 +290,7 @@ class TestPEP380Operation(unittest.TestCase):
             g.close()
         except ValueError as e:
             self.assertEqual(e.args[0], "nybbles have exploded with delight")
-            self.assertIsInstance(e.__context__, GeneratorExit)
+            #self.assertIsInstance(e.__context__, GeneratorExit)  # python3
         else:
             self.fail("subgenerator failed to raise ValueError")
         self.assertEqual(trace,[
@@ -536,7 +538,7 @@ class TestPEP380Operation(unittest.TestCase):
         class Broken:
             def __iter__(self):
                 return self
-            def __next__(self):
+            def next(self):
                 return 1
             def __getattr__(self, attr):
                 1/0
@@ -558,7 +560,7 @@ class TestPEP380Operation(unittest.TestCase):
             gi = g()
             self.assertEqual(next(gi), 1)
             gi.close()
-        self.assertIn('ZeroDivisionError', output.getvalue())
+        #self.assertIn('ZeroDivisionError', output.getvalue())  # python3 (I think)
 
     def test_exception_in_initial_next_call(self):
         """
@@ -834,7 +836,7 @@ class TestPEP380Operation(unittest.TestCase):
             gi.throw(GeneratorExit)
         except ValueError as e:
             self.assertEqual(e.args[0], "Vorpal bunny encountered")
-            self.assertIsInstance(e.__context__, GeneratorExit)
+            #self.assertIsInstance(e.__context__, GeneratorExit)  # python3
         else:
             self.fail("subgenerator failed to raise ValueError")
         self.assertEqual(trace,[
@@ -908,7 +910,7 @@ class TestPEP380Operation(unittest.TestCase):
         class MyIt(object):
             def __iter__(self):
                 return self
-            def __next__(self):
+            def next(self):
                 return 42
             def close(self_):
                 self.assertTrue(g1.gi_running)
@@ -940,19 +942,18 @@ class TestPEP380Operation(unittest.TestCase):
         for stack in spam(eggs(gen())):
             self.assertTrue('spam' in stack and 'eggs' in stack)
 
-    #def test_custom_iterator_return(self):
-    #    # See issue #15568
-    #    class MyIter:
-    #        def __iter__(self):
-    #            return self
-    #        def __next__(self):
-    #            raise StopIteration(42)
-    #    def gen():
-    #        nonlocal ret
-    #        ret = yield from MyIter()
-    #    ret = None
-    #    list(gen())
-    #    self.assertEqual(ret, 42)
+    def test_custom_iterator_return(self):
+        # See issue #15568
+        class MyIter:
+            def __iter__(self):
+                return self
+            def next(self):
+                raise StopIteration(42)
+        ret = ["foo"]
+        def gen():
+            ret[0] = yield from MyIter()
+        list(gen())
+        self.assertEqual(ret[0], 42)
 
     def test_close_with_cleared_frame(self):
         # See issue #17669.
@@ -993,24 +994,26 @@ class TestPEP380Operation(unittest.TestCase):
             del inner_gen
             gc_collect()
 
-    #def test_send_tuple_with_custom_generator(self):
-    #    # See issue #21209.
-    #    class MyGen:
-    #        def __iter__(self):
-    #            return self
-    #        def __next__(self):
-    #            return 42
-    #        def send(self, what):
-    #            nonlocal v
-    #            v = what
-    #            return None
-    #    def outer():
-    #        v = yield from MyGen()
-    #    g = outer()
-    #    next(g)
-    #    v = None
-    #    g.send((1, 2, 3, 4))
-    #    self.assertEqual(v, (1, 2, 3, 4))
+    def test_send_tuple_with_custom_generator(self):
+        # See issue #21209.
+        class MyGen:
+            def __init__(self, v):
+                self.v = v
+            def __iter__(self):
+                return self
+            def next(self):
+                return 42
+            def send(self, what):
+                self.v[0] = what
+                return None
+        v = ["foo"]
+        def outer():
+            v[0] = yield from MyGen(v)
+        g = outer()
+        next(g)
+        v[0] = None
+        g.send((1, 2, 3, 4))
+        self.assertEqual(v[0], (1, 2, 3, 4))
 
 def test_main():
     from test import support
