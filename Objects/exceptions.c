@@ -550,17 +550,15 @@ PyStopIteration_Create(PyObject *value)
 }
 
 ComplexExtendsException(
-    PyExc_Exception,       /* base */
-    StopIteration,         /* name */
-    StopIteration,         /* prefix for *_init, etc */
-    0,                     /* new */
-    0,                     /* methods */
-    StopIteration_members, /* members */
-    0,                     /* getset */
-    0,                     /* str */
+    PyExc_Exception,
+    StopIteration,
+    StopIteration,
+    StopIteration_dealloc,
+    0,
+    StopIteration_members,
+    0,
     "Signal the end from iterator.__next__()."
 );
-
 
 /*
  *    GeneratorExit extends BaseException

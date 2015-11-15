@@ -49,7 +49,10 @@ typedef struct {
 } PySystemExitObject;
 
 typedef struct {
-    PyException_HEAD
+    PyObject_HEAD
+    PyObject *dict;
+    PyObject *args;
+    PyObject *message;
     PyObject *value;
 } PyStopIterationObject;
 

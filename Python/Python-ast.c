@@ -5322,7 +5322,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
         if (isinstance) {
                 expr_ty value;
 
-                if (_PyObject_HasAttrId(obj, &PyId_value)) {
+                if (PyObject_HasAttrString(obj, "value")) {
                         int res;
                         tmp = PyObject_GetAttrString(obj, "value");
                         if (tmp == NULL) goto failed;
@@ -6085,11 +6085,11 @@ obj2ast_operator(PyObject* obj, operator_ty* out, PyArena* arena)
         }
         isinstance = PyObject_IsInstance(obj, (PyObject *)MatMult_type);
         if (isinstance == -1) {
-            return 1;
+                return 1;
         }
         if (isinstance) {
-            *out = MatMult;
-            return 0;
+                *out = MatMult;
+                return 0;
         }
         isinstance = PyObject_IsInstance(obj, (PyObject *)Div_type);
         if (isinstance == -1) {
@@ -6728,7 +6728,7 @@ init_ast(void)
             (PyObject*)GeneratorExp_type) < 0) return;
         if (PyDict_SetItemString(d, "Yield", (PyObject*)Yield_type) < 0) return;
         if (PyDict_SetItemString(d, "YieldFrom", (PyObject*)YieldFrom_type) <
-            0) return NULL;
+            0) return;
         if (PyDict_SetItemString(d, "Compare", (PyObject*)Compare_type) < 0)
             return;
         if (PyDict_SetItemString(d, "Call", (PyObject*)Call_type) < 0) return;

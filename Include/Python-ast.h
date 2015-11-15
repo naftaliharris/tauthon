@@ -254,8 +254,8 @@ struct _expr {
                 struct {
                         expr_ty value;
                 } Yield;
-
-                 struct {
+                
+                struct {
                         expr_ty value;
                 } YieldFrom;
                 
