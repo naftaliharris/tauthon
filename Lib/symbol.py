@@ -95,6 +95,7 @@ comp_if = 337
 testlist1 = 338
 encoding_decl = 339
 yield_expr = 340
+yield_arg = 341
 #--end constants--
 
 sym_name = {}

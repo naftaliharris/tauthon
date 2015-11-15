@@ -809,7 +809,8 @@ opcode_stack_effect(int opcode, int oparg)
             return -3;
         case YIELD_VALUE:
             return 0;
-
+        case YIELD_FROM:
+            return -1;
         case POP_BLOCK:
             return 0;
         case END_FINALLY:
@@ -3063,6 +3064,14 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
             ADDOP_O(c, LOAD_CONST, Py_None, consts);
         }
         ADDOP(c, YIELD_VALUE);
+        break;
+    case YieldFrom_kind:
+        if (c->u->u_ste->ste_type != FunctionBlock)
+            return compiler_error(c, "'yield' outside function");
+        VISIT(c, expr, e->v.YieldFrom.value);
+        ADDOP(c, GET_ITER);
+        ADDOP_O(c, LOAD_CONST, Py_None, consts);
+        ADDOP(c, YIELD_FROM);
         break;
     case Compare_kind:
         return compiler_compare(c, e);

@@ -102,6 +102,7 @@ def_op('BINARY_XOR', 65)
 def_op('BINARY_OR', 66)
 def_op('INPLACE_POWER', 67)
 def_op('GET_ITER', 68)
+def_op('YIELD_FROM', 69)
 
 def_op('PRINT_EXPR', 70)
 def_op('PRINT_ITEM', 71)

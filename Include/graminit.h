@@ -85,3 +85,4 @@
 #define testlist1 338
 #define encoding_decl 339
 #define yield_expr 340
+#define yield_arg 341

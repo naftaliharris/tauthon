@@ -124,7 +124,7 @@ arglist: (argument ',')* (argument [',']
                          |'**' test)
 # The reason that keywords are test nodes instead of NAME is that using NAME
 # results in an ambiguity. ast.c makes sure it's a NAME.
-argument: test [comp_for] | test '=' test
+argument: (test) [comp_for] | test '=' test
 
 list_iter: list_for | list_if
 list_for: 'for' exprlist 'in' testlist_safe [list_iter]
@@ -139,4 +139,5 @@ testlist1: test (',' test)*
 # not used in grammar, but may appear in "node" passed from Parser to Compiler
 encoding_decl: NAME
 
-yield_expr: 'yield' [testlist]
+yield_expr: 'yield' [yield_arg]
+yield_arg: 'from' test | testlist

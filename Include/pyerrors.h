@@ -49,6 +49,11 @@ typedef struct {
 } PySystemExitObject;
 
 typedef struct {
+    PyException_HEAD
+    PyObject *value;
+} PyStopIterationObject;
+
+typedef struct {
     PyObject_HEAD
     PyObject *dict;
     PyObject *args;
@@ -302,6 +307,8 @@ PyAPI_FUNC(int) PyUnicodeTranslateError_SetReason(
     PyObject *, const char *);
 #endif
 
+/* create a StopIteration exception with the given value */
+PyAPI_FUNC(PyObject *) PyStopIteration_Create(PyObject *);
 
 /* These APIs aren't really part of the error implementation, but
    often needed to format error messages; the native C lib APIs are

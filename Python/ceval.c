@@ -1023,6 +1023,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
        f->f_lasti to -1 (i.e. the index *before* the first instruction)
        and YIELD_VALUE doesn't fiddle with f_lasti any more.  So this
        does work.  Promise.
+       YIELD_FROM sets f_lasti to itself, in order to repeated yield
+       multiple values.
 
        When the PREDICT() macros are enabled, some opcode pairs follow in
        direct succession without updating f->f_lasti.  A successful
@@ -2111,6 +2113,39 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             why = WHY_RETURN;
             goto fast_block_end;
         }
+
+        TARGET_NOARG(YIELD_FROM)
+            u = POP();
+            x = TOP();
+            /* send u to x */
+            if (PyGen_CheckExact(x)) {
+                retval = _PyGen_Send((PyGenObject *)x, u);
+            } else {
+                if (u == Py_None)
+                    retval = Py_TYPE(x)->tp_iternext(x);
+                else
+                    retval = PyObject_CallMethod(x, "send", "O", u);  /* RSI : Fix the bug this introduces */
+            }
+            Py_DECREF(u);
+            if (!retval) {
+                PyObject *val;
+                x = POP(); /* Remove iter from stack */
+                Py_DECREF(x);
+                err = PyGen_FetchStopIterationValue(&val);
+                if (err < 0) {
+                    x = NULL;
+                    break;
+                }
+                x = val;
+                PUSH(x);
+                continue;
+            }
+            /* x remains on stack, retval is value to be yielded */
+            f->f_stacktop = stack_pointer;
+            why = WHY_YIELD;
+            /* and repeat... */
+            f->f_lasti--;
+            goto fast_yield;
 
         TARGET_NOARG(YIELD_VALUE)
         {

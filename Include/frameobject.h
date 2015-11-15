@@ -8,24 +8,24 @@ extern "C" {
 #endif
 
 typedef struct {
-    int b_type;			/* what kind of block this is */
-    int b_handler;		/* where to jump to find handler */
-    int b_level;		/* value stack level to pop to */
+    int b_type;                 /* what kind of block this is */
+    int b_handler;              /* where to jump to find handler */
+    int b_level;                /* value stack level to pop to */
 } PyTryBlock;
 
 typedef struct _frame {
     PyObject_VAR_HEAD
-    struct _frame *f_back;	/* previous frame, or NULL */
-    PyCodeObject *f_code;	/* code segment */
-    PyObject *f_builtins;	/* builtin symbol table (PyDictObject) */
-    PyObject *f_globals;	/* global symbol table (PyDictObject) */
-    PyObject *f_locals;		/* local symbol table (any mapping) */
-    PyObject **f_valuestack;	/* points after the last local */
+    struct _frame *f_back;      /* previous frame, or NULL */
+    PyCodeObject *f_code;       /* code segment */
+    PyObject *f_builtins;       /* builtin symbol table (PyDictObject) */
+    PyObject *f_globals;        /* global symbol table (PyDictObject) */
+    PyObject *f_locals;         /* local symbol table (any mapping) */
+    PyObject **f_valuestack;    /* points after the last local */
     /* Next free slot in f_valuestack.  Frame creation sets to f_valuestack.
        Frame evaluation usually NULLs it, but a frame that yields sets it
        to the current stack top. */
     PyObject **f_stacktop;
-    PyObject *f_trace;		/* Trace function */
+    PyObject *f_trace;          /* Trace function */
 
     /* If an exception is raised in this frame, the next three are used to
      * record the exception info (if any) originally in the thread state.  See
@@ -37,16 +37,16 @@ typedef struct _frame {
     PyObject *f_exc_type, *f_exc_value, *f_exc_traceback;
 
     PyThreadState *f_tstate;
-    int f_lasti;		/* Last instruction if called */
+    int f_lasti;                /* Last instruction if called */
     /* Call PyFrame_GetLineNumber() instead of reading this field
        directly.  As of 2.3 f_lineno is only valid when tracing is
        active (i.e. when f_trace is set).  At other times we use
        PyCode_Addr2Line to calculate the line from the current
        bytecode index. */
-    int f_lineno;		/* Current line number */
-    int f_iblock;		/* index in f_blockstack */
+    int f_lineno;               /* Current line number */
+    int f_iblock;               /* index in f_blockstack */
     PyTryBlock f_blockstack[CO_MAXBLOCKS]; /* for try and loop blocks */
-    PyObject *f_localsplus[1];	/* locals+stack, dynamically sized */
+    PyObject *f_localsplus[1];  /* locals+stack, dynamically sized */
 } PyFrameObject;
 
 
