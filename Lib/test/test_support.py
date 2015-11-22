@@ -1161,6 +1161,15 @@ def gc_collect():
     gc.collect()
     gc.collect()
 
+@contextlib.contextmanager
+def disable_gc():
+    have_gc = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if have_gc:
+            gc.enable()
 
 _header = '2P'
 if hasattr(sys, "gettotalrefcount"):

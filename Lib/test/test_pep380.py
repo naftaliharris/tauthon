@@ -15,7 +15,7 @@ import sys
 import inspect
 import parser
 
-from test.support import captured_stderr, disable_gc, gc_collect
+from test.test_support import captured_stderr, disable_gc, gc_collect
 
 class TestPEP380Operation(unittest.TestCase):
     """
@@ -541,7 +541,7 @@ class TestPEP380Operation(unittest.TestCase):
             def next(self):
                 return 1
             def __getattr__(self, attr):
-                1/0
+                1//0
 
         def g():
             yield from Broken()
@@ -572,7 +572,7 @@ class TestPEP380Operation(unittest.TestCase):
             yield from g2()
             trace.append("g1 should not be here")
         def g2():
-            yield 1/0
+            yield 1//0
         def run():
             gi = g1()
             next(gi)
@@ -1016,9 +1016,9 @@ class TestPEP380Operation(unittest.TestCase):
         self.assertEqual(v[0], (1, 2, 3, 4))
 
 def test_main():
-    from test import support
+    from test import test_support
     test_classes = [TestPEP380Operation]
-    support.run_unittest(*test_classes)
+    test_support.run_unittest(*test_classes)
 
 
 if __name__ == '__main__':
