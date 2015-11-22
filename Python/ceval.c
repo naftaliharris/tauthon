@@ -2116,23 +2116,34 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         TARGET_NOARG(YIELD_FROM)
         {
-            static PyObject *send;
+            static PyObject *send, *next;
             if (send == NULL) {
                 send = PyString_InternFromString("send");
                 if (send == NULL) {
                     return NULL;  /* RSI: handle this error */
                 }
             }
+            if (next == NULL) {
+                next = PyString_InternFromString("next");
+                if (next == NULL) {
+                    return NULL;  /* RSI: handle this error */
+                }
+            }
+
             u = POP();
             x = TOP();
             /* send u to x */
             if (PyGen_CheckExact(x)) {
                 retval = _PyGen_Send((PyGenObject *)x, u);
             } else {
-                if (u == Py_None)
-                    retval = Py_TYPE(x)->tp_iternext(x);
-                else
+                if (u == Py_None) {
+                    if (PyInstance_Check(x))
+                        retval = PyObject_CallMethodObjArgs(x, next, NULL);
+                    else
+                        retval = Py_TYPE(x)->tp_iternext(x);
+                } else {
                     retval = PyObject_CallMethodObjArgs(x, send, u, NULL);
+                }
             }
             Py_DECREF(u);
             if (!retval) {

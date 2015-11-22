@@ -944,16 +944,19 @@ class TestPEP380Operation(unittest.TestCase):
 
     def test_custom_iterator_return(self):
         # See issue #15568
-        class MyIter(object):  # RSI: make this work for old-style classes
+        class MyIterOld:
             def __iter__(self):
                 return self
             def next(self):
                 raise StopIteration(42)
-        ret = ["foo"]
-        def gen():
-            ret[0] = yield from MyIter()
-        list(gen())
-        self.assertEqual(ret[0], 42)
+        class MyIterNew(MyIterOld, object):
+            pass
+        for klass in [MyIterOld, MyIterNew]:
+            ret = ["foo"]
+            def gen():
+                ret[0] = yield from klass()
+            list(gen())
+            self.assertEqual(ret[0], 42)
 
     def test_close_with_cleared_frame(self):
         # See issue #17669.
