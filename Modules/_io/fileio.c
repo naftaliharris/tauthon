@@ -70,8 +70,6 @@ _PyFileIO_closed(PyObject *self)
 static PyObject *
 portable_lseek(int fd, PyObject *posobj, int whence);
 
-static PyObject *portable_lseek(int fd, PyObject *posobj, int whence);
-
 /* Returns 0 on success, -1 with exception set on failure. */
 static int
 internal_close(fileio *self)
@@ -374,6 +372,7 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
         }
 
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
 #ifdef MS_WINDOWS
         if (widename != NULL)
@@ -381,6 +380,7 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
         else
 #endif
             self->fd = open(name, flags, 0666);
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
         fd_is_own = 1;
         if (self->fd < 0) {
@@ -916,6 +916,7 @@ fileio_truncate(fileio *self, PyObject *args)
 
         /* Truncate.  Note that this may grow the file! */
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
         hFile = (HANDLE)_get_osfhandle(fd);
         ret = hFile == (HANDLE)-1; /* testing for INVALID_HANDLE value */
@@ -924,6 +925,7 @@ fileio_truncate(fileio *self, PyObject *args)
             if (ret)
                 errno = EACCES;
         }
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
 
         /* we restore the file pointer position in any case */
