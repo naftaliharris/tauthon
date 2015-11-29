@@ -333,6 +333,7 @@
     <ClCompile Include="..\Parser\parsetok.c" />
     <ClCompile Include="..\Parser\tokenizer.c" />
     <ClCompile Include="..\PC\_subprocess.c" />
+    <ClCompile Include="..\PC\invalid_parameter_handler.c" />
     <ClCompile Include="..\PC\_winreg.c" />
     <ClCompile Include="..\PC\config.c" />
     <ClCompile Include="..\PC\dl_nt.c" />

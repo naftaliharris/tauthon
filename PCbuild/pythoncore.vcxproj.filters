@@ -797,6 +797,9 @@
     <ClCompile Include="..\PC\_subprocess.c">
       <Filter>PC</Filter>
     </ClCompile>
+    <ClCompile Include="..\PC\invalid_parameter_handler.c">
+      <Filter>PC</Filter>
+    </ClCompile>
     <ClCompile Include="..\PC\_winreg.c">
       <Filter>PC</Filter>
     </ClCompile>

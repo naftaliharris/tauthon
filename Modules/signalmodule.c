@@ -407,7 +407,7 @@ static PyObject *
 signal_set_wakeup_fd(PyObject *self, PyObject *args)
 {
     struct stat buf;
-    int fd, old_fd;
+    int fd, old_fd, is_bad_fd;
     if (!PyArg_ParseTuple(args, "i:set_wakeup_fd", &fd))
         return NULL;
 #ifdef WITH_THREAD
@@ -417,7 +417,11 @@ signal_set_wakeup_fd(PyObject *self, PyObject *args)
         return NULL;
     }
 #endif
-    if (fd != -1 && (!_PyVerify_fd(fd) || fstat(fd, &buf) != 0)) {
+    _Py_BEGIN_SUPPRESS_IPH
+    errno = 0;
+    is_bad_fd = (fd != -1 && (!_PyVerify_fd(fd) || fstat(fd, &buf) != 0));
+    _Py_END_SUPPRESS_IPH
+    if (is_bad_fd) {
         PyErr_SetString(PyExc_ValueError, "invalid fd");
         return NULL;
     }

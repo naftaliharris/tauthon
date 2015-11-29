@@ -146,7 +146,10 @@ msvcrt_get_osfhandle(PyObject *self, PyObject *args)
     if (!_PyVerify_fd(fd))
         return PyErr_SetFromErrno(PyExc_IOError);
 
+    _Py_BEGIN_SUPPRESS_IPH
+    errno = 0;
     handle = _get_osfhandle(fd);
+    _Py_END_SUPPRESS_IPH
     if (handle == -1)
         return PyErr_SetFromErrno(PyExc_IOError);
 
