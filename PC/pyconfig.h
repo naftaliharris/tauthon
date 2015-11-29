@@ -160,13 +160,8 @@ WIN32 is still required for the locale module.
 #endif /* MS_WIN64 */
 
 /* Set the version macros for the windows headers */
-
-/* Python 2.8+ requires Windows Vista or greater */
-#ifdef _WIN32_WINNT_WIN2K
-#define Py_WINVER _WIN32_WINNT_VISTA
-#else
-#define Py_WINVER 0x0600
-#endif
+/* We require at least Windows Vista */
+#define Py_WINVER 0x0600 /* _WIN32_WINNT_VISTA */
 #define Py_NTDDI NTDDI_VISTA
 
 /* We only set these values when building Python - we don't want to force
