@@ -696,6 +696,12 @@ typedef fpos_t Py_off_t;
 #error "Large file support, but neither off_t nor fpos_t is large enough."
 #endif
 
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+#define HAVE_FSEEK64
+#define fseek64 _fseeki64
+#define HAVE_FTELL64
+#define ftell64 _ftelli64
+#endif
 
 /* a portable fseek() function
    return 0 on success, non-zero on failure (with errno set) */
