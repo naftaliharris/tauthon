@@ -1313,7 +1313,9 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
             return NULL;
         }
         /* Win9x appears to need us seeked to zero */
+        _Py_BEGIN_SUPPRESS_IPH
         lseek(fileno, 0, SEEK_SET);
+        _Py_END_SUPPRESS_IPH
     }
 
     m_obj = (mmap_object *)type->tp_alloc(type, 0);
