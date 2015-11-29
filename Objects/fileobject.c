@@ -879,7 +879,16 @@ file_truncate(PyFileObject *f, PyObject *args)
     if (ret != 0)
         goto onioerror;
 
-#ifdef MS_WINDOWS
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+    FILE_BEGIN_ALLOW_THREADS(f)
+    _Py_BEGIN_SUPPRESS_IPH
+    errno = 0;
+    ret = _chsize_s(_fileno(f->f_fp), newsize);
+    if (ret != 0)
+        goto onioerror;
+    _Py_END_SUPPRESS_IPH
+    FILE_END_ALLOW_THREADS(f)
+#elif defined(MS_WINDOWS)
     /* MS _chsize doesn't work if newsize doesn't fit in 32 bits,
        so don't even try using it. */
     {
