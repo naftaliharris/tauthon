@@ -1146,6 +1146,38 @@ file_read(PyFileObject *f, PyObject *args)
         }
         bytesread += chunksize;
         if (bytesread < buffersize && !interrupted) {
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+            /* There seems to be a highly state dependant bug in the CRT stdio
+             * functions. Reading past the end of the file, so that the eof
+             * marker gets set, and then seeking back using SEEK_CUR causes a
+             * subsequent read() to return garbage data from its internal
+             * buffer. Setting the stream to unbuffered prevents this bug from
+             * happening, but we cannot do that, for obvious performance
+             * reasons. I have been unable to find a simple sequence of seek()
+             * + read() operations that cause this bug. It is triggered
+             * reliably by test_gzip.test_append_many.
+             *
+             * To workaround it we simply cause the CRT to discard its internal
+             * read buffer by rewinding the stream, and then seek back to the
+             * end. This has two performance downsides:
+             * 1) When subsequent seek+reads would have normally used the
+             * internal buffer, they cannot as the buffer has been discarded.
+             * 2) This procedure removes the eof marker, so a subsequent fread() will
+             * have to call the underlying read() instead of just using the eof marker.
+             * Hopefully, Microsoft will fix this eventually. Note, that if the
+             * stream is not seekable, no harm is done, since we call clearerr()
+             * afterwards, anyway.
+             */
+            _Py_BEGIN_SUPPRESS_IPH
+            if (feof(f->f_fp) != 0) {
+                /* Flush the underlying read buffer, while preserving stream
+                 * position. We have to use tell() because seeking to the end of
+                 * stream does not work for text mode streams. */
+                __int64 end_pos = _ftelli64(f->f_fp); 
+                if (end_pos > -1) { rewind(f->f_fp); _fseeki64(f->f_fp, end_pos, SEEK_SET); }
+            }
+            _Py_END_SUPPRESS_IPH
+#endif
             clearerr(f->f_fp);
             break;
         }
