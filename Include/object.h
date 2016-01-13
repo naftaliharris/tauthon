@@ -296,6 +296,12 @@ typedef struct {
 } PyMappingMethods;
 
 typedef struct {
+    unaryfunc am_await;
+    unaryfunc am_aiter;
+    unaryfunc am_anext;
+} PyAsyncMethods;
+
+typedef struct {
     readbufferproc bf_getreadbuffer;
     writebufferproc bf_getwritebuffer;
     segcountproc bf_getsegcount;

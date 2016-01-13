@@ -22,6 +22,8 @@ PyAPI_FUNC(PyObject *) PyEval_CallMethod(PyObject *obj,
 
 PyAPI_FUNC(void) PyEval_SetProfile(Py_tracefunc, PyObject *);
 PyAPI_FUNC(void) PyEval_SetTrace(Py_tracefunc, PyObject *);
+PyAPI_FUNC(void) _PyEval_SetCoroutineWrapper(PyObject *);
+PyAPI_FUNC(PyObject *) _PyEval_GetCoroutineWrapper(void);
 
 struct _frame; /* Avoid including frameobject.h */
 

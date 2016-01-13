@@ -63,8 +63,10 @@ extern "C" {
 #define ATEQUAL         51
 /* Don't forget to update the table _PyParser_TokenNames in tokenizer.c! */
 #define OP		52
-#define ERRORTOKEN	53
-#define N_TOKENS	54
+#define AWAIT           54
+#define ASYNC           55
+#define ERRORTOKEN	56
+#define N_TOKENS	57
 
 /* Special definitions for cooperation with parser */
 
