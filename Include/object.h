@@ -409,6 +409,8 @@ typedef struct _typeobject {
     /* Type attribute cache version tag. Added in version 2.6 */
     unsigned int tp_version_tag;
 
+    PyAsyncMethods *tp_as_async;
+
 #ifdef COUNT_ALLOCS
     /* these must be last and never explicitly initialized */
     Py_ssize_t tp_allocs;
@@ -425,6 +427,7 @@ typedef struct _heaptypeobject {
     /* Note: there's a dependency on the order of these members
        in slotptr() in typeobject.c . */
     PyTypeObject ht_type;
+    PyAsyncMethods as_async;
     PyNumberMethods as_number;
     PyMappingMethods as_mapping;
     PySequenceMethods as_sequence; /* as_sequence comes after as_mapping,
