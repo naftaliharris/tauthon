@@ -517,9 +517,9 @@ expr_ty _Py_DictComp(expr_ty key, expr_ty value, asdl_seq * generators, int
                      lineno, int col_offset, PyArena *arena);
 #define GeneratorExp(a0, a1, a2, a3, a4) _Py_GeneratorExp(a0, a1, a2, a3, a4)
 expr_ty _Py_GeneratorExp(expr_ty elt, asdl_seq * generators, int lineno, int
+                         col_offset, PyArena *arena);
 #define Await(a0, a1, a2, a3) _Py_Await(a0, a1, a2, a3)
 expr_ty _Py_Await(expr_ty value, int lineno, int col_offset, PyArena *arena);
-                         col_offset, PyArena *arena);
 #define Yield(a0, a1, a2, a3) _Py_Yield(a0, a1, a2, a3)
 expr_ty _Py_Yield(expr_ty value, int lineno, int col_offset, PyArena *arena);
 #define YieldFrom(a0, a1, a2, a3) _Py_YieldFrom(a0, a1, a2, a3)

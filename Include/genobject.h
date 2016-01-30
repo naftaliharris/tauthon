@@ -52,7 +52,6 @@ PyAPI_DATA(PyTypeObject) _PyCoroWrapper_Type;
 PyObject *_PyCoro_GetAwaitableIter(PyObject *o);
 PyAPI_FUNC(PyObject *) PyCoro_New(struct _frame *,
     PyObject *name, PyObject *qualname);
-#endif
 
 #undef _PyGenObject_HEAD
 
