@@ -60,13 +60,13 @@ struct _mod {
 };
 
 enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
-                  Return_kind=4, Delete_kind=5, Assign_kind=6, AugAssign_kind=7,
-                  Print_kind=8, For_kind=9, AsyncFor_kind=10, While_kind=11,
-                  If_kind=12, With_kind=13, AsyncWith_kind=14, Raise_kind=15,
-                  TryExcept_kind=16, TryFinally_kind=17, Assert_kind=18,
-                  Import_kind=19, ImportFrom_kind=20, Exec_kind=21,
-                  Global_kind=22, Expr_kind=23, Pass_kind=24, Break_kind=25,
-                  Continue_kind=26};
+                  Return_kind=4, Delete_kind=5, Assign_kind=6,
+                  AugAssign_kind=7, Print_kind=8, For_kind=9, AsyncFor_kind=10,
+                  While_kind=11, If_kind=12, With_kind=13, AsyncWith_kind=14,
+                  Raise_kind=15, TryExcept_kind=16, TryFinally_kind=17,
+                  Assert_kind=18, Import_kind=19, ImportFrom_kind=20,
+                  Exec_kind=21, Global_kind=22, Expr_kind=23, Pass_kind=24,
+                  Break_kind=25, Continue_kind=26};
 struct _stmt {
         enum _stmt_kind kind;
         union {
@@ -83,7 +83,7 @@ struct _stmt {
                         asdl_seq *body;
                         asdl_seq *decorator_list;
                 } AsyncFunctionDef;
-
+                
                 struct {
                         identifier name;
                         asdl_seq *bases;
@@ -129,7 +129,7 @@ struct _stmt {
                         asdl_seq *body;
                         asdl_seq *orelse;
                 } AsyncFor;
-
+                
                 struct {
                         expr_ty test;
                         asdl_seq *body;
@@ -153,7 +153,7 @@ struct _stmt {
                         expr_ty optional_vars;
                         asdl_seq *body;
                 } AsyncWith;
-
+                
                 struct {
                         expr_ty type;
                         expr_ty inst;
@@ -275,7 +275,7 @@ struct _expr {
                 struct {
                         expr_ty value;
                 } Await;
-
+                
                 struct {
                         expr_ty value;
                 } Yield;
@@ -415,9 +415,9 @@ stmt_ty _Py_FunctionDef(identifier name, arguments_ty args, asdl_seq * body,
                         asdl_seq * decorator_list, int lineno, int col_offset,
                         PyArena *arena);
 #define AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6) _Py_AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6)
-stmt_ty _Py_AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq * body,
-                        asdl_seq * decorator_list, int lineno, int col_offset,
-                        PyArena *arena);
+stmt_ty _Py_AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq *
+                             body, asdl_seq * decorator_list, int lineno, int
+                             col_offset, PyArena *arena);
 #define ClassDef(a0, a1, a2, a3, a4, a5, a6) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * body,
                      asdl_seq * decorator_list, int lineno, int col_offset,
@@ -441,7 +441,7 @@ stmt_ty _Py_For(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq *
                 orelse, int lineno, int col_offset, PyArena *arena);
 #define AsyncFor(a0, a1, a2, a3, a4, a5, a6) _Py_AsyncFor(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_AsyncFor(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq *
-                orelse, int lineno, int col_offset, PyArena *arena);
+                     orelse, int lineno, int col_offset, PyArena *arena);
 #define While(a0, a1, a2, a3, a4, a5) _Py_While(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_While(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
                   int col_offset, PyArena *arena);
@@ -452,8 +452,8 @@ stmt_ty _Py_If(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
 stmt_ty _Py_With(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body,
                  int lineno, int col_offset, PyArena *arena);
 #define AsyncWith(a0, a1, a2, a3, a4, a5) _Py_AsyncWith(a0, a1, a2, a3, a4, a5)
-stmt_ty _Py_AsyncWith(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body,
-                 int lineno, int col_offset, PyArena *arena);
+stmt_ty _Py_AsyncWith(expr_ty context_expr, expr_ty optional_vars, asdl_seq *
+                      body, int lineno, int col_offset, PyArena *arena);
 #define Raise(a0, a1, a2, a3, a4, a5) _Py_Raise(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_Raise(expr_ty type, expr_ty inst, expr_ty tback, int lineno, int
                   col_offset, PyArena *arena);
