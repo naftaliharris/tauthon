@@ -399,6 +399,8 @@ typedef struct _typeobject {
     newfunc tp_new;
     freefunc tp_free; /* Low-level free-memory routine */
     inquiry tp_is_gc; /* For PyObject_IS_GC */
+    PyAsyncMethods *tp_as_async;
+
     PyObject *tp_bases;
     PyObject *tp_mro; /* method resolution order */
     PyObject *tp_cache;
@@ -408,8 +410,6 @@ typedef struct _typeobject {
 
     /* Type attribute cache version tag. Added in version 2.6 */
     unsigned int tp_version_tag;
-
-    PyAsyncMethods *tp_as_async;
 
 #ifdef COUNT_ALLOCS
     /* these must be last and never explicitly initialized */

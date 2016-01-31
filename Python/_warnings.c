@@ -705,6 +705,35 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
 }
 
 
+int
+PyErr_WarnFormat(PyObject *category, Py_ssize_t stack_level,
+                 const char *format, ...)
+{
+    int ret = 0;
+    PyObject *res;
+    PyObject *message;
+    va_list vargs;
+
+    #ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+    #else
+    va_start(vargs);
+    #endif
+    message = PyString_FromFormatV(format, vargs);
+    if (message != NULL) {
+        res = do_warn(message, category, stack_level);
+        if (res == NULL) {
+            ret = -1;
+        }
+        Py_DECREF(message);
+    } else {
+        ret = -1;
+    }
+    va_end(vargs);
+    return ret;
+}
+
+
 /* Function to issue a warning message; may raise an exception. */
 int
 PyErr_WarnEx(PyObject *category, const char *text, Py_ssize_t stack_level)
