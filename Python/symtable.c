@@ -1012,6 +1012,35 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         if (!symtable_exit_block(st, s))
             return 0;
         break;
+    case AsyncFunctionDef_kind:
+        if (!symtable_add_def(st, s->v.AsyncFunctionDef.name, DEF_LOCAL))
+            return 0;
+        if (s->v.AsyncFunctionDef.args->defaults)
+            VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.args->defaults);
+        if (s->v.AsyncFunctionDef.decorator_list)
+            VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.decorator_list);
+        if (!symtable_enter_block(st, s->v.AsyncFunctionDef.name,
+                                  FunctionBlock, (void *)s, s->lineno))
+            return 0;
+        VISIT_IN_BLOCK(st, arguments, s->v.AsyncFunctionDef.args, s);
+        VISIT_SEQ_IN_BLOCK(st, stmt, s->v.AsyncFunctionDef.body, s);
+        if (!symtable_exit_block(st, s))
+            return 0;
+        break;
+    case AsyncWith_kind:
+        VISIT(st, expr, s->v.AsyncWith.context_expr);
+        if (s->v.AsyncWith.optional_vars) {
+            VISIT(st, expr, s->v.AsyncWith.optional_vars);
+        }
+        VISIT_SEQ(st, stmt, s->v.AsyncWith.body);
+        break;
+    case AsyncFor_kind:
+        VISIT(st, expr, s->v.AsyncFor.target);
+        VISIT(st, expr, s->v.AsyncFor.iter);
+        VISIT_SEQ(st, stmt, s->v.AsyncFor.body);
+        if (s->v.AsyncFor.orelse)
+            VISIT_SEQ(st, stmt, s->v.AsyncFor.orelse);
+        break;
     case ClassDef_kind: {
         PyObject *tmp;
         if (!symtable_add_def(st, s->v.ClassDef.name, DEF_LOCAL))
@@ -1234,6 +1263,10 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         VISIT(st, expr, e->v.YieldFrom.value);
         st->st_cur->ste_generator = 1;
         break;
+    case Await_kind:
+         VISIT(st, expr, e->v.Await.value);
+         st->st_cur->ste_generator = 1;
+         break;
     case Compare_kind:
         VISIT(st, expr, e->v.Compare.left);
         VISIT_SEQ(st, expr, e->v.Compare.comparators);

@@ -1,3 +1,5 @@
+git diff e42d34 3_pep0492 --stat
+
 Haven't done yet:
  Include/typeslots.h                  |    3 +
  Lib/opcode.py                        |   11 +-
@@ -17,7 +19,6 @@ Haven't done yet:
  Python/peephole.c                    |    3 +
  Python/pymath.c                      |    2 +-
  Python/pystate.c                     |    5 +
- Python/symtable.c                    |   51 +-
  Python/sysmodule.c                   |   46 +
  Tools/parser/unparse.py              |   32 +-
 
@@ -44,6 +45,7 @@ Already did:
  Python/Python-ast.c                  |  473 ++++
  Python/ast.c                         |  174 +-
  Python/graminit.c                    | 2496 ++++++++---------
+ Python/symtable.c                    |   51 +-
 
 Haven't done yet (tests):
  Lib/test/badsyntax_async1.py         |    2 +
