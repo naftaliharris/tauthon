@@ -1424,7 +1424,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
         args = s->v.FunctionDef.args;
         decos = s->v.FunctionDef.decorator_list;
         name = s->v.FunctionDef.name;
-        body = s->v.cFunctionDef.body;
+        body = s->v.FunctionDef.body;
     }
 
     if (!compiler_decorators(c, decos))
@@ -2345,13 +2345,13 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
         return compiler_continue(c);
     case With_kind:
         return compiler_with(c, s);
-    }
     case AsyncFunctionDef_kind:
         return compiler_function(c, s, 1);
     case AsyncWith_kind:
         return compiler_async_with(c, s, 0);
     case AsyncFor_kind:
         return compiler_async_for(c, s);
+    }
     return 1;
 }
 

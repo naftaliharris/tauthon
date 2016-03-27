@@ -2114,6 +2114,110 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             goto fast_block_end;
         }
 
+        TARGET_NOARG(GET_AITER) {
+            unaryfunc getter = NULL;
+            PyObject *iter = NULL;
+            PyObject *awaitable = NULL;
+            PyObject *obj = TOP();
+            PyTypeObject *type = Py_TYPE(obj);
+
+            if (type->tp_as_async != NULL)
+                getter = type->tp_as_async->am_aiter;
+
+            if (getter != NULL) {
+                iter = (*getter)(obj);
+                Py_DECREF(obj);
+                if (iter == NULL) {
+                    SET_TOP(NULL);
+                    break;
+                }
+            }
+            else {
+                SET_TOP(NULL);
+                PyErr_Format(
+                    PyExc_TypeError,
+                    "'async for' requires an object with "
+                    "__aiter__ method, got %.100s",
+                    type->tp_name);
+                Py_DECREF(obj);
+                break;
+            }
+
+            awaitable = _PyCoro_GetAwaitableIter(iter);
+            if (awaitable == NULL) {
+                SET_TOP(NULL);
+                PyErr_Format(
+                    PyExc_TypeError,
+                    "'async for' received an invalid object "
+                    "from __aiter__: %.100s",
+                    Py_TYPE(iter)->tp_name);
+
+                Py_DECREF(iter);
+                break;
+            } else
+                Py_DECREF(iter);
+
+            SET_TOP(awaitable);
+            DISPATCH();
+        }
+
+        TARGET_NOARG(GET_ANEXT) {
+            unaryfunc getter = NULL;
+            PyObject *next_iter = NULL;
+            PyObject *awaitable = NULL;
+            PyObject *aiter = TOP();
+            PyTypeObject *type = Py_TYPE(aiter);
+
+            if (type->tp_as_async != NULL)
+                getter = type->tp_as_async->am_anext;
+
+            if (getter != NULL) {
+                next_iter = (*getter)(aiter);
+                if (next_iter == NULL) {
+                    break;
+                }
+            }
+            else {
+                PyErr_Format(
+                    PyExc_TypeError,
+                    "'async for' requires an iterator with "
+                    "__anext__ method, got %.100s",
+                    type->tp_name);
+                break;
+            }
+
+            awaitable = _PyCoro_GetAwaitableIter(next_iter);
+            if (awaitable == NULL) {
+                PyErr_Format(
+                    PyExc_TypeError,
+                    "'async for' received an invalid object "
+                    "from __anext__: %.100s",
+                    Py_TYPE(next_iter)->tp_name);
+
+                Py_DECREF(next_iter);
+                break;
+            } else
+                Py_DECREF(next_iter);
+
+            PUSH(awaitable);
+            DISPATCH();
+        }
+
+        TARGET_NOARG(GET_AWAITABLE) {
+            PyObject *iterable = TOP();
+            PyObject *iter = _PyCoro_GetAwaitableIter(iterable);
+
+            Py_DECREF(iterable);
+
+            SET_TOP(iter); /* Even if it's NULL */
+
+            if (iter == NULL) {
+                break;
+            }
+
+            DISPATCH();
+        }
+
         TARGET_NOARG(YIELD_FROM)
         {
             static PyObject *send, *next;
@@ -2877,6 +2981,34 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             break;
         }
 
+        TARGET_NOARG(GET_YIELD_FROM_ITER) {
+            /* before: [obj]; after [getiter(obj)] */
+            PyObject *iterable = TOP();
+            PyObject *iter;
+            if (PyCoro_CheckExact(iterable)) {
+                /* `iterable` is a coroutine */
+                if (!(co->co_flags & (CO_COROUTINE | CO_ITERABLE_COROUTINE))) {
+                    /* and it is used in a 'yield from' expression of a
+                       regular generator. */
+                    Py_DECREF(iterable);
+                    SET_TOP(NULL);
+                    PyErr_SetString(PyExc_TypeError,
+                                    "cannot 'yield from' a coroutine object "
+                                    "in a non-coroutine generator");
+                    break;
+                }
+            }
+            else if (!PyGen_CheckExact(iterable)) {
+                /* `iterable` is not a generator. */
+                iter = PyObject_GetIter(iterable);
+                Py_DECREF(iterable);
+                SET_TOP(iter);
+                if (iter == NULL)
+                    break;
+            }
+            DISPATCH();
+        }
+
         PREDICTED_WITH_ARG(FOR_ITER);
         TARGET(FOR_ITER)
         {
@@ -2934,7 +3066,36 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             DISPATCH();
         }
 
+        TARGET(BEFORE_ASYNC_WITH) {
+            static PyObject *__aexit__, *__aenter__;
+            PyObject *mgr = TOP();
+            PyObject *exit = special_lookup(mgr, "__aexit__", &__aexit__),
+                     *enter;
+            PyObject *res;
+            if (exit == NULL)
+                break;
+            SET_TOP(exit);
+            enter = special_lookup(mgr, "__aenter__", &__aenter__);
+            Py_DECREF(mgr);
+            if (enter == NULL)
+                break;
+            res = PyObject_CallFunctionObjArgs(enter, NULL);
+            Py_DECREF(enter);
+            if (res == NULL)
+                break;
+            PUSH(res);
+            DISPATCH();
+        }
 
+        TARGET(SETUP_ASYNC_WITH) {
+            PyObject *res = POP();
+            /* Setup the finally block before pushing the result
+               of __aenter__ on the stack. */
+            PyFrame_BlockSetup(f, SETUP_FINALLY, INSTR_OFFSET() + oparg,
+                               STACK_LEVEL());
+            PUSH(res);
+            DISPATCH();
+        }
 
         TARGET(SETUP_WITH)
         {
@@ -2967,7 +3128,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             }
         }
 
-        TARGET_NOARG(WITH_CLEANUP)
+        TARGET_NOARG(WITH_CLEANUP_START)
         {
             /* At the top of the stack are 1-3 values indicating
                how/why we entered the finally clause:
@@ -3030,6 +3191,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (x == NULL)
                 break; /* Go to error exit */
 
+            /* TODO/RSI: There are supposed to be more stuff here?!! */
+
             if (u != Py_None)
                 err = PyObject_IsTrue(x);
             else
@@ -3053,6 +3216,11 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             }
             PREDICT(END_FINALLY);
             break;
+        }
+
+        TARGET_NOARG(WITH_CLEANUP_FINISH)
+        {
+            /* TODO/RSI: Need to put shit in here!!! */
         }
 
         TARGET(CALL_FUNCTION)

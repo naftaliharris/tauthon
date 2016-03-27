@@ -115,7 +115,7 @@ def_op('INPLACE_AND', 77)
 def_op('INPLACE_XOR', 78)
 def_op('INPLACE_OR', 79)
 def_op('BREAK_LOOP', 80)
-def_op('WITH_CLEANUP', 81)
+def_op('WITH_CLEANUP_START', 81)
 def_op('LOAD_LOCALS', 82)
 def_op('RETURN_VALUE', 83)
 def_op('IMPORT_STAR', 84)
@@ -192,5 +192,8 @@ def_op('EXTENDED_ARG', 145)
 EXTENDED_ARG = 145
 def_op('SET_ADD', 146)
 def_op('MAP_ADD', 147)
+
+def_op('SETUP_ASYNC_WITH', 154)
+def_op('WITH_CLEANUP_FINISH', 155)
 
 del def_op, name_op, jrel_op, jabs_op
