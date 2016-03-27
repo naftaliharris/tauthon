@@ -91,7 +91,7 @@ extern "C" {
 #define INPLACE_XOR     78
 #define INPLACE_OR      79
 #define BREAK_LOOP      80
-#define WITH_CLEANUP    81
+#define WITH_CLEANUP_START 81
 #define LOAD_LOCALS     82
 #define RETURN_VALUE    83
 #define IMPORT_STAR     84
@@ -169,6 +169,7 @@ extern "C" {
 #define SET_ADD         146
 #define MAP_ADD         147
 #define SETUP_ASYNC_WITH 154
+#define WITH_CLEANUP_FINISH 155
 
 
 enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyCmp_GT=Py_GT, PyCmp_GE=Py_GE,

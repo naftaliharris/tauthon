@@ -177,6 +177,8 @@ static int inplace_binop(struct compiler *, operator_ty);
 static int expr_constant(expr_ty e);
 
 static int compiler_with(struct compiler *, stmt_ty);
+static int compiler_async_with(struct compiler *, stmt_ty, int);
+static int compiler_async_for(struct compiler *, stmt_ty);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
 static PyObject *__doc__;
@@ -797,7 +799,9 @@ opcode_stack_effect(int opcode, int oparg)
             return 0;
         case SETUP_WITH:
             return 4;
-        case WITH_CLEANUP:
+        case WITH_CLEANUP_START:
+            return 1;
+        case WITH_CLEANUP_FINISH:
             return -1; /* XXX Sometimes more */
         case LOAD_LOCALS:
             return 1;
@@ -911,6 +915,18 @@ opcode_stack_effect(int opcode, int oparg)
             return 1;
         case STORE_DEREF:
             return -1;
+        case GET_AWAITABLE:
+            return 0;
+        case SETUP_ASYNC_WITH:
+            return 6;
+        case BEFORE_ASYNC_WITH:
+            return 1;
+        case GET_AITER:
+            return 0;
+        case GET_ANEXT:
+            return 1;
+        case GET_YIELD_FROM_ITER:
+            return 0;
         default:
             fprintf(stderr, "opcode = %d\n", opcode);
             Py_FatalError("opcode_stack_effect()");
@@ -1384,26 +1400,42 @@ compiler_arguments(struct compiler *c, arguments_ty args)
 }
 
 static int
-compiler_function(struct compiler *c, stmt_ty s)
+compiler_function(struct compiler *c, stmt_ty s, int is_async)
 {
     PyCodeObject *co;
     PyObject *first_const = Py_None;
-    arguments_ty args = s->v.FunctionDef.args;
-    asdl_seq* decos = s->v.FunctionDef.decorator_list;
+    arguments_ty args;
+    identifier name;
+    asdl_seq* decos;
+    asdl_seq *body;
     stmt_ty st;
     int i, n, docstring;
 
-    assert(s->kind == FunctionDef_kind);
+    if (is_async) {
+        assert(s->kind == AsyncFunctionDef_kind);
+
+        args = s->v.AsyncFunctionDef.args;
+        decos = s->v.AsyncFunctionDef.decorator_list;
+        name = s->v.AsyncFunctionDef.name;
+        body = s->v.AsyncFunctionDef.body;
+    } else {
+        assert(s->kind == FunctionDef_kind);
+
+        args = s->v.FunctionDef.args;
+        decos = s->v.FunctionDef.decorator_list;
+        name = s->v.FunctionDef.name;
+        body = s->v.cFunctionDef.body;
+    }
 
     if (!compiler_decorators(c, decos))
         return 0;
     if (args->defaults)
         VISIT_SEQ(c, expr, args->defaults);
-    if (!compiler_enter_scope(c, s->v.FunctionDef.name, (void *)s,
+    if (!compiler_enter_scope(c, name, (void *)s,
                               s->lineno))
         return 0;
 
-    st = (stmt_ty)asdl_seq_GET(s->v.FunctionDef.body, 0);
+    st = (stmt_ty)asdl_seq_GET(body, 0);
     docstring = compiler_isdocstring(st);
     if (docstring && Py_OptimizeFlag < 2)
         first_const = st->v.Expr.value->v.Str.s;
@@ -1416,10 +1448,10 @@ compiler_function(struct compiler *c, stmt_ty s)
     compiler_arguments(c, args);
 
     c->u->u_argcount = asdl_seq_LEN(args->args);
-    n = asdl_seq_LEN(s->v.FunctionDef.body);
+    n = asdl_seq_LEN(body);
     /* if there was a docstring, we need to skip the first statement */
     for (i = docstring; i < n; i++) {
-        st = (stmt_ty)asdl_seq_GET(s->v.FunctionDef.body, i);
+        st = (stmt_ty)asdl_seq_GET(body, i);
         VISIT_IN_SCOPE(c, stmt, st);
     }
     co = assemble(c, 1);
@@ -1427,6 +1459,8 @@ compiler_function(struct compiler *c, stmt_ty s)
     if (co == NULL)
         return 0;
 
+    if (is_async)
+        co->co_flags |= CO_COROUTINE;
     compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
     Py_DECREF(co);
 
@@ -1434,7 +1468,7 @@ compiler_function(struct compiler *c, stmt_ty s)
         ADDOP_I(c, CALL_FUNCTION, 1);
     }
 
-    return compiler_nameop(c, s->v.FunctionDef.name, Store);
+    return compiler_nameop(c, name, Store);
 }
 
 static int
@@ -1673,6 +1707,91 @@ compiler_for(struct compiler *c, stmt_ty s)
     compiler_pop_fblock(c, LOOP, start);
     VISIT_SEQ(c, stmt, s->v.For.orelse);
     compiler_use_next_block(c, end);
+    return 1;
+}
+
+static int
+compiler_async_for(struct compiler *c, stmt_ty s)
+{
+    static PyObject *stopiter_error = NULL;
+    basicblock *try, *except, *end, *after_try, *try_cleanup,
+               *after_loop, *after_loop_else;
+
+    if (stopiter_error == NULL) {
+        stopiter_error = PyUnicode_InternFromString("StopAsyncIteration");
+        if (stopiter_error == NULL)
+            return 0;
+    }
+
+    try = compiler_new_block(c);
+    except = compiler_new_block(c);
+    end = compiler_new_block(c);
+    after_try = compiler_new_block(c);
+    try_cleanup = compiler_new_block(c);
+    after_loop = compiler_new_block(c);
+    after_loop_else = compiler_new_block(c);
+
+    if (try == NULL || except == NULL || end == NULL
+            || after_try == NULL || try_cleanup == NULL)
+        return 0;
+
+    ADDOP_JREL(c, SETUP_LOOP, after_loop);
+    if (!compiler_push_fblock(c, LOOP, try))
+        return 0;
+
+    VISIT(c, expr, s->v.AsyncFor.iter);
+    ADDOP(c, GET_AITER);
+    ADDOP_O(c, LOAD_CONST, Py_None, consts);
+    ADDOP(c, YIELD_FROM);
+
+    compiler_use_next_block(c, try);
+
+
+    ADDOP_JREL(c, SETUP_EXCEPT, except);
+    if (!compiler_push_fblock(c, EXCEPT, try))
+        return 0;
+
+    ADDOP(c, GET_ANEXT);
+    ADDOP_O(c, LOAD_CONST, Py_None, consts);
+    ADDOP(c, YIELD_FROM);
+    VISIT(c, expr, s->v.AsyncFor.target);
+    ADDOP(c, POP_BLOCK);
+    compiler_pop_fblock(c, EXCEPT, try);
+    ADDOP_JREL(c, JUMP_FORWARD, after_try);
+
+
+    compiler_use_next_block(c, except);
+    ADDOP(c, DUP_TOP);
+    ADDOP_O(c, LOAD_GLOBAL, stopiter_error, names);
+    ADDOP_I(c, COMPARE_OP, PyCmp_EXC_MATCH);
+    ADDOP_JABS(c, POP_JUMP_IF_FALSE, try_cleanup);
+
+    ADDOP(c, POP_TOP);
+    ADDOP(c, POP_TOP);
+    ADDOP(c, POP_TOP);
+    ADDOP(c, POP_EXCEPT); /* for SETUP_EXCEPT */
+    ADDOP(c, POP_BLOCK); /* for SETUP_LOOP */
+    ADDOP_JABS(c, JUMP_ABSOLUTE, after_loop_else);
+
+
+    compiler_use_next_block(c, try_cleanup);
+    ADDOP(c, END_FINALLY);
+
+    compiler_use_next_block(c, after_try);
+    VISIT_SEQ(c, stmt, s->v.AsyncFor.body);
+    ADDOP_JABS(c, JUMP_ABSOLUTE, try);
+
+    ADDOP(c, POP_BLOCK); /* for SETUP_LOOP */
+    compiler_pop_fblock(c, LOOP, try);
+
+    compiler_use_next_block(c, after_loop);
+    ADDOP_JABS(c, JUMP_ABSOLUTE, end);
+
+    compiler_use_next_block(c, after_loop_else);
+    VISIT_SEQ(c, stmt, s->v.For.orelse);
+
+    compiler_use_next_block(c, end);
+
     return 1;
 }
 
@@ -2125,7 +2244,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 
     switch (s->kind) {
     case FunctionDef_kind:
-        return compiler_function(c, s);
+        return compiler_function(c, s, 0);
     case ClassDef_kind:
         return compiler_class(c, s);
     case Return_kind:
@@ -2227,6 +2346,12 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case With_kind:
         return compiler_with(c, s);
     }
+    case AsyncFunctionDef_kind:
+        return compiler_function(c, s, 1);
+    case AsyncWith_kind:
+        return compiler_async_with(c, s, 0);
+    case AsyncFor_kind:
+        return compiler_async_for(c, s);
     return 1;
 }
 
@@ -2924,6 +3049,100 @@ expr_constant(expr_ty e)
 }
 
 /*
+   Implements the async with statement.
+
+   The semantics outlined in that PEP are as follows:
+
+   async with EXPR as VAR:
+       BLOCK
+
+   It is implemented roughly as:
+
+   context = EXPR
+   exit = context.__aexit__  # not calling it
+   value = await context.__aenter__()
+   try:
+       VAR = value  # if VAR present in the syntax
+       BLOCK
+   finally:
+       if an exception was raised:
+       exc = copy of (exception, instance, traceback)
+       else:
+       exc = (None, None, None)
+       if not (await exit(*exc)):
+           raise
+ */
+static int
+compiler_async_with(struct compiler *c, stmt_ty s, int pos)
+{
+    basicblock *block, *finally;
+    withitem_ty item = asdl_seq_GET(s->v.AsyncWith.items, pos);
+
+    assert(s->kind == AsyncWith_kind);
+
+    block = compiler_new_block(c);
+    finally = compiler_new_block(c);
+    if (!block || !finally)
+        return 0;
+
+    /* Evaluate EXPR */
+    VISIT(c, expr, item->context_expr);
+
+    ADDOP(c, BEFORE_ASYNC_WITH);
+    ADDOP(c, GET_AWAITABLE);
+    ADDOP_O(c, LOAD_CONST, Py_None, consts);
+    ADDOP(c, YIELD_FROM);
+
+    ADDOP_JREL(c, SETUP_ASYNC_WITH, finally);
+
+    /* SETUP_ASYNC_WITH pushes a finally block. */
+    compiler_use_next_block(c, block);
+    if (!compiler_push_fblock(c, FINALLY_TRY, block)) {
+        return 0;
+    }
+
+    if (item->optional_vars) {
+        VISIT(c, expr, item->optional_vars);
+    }
+    else {
+    /* Discard result from context.__aenter__() */
+        ADDOP(c, POP_TOP);
+    }
+
+    pos++;
+    if (pos == asdl_seq_LEN(s->v.AsyncWith.items))
+        /* BLOCK code */
+        VISIT_SEQ(c, stmt, s->v.AsyncWith.body)
+    else if (!compiler_async_with(c, s, pos))
+            return 0;
+
+    /* End of try block; start the finally block */
+    ADDOP(c, POP_BLOCK);
+    compiler_pop_fblock(c, FINALLY_TRY, block);
+
+    ADDOP_O(c, LOAD_CONST, Py_None, consts);
+    compiler_use_next_block(c, finally);
+    if (!compiler_push_fblock(c, FINALLY_END, finally))
+        return 0;
+
+    /* Finally block starts; context.__exit__ is on the stack under
+       the exception or return information. Just issue our magic
+       opcode. */
+    ADDOP(c, WITH_CLEANUP_START);
+
+    ADDOP(c, GET_AWAITABLE);
+    ADDOP_O(c, LOAD_CONST, Py_None, consts);
+    ADDOP(c, YIELD_FROM);
+
+    ADDOP(c, WITH_CLEANUP_FINISH);
+
+    /* Finally block ends. */
+    ADDOP(c, END_FINALLY);
+    compiler_pop_fblock(c, FINALLY_END, finally);
+    return 1;
+}
+
+/*
    Implements the with statement from PEP 343.
 
    The semantics outlined in that PEP are as follows:
@@ -2994,7 +3213,8 @@ compiler_with(struct compiler *c, stmt_ty s)
     /* Finally block starts; context.__exit__ is on the stack under
        the exception or return information. Just issue our magic
        opcode. */
-    ADDOP(c, WITH_CLEANUP);
+    ADDOP(c, WITH_CLEANUP_START);
+    ADDOP(c, WITH_CLEANUP_FINISH);
 
     /* Finally block ends. */
     ADDOP(c, END_FINALLY);
@@ -3057,6 +3277,10 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     case Yield_kind:
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'yield' outside function");
+        /* TODO/RSI: Figure out how to raise an error here.
+        if (c->u->u_scope_type == COMPILER_SCOPE_ASYNC_FUNCTION)
+            return compiler_error(c, "'yield' inside async function");
+        */
         if (e->v.Yield.value) {
             VISIT(c, expr, e->v.Yield.value);
         }
@@ -3068,8 +3292,30 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     case YieldFrom_kind:
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'yield' outside function");
+        /* TODO/RSI: Figure out how to raise an error here.
+        if (c->u->u_scope_type == COMPILER_SCOPE_ASYNC_FUNCTION)
+            return compiler_error(c, "'yield from' inside async function");
+        */
         VISIT(c, expr, e->v.YieldFrom.value);
-        ADDOP(c, GET_ITER);
+        ADDOP(c, GET_YIELD_FROM_ITER);
+        ADDOP_O(c, LOAD_CONST, Py_None, consts);
+        ADDOP(c, YIELD_FROM);
+        break;
+    case Await_kind:
+        if (c->u->u_ste->ste_type != FunctionBlock)
+            return compiler_error(c, "'await' outside function");
+
+        /* TODO/RSI: Figure out how to raise an error here.
+        if (c->u->u_scope_type == COMPILER_SCOPE_COMPREHENSION)
+            return compiler_error(
+                c, "'await' expressions in comprehensions are not supported");
+
+        if (c->u->u_scope_type != COMPILER_SCOPE_ASYNC_FUNCTION)
+            return compiler_error(c, "'await' outside async function");
+        */
+
+        VISIT(c, expr, e->v.Await.value);
+        ADDOP(c, GET_AWAITABLE);
         ADDOP_O(c, LOAD_CONST, Py_None, consts);
         ADDOP(c, YIELD_FROM);
         break;

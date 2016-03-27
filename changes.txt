@@ -12,7 +12,6 @@ Haven't done yet:
  Objects/typeslots.inc                |    3 +
  Objects/typeslots.py                 |    2 +
  Python/ceval.c                       |  241 +-
- Python/compile.c                     |  317 ++-
  Python/importlib.h                   | 3466 +++++++++++------------
  Python/importlib_external.h          | 4994 +++++++++++++++++-----------------
  Python/opcode_targets.h              |   16 +-
@@ -44,6 +43,7 @@ Already did:
  Parser/tokenizer.h                   |    7 +
  Python/Python-ast.c                  |  473 ++++
  Python/ast.c                         |  174 +-
+ Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
  Python/graminit.c                    | 2496 ++++++++---------
  Python/symtable.c                    |   51 +-
 
