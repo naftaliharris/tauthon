@@ -854,6 +854,8 @@ time_strftime(PyObject *self, PyObject *args)
         _set_errno(0);
         buflen = strftime(outbuf, i, fmt, &buf);
         _Py_END_SUPPRESS_IPH
+#else
+        buflen = strftime(outbuf, i, fmt, &buf);
 #endif
         if (buflen > 0 || i >= 256 * fmtlen) {
             /* If the buffer is 256 times as long as the format,
