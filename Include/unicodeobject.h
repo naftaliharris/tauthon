@@ -513,7 +513,7 @@ PyAPI_FUNC(int) PyUnicode_Resize(
     Py_ssize_t length           /* New length */
     );
 
-/* Coerce obj to an Unicode object and return a reference with
+/* Coerce obj to a Unicode object and return a reference with
    *incremented* refcount.
 
    Coercion is done in the following way:
@@ -536,7 +536,7 @@ PyAPI_FUNC(PyObject*) PyUnicode_FromEncodedObject(
     const char *errors          /* error handling */
     );
 
-/* Coerce obj to an Unicode object and return a reference with
+/* Coerce obj to a Unicode object and return a reference with
    *incremented* refcount.
 
    Unicode objects are passed back as-is (subclasses are converted to
@@ -1318,7 +1318,7 @@ PyAPI_FUNC(PyObject *) PyUnicode_Format(
 /* Checks whether element is contained in container and return 1/0
    accordingly.
 
-   element has to coerce to an one element Unicode string. -1 is
+   element has to coerce to a one element Unicode string. -1 is
    returned in case of an error. */
 
 PyAPI_FUNC(int) PyUnicode_Contains(

@@ -13,10 +13,11 @@
    MCACHE_MAX_ATTR_SIZE, since it might be a problem if very large
    strings are used as attribute names. */
 #define MCACHE_MAX_ATTR_SIZE    100
-#define MCACHE_SIZE_EXP         10
+#define MCACHE_SIZE_EXP         12
 #define MCACHE_HASH(version, name_hash)                                 \
-        (((unsigned int)(version) * (unsigned int)(name_hash))          \
-         >> (8*sizeof(unsigned int) - MCACHE_SIZE_EXP))
+        (((unsigned int)(version) ^ (unsigned int)(name_hash))          \
+         & ((1 << MCACHE_SIZE_EXP) - 1))
+
 #define MCACHE_HASH_METHOD(type, name)                                  \
         MCACHE_HASH((type)->tp_version_tag,                     \
                     ((PyStringObject *)(name))->ob_shash)
@@ -33,11 +34,31 @@ struct method_cache_entry {
 static struct method_cache_entry method_cache[1 << MCACHE_SIZE_EXP];
 static unsigned int next_version_tag = 0;
 
+#define MCACHE_STATS 0
+
+#if MCACHE_STATS
+static size_t method_cache_hits = 0;
+static size_t method_cache_misses = 0;
+static size_t method_cache_collisions = 0;
+#endif
+
 unsigned int
 PyType_ClearCache(void)
 {
     Py_ssize_t i;
     unsigned int cur_version_tag = next_version_tag - 1;
+
+#if MCACHE_STATS
+    size_t total = method_cache_hits + method_cache_collisions + method_cache_misses;
+    fprintf(stderr, "-- Method cache hits        = %zd (%d%%)\n",
+            method_cache_hits, (int) (100.0 * method_cache_hits / total));
+    fprintf(stderr, "-- Method cache true misses = %zd (%d%%)\n",
+            method_cache_misses, (int) (100.0 * method_cache_misses / total));
+    fprintf(stderr, "-- Method cache collisions  = %zd (%d%%)\n",
+            method_cache_collisions, (int) (100.0 * method_cache_collisions / total));
+    fprintf(stderr, "-- Method cache size        = %zd KB\n",
+            sizeof(method_cache) / 1024);
+#endif
 
     for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
         method_cache[i].version = 0;
@@ -166,9 +187,8 @@ assign_version_tag(PyTypeObject *type)
            are borrowed reference */
         for (i = 0; i < (1 << MCACHE_SIZE_EXP); i++) {
             method_cache[i].value = NULL;
-            Py_XDECREF(method_cache[i].name);
-            method_cache[i].name = Py_None;
             Py_INCREF(Py_None);
+            Py_XSETREF(method_cache[i].name, Py_None);
         }
         /* mark all version tags as invalid */
         PyType_Modified(&PyBaseObject_Type);
@@ -245,8 +265,8 @@ type_set_name(PyTypeObject *type, PyObject *value, void *context)
     }
     if (strlen(PyString_AS_STRING(value))
         != (size_t)PyString_GET_SIZE(value)) {
-        PyErr_Format(PyExc_ValueError,
-                     "__name__ must not contain null bytes");
+        PyErr_SetString(PyExc_ValueError,
+                        "type name must not contain null characters");
         return -1;
     }
 
@@ -771,7 +791,7 @@ PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
         Py_INCREF(type);
 
     if (type->tp_itemsize == 0)
-        PyObject_INIT(obj, type);
+        (void)PyObject_INIT(obj, type);
     else
         (void) PyObject_INIT_VAR((PyVarObject *)obj, type, nitems);
 
@@ -2072,8 +2092,8 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     PyTypeObject *type, *base, *tmptype, *winner;
     PyHeapTypeObject *et;
     PyMemberDef *mp;
-    Py_ssize_t i, nbases, nslots, slotoffset, add_dict, add_weak;
-    int j, may_add_dict, may_add_weak;
+    Py_ssize_t i, nbases, nslots, slotoffset;
+    int j, may_add_dict, may_add_weak, add_dict, add_weak;
 
     assert(args != NULL && PyTuple_Check(args));
     assert(kwds == NULL || PyDict_Check(kwds));
@@ -2343,6 +2363,18 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
     type->tp_as_mapping = &et->as_mapping;
     type->tp_as_buffer = &et->as_buffer;
     type->tp_name = PyString_AS_STRING(name);
+    if (!type->tp_name) {
+        Py_DECREF(bases);
+        Py_DECREF(type);
+        return NULL;
+    }
+    if (strlen(type->tp_name) != (size_t)PyString_GET_SIZE(name)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "type name must not contain null characters");
+        Py_DECREF(bases);
+        Py_DECREF(type);
+        return NULL;
+    }
 
     /* Set tp_base and tp_bases */
     type->tp_bases = bases;
@@ -2363,8 +2395,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
             tmp = PyDict_GetItemString(tmp, "__name__");
             if (tmp != NULL) {
                 if (PyDict_SetItemString(dict, "__module__",
-                                         tmp) < 0)
+                                         tmp) < 0) {
+                    Py_DECREF(type);
                     return NULL;
+                }
             }
         }
     }
@@ -2396,7 +2430,11 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
             Py_DECREF(type);
             return NULL;
         }
-        PyDict_SetItemString(dict, "__new__", tmp);
+        if (PyDict_SetItemString(dict, "__new__", tmp) < 0) {
+            Py_DECREF(tmp);
+            Py_DECREF(type);
+            return NULL;
+        }
         Py_DECREF(tmp);
     }
 
@@ -2492,8 +2530,12 @@ _PyType_Lookup(PyTypeObject *type, PyObject *name)
         /* fast path */
         h = MCACHE_HASH_METHOD(type, name);
         if (method_cache[h].version == type->tp_version_tag &&
-            method_cache[h].name == name)
+            method_cache[h].name == name) {
+#if MCACHE_STATS
+            method_cache_hits++;
+#endif
             return method_cache[h].value;
+        }
     }
 
     /* Look in tp_dict of types in MRO */
@@ -2527,6 +2569,13 @@ _PyType_Lookup(PyTypeObject *type, PyObject *name)
         method_cache[h].version = type->tp_version_tag;
         method_cache[h].value = res;  /* borrowed */
         Py_INCREF(name);
+        assert(((PyStringObject *)(name))->ob_shash != -1);
+#if MCACHE_STATS
+        if (method_cache[h].name != Py_None && method_cache[h].name != name)
+            method_cache_collisions++;
+        else
+            method_cache_misses++;
+#endif
         Py_DECREF(method_cache[h].name);
         method_cache[h].name = name;
     }
@@ -3209,16 +3258,26 @@ reduce_2(PyObject *obj)
     PyObject *slots = NULL, *listitems = NULL, *dictitems = NULL;
     PyObject *copyreg = NULL, *newobj = NULL, *res = NULL;
     Py_ssize_t i, n;
+    int required_state = 0;
 
     cls = PyObject_GetAttrString(obj, "__class__");
     if (cls == NULL)
         return NULL;
 
+    if (PyType_Check(cls) && ((PyTypeObject *)cls)->tp_new == NULL) {
+        PyErr_Format(PyExc_TypeError,
+                     "can't pickle %.200s objects",
+                     ((PyTypeObject *)cls)->tp_name);
+        return NULL;
+    }
+
     getnewargs = PyObject_GetAttrString(obj, "__getnewargs__");
     if (getnewargs != NULL) {
         args = PyObject_CallObject(getnewargs, NULL);
         Py_DECREF(getnewargs);
-        if (args != NULL && !PyTuple_Check(args)) {
+        if (args == NULL)
+            goto end;
+        if (!PyTuple_Check(args)) {
             PyErr_Format(PyExc_TypeError,
                 "__getnewargs__ should return a tuple, "
                 "not '%.200s'", Py_TYPE(args)->tp_name);
@@ -3227,10 +3286,8 @@ reduce_2(PyObject *obj)
     }
     else {
         PyErr_Clear();
-        args = PyTuple_New(0);
+        required_state = !PyList_Check(obj) && !PyDict_Check(obj);
     }
-    if (args == NULL)
-        goto end;
 
     getstate = PyObject_GetAttrString(obj, "__getstate__");
     if (getstate != NULL) {
@@ -3241,6 +3298,14 @@ reduce_2(PyObject *obj)
     }
     else {
         PyErr_Clear();
+
+        if (required_state && obj->ob_type->tp_itemsize) {
+            PyErr_Format(PyExc_TypeError,
+                         "can't pickle %.200s objects",
+                         Py_TYPE(obj)->tp_name);
+            goto end;
+        }
+
         state = PyObject_GetAttrString(obj, "__dict__");
         if (state == NULL) {
             PyErr_Clear();
@@ -3250,8 +3315,9 @@ reduce_2(PyObject *obj)
         names = slotnames(cls);
         if (names == NULL)
             goto end;
+        assert(names == Py_None || PyList_Check(names));
+
         if (names != Py_None) {
-            assert(PyList_Check(names));
             slots = PyDict_New();
             if (slots == NULL)
                 goto end;
@@ -3262,12 +3328,16 @@ reduce_2(PyObject *obj)
             for (i = 0; i < PyList_GET_SIZE(names); i++) {
                 PyObject *name, *value;
                 name = PyList_GET_ITEM(names, i);
+                Py_INCREF(name);
                 value = PyObject_GetAttr(obj, name);
-                if (value == NULL)
+                if (value == NULL) {
+                    Py_DECREF(name);
                     PyErr_Clear();
+                }
                 else {
                     int err = PyDict_SetItem(slots, name,
                                              value);
+                    Py_DECREF(name);
                     Py_DECREF(value);
                     if (err)
                         goto end;
@@ -3309,7 +3379,7 @@ reduce_2(PyObject *obj)
     if (newobj == NULL)
         goto end;
 
-    n = PyTuple_GET_SIZE(args);
+    n = args ? PyTuple_GET_SIZE(args) : 0;
     args2 = PyTuple_New(n+1);
     if (args2 == NULL)
         goto end;
@@ -6685,9 +6755,9 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
         Py_INCREF(obj);
     }
     Py_INCREF(type);
-    su->type = type;
-    su->obj = obj;
-    su->obj_type = obj_type;
+    Py_XSETREF(su->type, type);
+    Py_XSETREF(su->obj, obj);
+    Py_XSETREF(su->obj_type, obj_type);
     return 0;
 }
 

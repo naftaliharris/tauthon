@@ -17,7 +17,7 @@
    single: Overmars, Mark
 
 This module provides an interface to the FORMS Library by Mark Overmars.  The
-source for the library can be retrieved by anonymous ftp from host
+source for the library can be retrieved by anonymous FTP from host
 ``ftp.cs.ruu.nl``, directory :file:`SGI/FORMS`.  It was last tested with version
 2.0b.
 
@@ -310,7 +310,7 @@ here.
 
 .. method:: form.add_input(type, x, y, w, h, name)
 
-   Add a input object to the form.  ---  Methods: :meth:`set_input`,
+   Add an input object to the form.  ---  Methods: :meth:`set_input`,
    :meth:`get_input`, :meth:`set_input_color`, :meth:`set_input_return`.
 
 

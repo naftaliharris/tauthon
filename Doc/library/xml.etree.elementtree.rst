@@ -129,7 +129,7 @@ As an :class:`Element`, ``root`` has a tag and a dictionary of attributes::
 It also has children nodes over which we can iterate::
 
    >>> for child in root:
-   ...   print child.tag, child.attrib
+   ...     print child.tag, child.attrib
    ...
    country {'name': 'Liechtenstein'}
    country {'name': 'Singapore'}
@@ -148,7 +148,7 @@ the sub-tree below it (its children, their children, and so on).  For example,
 :meth:`Element.iter`::
 
    >>> for neighbor in root.iter('neighbor'):
-   ...   print neighbor.attrib
+   ...     print neighbor.attrib
    ...
    {'name': 'Austria', 'direction': 'E'}
    {'name': 'Switzerland', 'direction': 'W'}
@@ -162,9 +162,9 @@ with a particular tag, and :attr:`Element.text` accesses the element's text
 content.  :meth:`Element.get` accesses the element's attributes::
 
    >>> for country in root.findall('country'):
-   ...   rank = country.find('rank').text
-   ...   name = country.get('name')
-   ...   print name, rank
+   ...     rank = country.find('rank').text
+   ...     name = country.get('name')
+   ...     print name, rank
    ...
    Liechtenstein 1
    Singapore 4
@@ -188,9 +188,9 @@ Let's say we want to add one to each country's rank, and add an ``updated``
 attribute to the rank element::
 
    >>> for rank in root.iter('rank'):
-   ...   new_rank = int(rank.text) + 1
-   ...   rank.text = str(new_rank)
-   ...   rank.set('updated', 'yes')
+   ...     new_rank = int(rank.text) + 1
+   ...     rank.text = str(new_rank)
+   ...     rank.set('updated', 'yes')
    ...
    >>> tree.write('output.xml')
 
@@ -226,9 +226,9 @@ We can remove elements using :meth:`Element.remove`.  Let's say we want to
 remove all countries with a rank higher than 50::
 
    >>> for country in root.findall('country'):
-   ...   rank = int(country.find('rank').text)
-   ...   if rank > 50:
-   ...     root.remove(country)
+   ...     rank = int(country.find('rank').text)
+   ...     if rank > 50:
+   ...         root.remove(country)
    ...
    >>> tree.write('output.xml')
 
@@ -274,7 +274,7 @@ If the XML input has `namespaces
 with prefixes in the form ``prefix:sometag`` get expanded to
 ``{uri}sometag`` where the *prefix* is replaced by the full *URI*.
 Also, if there is a `default namespace
-<http://www.w3.org/TR/2006/REC-xml-names-20060816/#defaulting>`__,
+<https://www.w3.org/TR/2006/REC-xml-names-20060816/#defaulting>`__,
 that full URI gets prepended to all of the non-prefixed tags.
 
 Here is an XML example that incorporates two namespaces, one with the
@@ -345,7 +345,7 @@ XPath support
 -------------
 
 This module provides limited support for
-`XPath expressions <http://www.w3.org/TR/xpath>`_ for locating elements in a
+`XPath expressions <https://www.w3.org/TR/xpath>`_ for locating elements in a
 tree.  The goal is to support a small subset of the abbreviated syntax; a full
 XPath engine is outside the scope of the module.
 
@@ -887,6 +887,7 @@ Example of changing the attribute "target" of every link in first paragraph::
     [<Element 'a' at 0xb77ec2ac>, <Element 'a' at 0xb77ec1cc>]
     >>> for i in links:             # Iterates through all found links
     ...     i.attrib["target"] = "blank"
+    ...
     >>> tree.write("output.xhtml")
 
 .. _elementtree-qname-objects:
@@ -901,7 +902,7 @@ QName Objects
    to get proper namespace handling on output.  *text_or_uri* is a string
    containing the QName value, in the form {uri}local, or, if the tag argument
    is given, the URI part of a QName.  If *tag* is given, the first argument is
-   interpreted as an URI, and this argument is interpreted as a local name.
+   interpreted as a URI, and this argument is interpreted as a local name.
    :class:`QName` instances are opaque.
 
 
@@ -1032,5 +1033,5 @@ This is an example of counting the maximum depth of an XML file::
 
 .. [#] The encoding string included in XML output should conform to the
    appropriate standards.  For example, "UTF-8" is valid, but "UTF8" is
-   not.  See http://www.w3.org/TR/2006/REC-xml11-20060816/#NT-EncodingDecl
-   and http://www.iana.org/assignments/character-sets/character-sets.xhtml.
+   not.  See https://www.w3.org/TR/2006/REC-xml11-20060816/#NT-EncodingDecl
+   and https://www.iana.org/assignments/character-sets/character-sets.xhtml.

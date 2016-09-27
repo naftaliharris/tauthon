@@ -69,6 +69,37 @@ These macros are used in the definition of :c:type:`PyObject` and
    expansion varies depending on the definition of :c:macro:`Py_TRACE_REFS`.
 
 
+.. c:macro:: Py_TYPE(o)
+
+   This macro is used to access the :attr:`ob_type` member of a Python object.
+   It expands to::
+
+      (((PyObject*)(o))->ob_type)
+
+   .. versionadded:: 2.6
+
+
+.. c:macro:: Py_REFCNT(o)
+
+   This macro is used to access the :attr:`ob_refcnt` member of a Python
+   object.
+   It expands to::
+
+      (((PyObject*)(o))->ob_refcnt)
+
+   .. versionadded:: 2.6
+
+
+.. c:macro:: Py_SIZE(o)
+
+   This macro is used to access the :attr:`ob_size` member of a Python object.
+   It expands to::
+
+      (((PyVarObject*)(o))->ob_size)
+
+   .. versionadded:: 2.6
+
+
 .. c:macro:: PyObject_HEAD_INIT(type)
 
    This is a macro which expands to initialization values for a new
@@ -128,9 +159,8 @@ specific C type of the *self* object.
 The :attr:`ml_flags` field is a bitfield which can include the following flags.
 The individual flags indicate either a calling convention or a binding
 convention.  Of the calling convention flags, only :const:`METH_VARARGS` and
-:const:`METH_KEYWORDS` can be combined (but note that :const:`METH_KEYWORDS`
-alone is equivalent to ``METH_VARARGS | METH_KEYWORDS``). Any of the calling
-convention flags can be combined with a binding flag.
+:const:`METH_KEYWORDS` can be combined. Any of the calling convention flags
+can be combined with a binding flag.
 
 
 .. data:: METH_VARARGS

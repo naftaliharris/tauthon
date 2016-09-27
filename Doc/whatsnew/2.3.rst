@@ -218,10 +218,10 @@ queen threatens another) and the Knight's Tour (a route that takes a knight to
 every square of an $NxN$ chessboard without visiting any square twice).
 
 The idea of generators comes from other programming languages, especially Icon
-(http://www.cs.arizona.edu/icon/), where the idea of generators is central.  In
+(https://www.cs.arizona.edu/icon/), where the idea of generators is central.  In
 Icon, every expression and function call behaves like a generator.  One example
 from "An Overview of the Icon Programming Language" at
-http://www.cs.arizona.edu/icon/docs/ipd266.htm gives an idea of what this looks
+https://www.cs.arizona.edu/icon/docs/ipd266.htm gives an idea of what this looks
 like::
 
    sentence := "Store it in the neighboring harbor"
@@ -411,7 +411,7 @@ PEP 279: enumerate()
 
 A new built-in function, :func:`enumerate`, will make certain loops a bit
 clearer.  ``enumerate(thing)``, where *thing* is either an iterator or a
-sequence, returns a iterator that will return ``(0, thing[0])``, ``(1,
+sequence, returns an iterator that will return ``(0, thing[0])``, ``(1,
 thing[1])``, ``(2, thing[2])``, and so forth.
 
 A common idiom to change every element of a list looks like this::
@@ -1057,7 +1057,7 @@ Here are all of the changes that Python 2.3 makes to the core Python language.
 * A new warning, :exc:`PendingDeprecationWarning` was added to indicate features
   which are in the process of being deprecated.  The warning will *not* be printed
   by default.  To check for use of features that will be deprecated in the future,
-  supply :option:`-Walways::PendingDeprecationWarning::` on the command line or
+  supply :option:`-Walways::PendingDeprecationWarning:: <-W>` on the command line or
   use :func:`warnings.filterwarnings`.
 
 * The process of deprecating string-based exceptions, as in ``raise "Error
@@ -1080,9 +1080,9 @@ Here are all of the changes that Python 2.3 makes to the core Python language.
   hierarchy.  Classic classes are unaffected by this change.  Python 2.2
   originally used a topological sort of a class's ancestors, but 2.3 now uses the
   C3 algorithm as described in the paper `"A Monotonic Superclass Linearization
-  for Dylan" <http://www.webcom.com/haahr/dylan/linearization-oopsla96.html>`_. To
+  for Dylan" <http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.19.3910>`_. To
   understand the motivation for this change,  read Michele Simionato's article
-  `"Python 2.3 Method Resolution Order" <https://www.python.org/2.3/mro.html>`_, or
+  `"Python 2.3 Method Resolution Order" <http://www.phyast.pitt.edu/~micheles/mro.html>`_, or
   read the thread on python-dev starting with the message at
   https://mail.python.org/pipermail/python-dev/2002-October/029035.html. Samuele
   Pedroni first pointed out the problem and also implemented the fix by coding the
@@ -1111,10 +1111,10 @@ Here are all of the changes that Python 2.3 makes to the core Python language.
      <type '_socket.socket'>
 
 * One of the noted incompatibilities between old- and new-style classes has been
-  removed: you can now assign to the :attr:`__name__` and :attr:`__bases__`
+  removed: you can now assign to the :attr:`~definition.__name__` and :attr:`~class.__bases__`
   attributes of new-style classes.  There are some restrictions on what can be
-  assigned to :attr:`__bases__` along the lines of those relating to assigning to
-  an instance's :attr:`__class__` attribute.
+  assigned to :attr:`~class.__bases__` along the lines of those relating to assigning to
+  an instance's :attr:`~instance.__class__` attribute.
 
 .. ======================================================================
 
@@ -1306,7 +1306,7 @@ complete list of changes, or look through the CVS logs for all the details.
   partially sorted order such that, for every index *k*, ``heap[k] <=
   heap[2*k+1]`` and ``heap[k] <= heap[2*k+2]``.  This makes it quick to remove the
   smallest item, and inserting a new item while maintaining the heap property is
-  O(lg n).  (See http://www.nist.gov/dads/HTML/priorityque.html for more
+  O(lg n).  (See https://xlinux.nist.gov/dads//HTML/priorityque.html for more
   information about the priority queue data structure.)
 
   The :mod:`heapq` module provides :func:`heappush` and :func:`heappop` functions
@@ -1734,7 +1734,7 @@ The optparse Module
 The :mod:`getopt` module provides simple parsing of command-line arguments.  The
 new :mod:`optparse` module (originally named Optik) provides more elaborate
 command-line parsing that follows the Unix conventions, automatically creates
-the output for :option:`--help`, and can perform different actions for different
+the output for :option:`!--help`, and can perform different actions for different
 options.
 
 You start by creating an instance of :class:`OptionParser` and telling it what
@@ -1858,7 +1858,7 @@ and bundle it with the source of your extension.
 
 .. seealso::
 
-   https://svn.python.org/view/python/trunk/Objects/obmalloc.c
+   https://hg.python.org/cpython/file/default/Objects/obmalloc.c
       For the full details of the pymalloc implementation, see the comments at
       the top of the file :file:`Objects/obmalloc.c` in the Python source code.
       The above link points to the file within the python.org SVN browser.
@@ -1920,7 +1920,7 @@ Changes to Python's build process and to the C API include:
 
 * If you dynamically allocate type objects in your extension, you should be
   aware of a change in the rules relating to the :attr:`__module__` and
-  :attr:`__name__` attributes.  In summary, you will want to ensure the type's
+  :attr:`~definition.__name__` attributes.  In summary, you will want to ensure the type's
   dictionary contains a ``'__module__'`` key; making the module name the part of
   the type name leading up to the final period will no longer have the desired
   effect.  For more detail, read the API reference documentation or the  source.
@@ -1949,7 +1949,7 @@ The RPM spec files, found in the :file:`Misc/RPM/` directory in the Python
 source distribution, were updated for 2.3.  (Contributed by Sean Reifschneider.)
 
 Other new platforms now supported by Python include AtheOS
-(http://www.atheos.cx/), GNU/Hurd, and OpenVMS.
+(http://atheos.cx/), GNU/Hurd, and OpenVMS.
 
 .. ======================================================================
 
@@ -1973,7 +1973,7 @@ Some of the more notable changes are:
   the Python program as part of its execution.
 
 * The :file:`regrtest.py` script now provides a way to allow "all resources
-  except *foo*."  A resource name passed to the :option:`-u` option can now be
+  except *foo*."  A resource name passed to the :option:`!-u` option can now be
   prefixed with a hyphen (``'-'``) to mean "remove this resource."  For example,
   the option '``-uall,-bsddb``' could be used to enable the use of all resources
   except ``bsddb``.

@@ -667,6 +667,7 @@ LLVM_PROF_FILE
 LLVM_PROF_MERGER
 PGO_PROF_USE_FLAG
 PGO_PROF_GEN_FLAG
+LTOFLAGS
 UNIVERSAL_ARCH_FLAGS
 BASECFLAGS
 OPT
@@ -743,6 +744,7 @@ build_os
 build_vendor
 build_cpu
 build
+cross_compiling
 target_alias
 host_alias
 build_alias
@@ -789,11 +791,13 @@ with_universal_archs
 with_framework_name
 enable_framework
 with_gcc
+with_icc
 with_cxx_main
 with_suffix
 enable_shared
 enable_profiling
 with_pydebug
+with_lto
 enable_toolbox_glue
 with_libs
 with_system_expat
@@ -1469,11 +1473,14 @@ Optional Packages:
                           specify an alternate name of the framework built
                           with --enable-framework
   --without-gcc           never use gcc
+  --with-icc              build with icc
   --with-cxx-main=<compiler>
                           compile main() and link python executable with C++
                           compiler
   --with-suffix=.exe      set executable suffix
   --with-pydebug          build with Py_DEBUG defined
+  --with-lto              Enable Link Time Optimization in PGO builds.
+                          Disabled by default.
   --with-libs='lib1 ...'  link against additional libs
   --with-system-expat     build pyexpat module using an installed expat
                           library
@@ -3375,7 +3382,7 @@ fi
 #
 # SGI compilers allow the specification of the both the ABI and the
 # ISA on the command line.  Depending on the values of these switches,
-# different and often incompatable code will be generated.
+# different and often incompatible code will be generated.
 #
 # The SGI_ABI variable can be used to modify the CC and LDFLAGS and
 # thus supply support for various ABI/ISA combinations.  The MACHDEP
@@ -3479,6 +3486,29 @@ fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $without_gcc" >&5
 $as_echo "$without_gcc" >&6; }
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-icc" >&5
+$as_echo_n "checking for --with-icc... " >&6; }
+
+# Check whether --with-icc was given.
+if test "${with_icc+set}" = set; then :
+  withval=$with_icc;
+	case $withval in
+	no)	CC=${CC:-cc}
+		with_icc=no;;
+	yes)	CC=icc
+		CXX=icpc
+		with_icc=yes;;
+	*)	CC=$withval
+		with_icc=$withval;;
+	esac
+else
+
+	with_icc=no
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $with_icc" >&5
+$as_echo "$with_icc" >&6; }
 
 # If the user switches compilers, we can't believe the cache
 if test ! -z "$ac_cv_prog_CC" -a ! -z "$CC" -a "$CC" != "$ac_cv_prog_CC"
@@ -6188,6 +6218,13 @@ $as_echo "$CC" >&6; }
     ;;
 esac
 
+# ICC needs -fp-model strict or floats behave badly
+case "$CC" in
+*icc*)
+    BASECFLAGS="$BASECFLAGS -fp-model strict"
+    ;;
+esac
+
 if test "$Py_DEBUG" = 'true'; then
   :
 else
@@ -6333,7 +6370,56 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 fi
 
 
+# Enable LTO flags
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-lto" >&5
+$as_echo_n "checking for --with-lto... " >&6; }
+
+# Check whether --with-lto was given.
+if test "${with_lto+set}" = set; then :
+  withval=$with_lto;
+if test "$withval" != no
+then
+  Py_LTO='true'
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; };
+else
+  Py_LTO='false'
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; };
+fi
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+if test "$Py_LTO" = 'true' ; then
+  case $CC in
+    *clang*)
+      # Any changes made here should be reflected in the GCC+Darwin case below
+      LTOFLAGS="-flto"
+      ;;
+    *gcc*)
+      case $ac_sys_system in
+        Darwin*)
+          LTOFLAGS="-flto"
+          ;;
+        *)
+          LTOFLAGS="-flto -fuse-linker-plugin -ffat-lto-objects -flto-partition=none"
+          ;;
+      esac
+      ;;
+  esac
+fi
+
+
 # Enable PGO flags.
+
+
+
+
+
+
 # Extract the first word of "llvm-profdata", so it can be a program name with args.
 set dummy llvm-profdata; ac_word=$2
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
@@ -6404,6 +6490,12 @@ case $CC in
         LLVM_PROF_FILE=""
         ;;
     esac
+    ;;
+  *icc*)
+    PGO_PROF_GEN_FLAG="-prof-gen"
+    PGO_PROF_USE_FLAG="-prof-use"
+    LLVM_PROF_MERGER="true"
+    LLVM_PROF_FILE=""
     ;;
 esac
 
@@ -11918,17 +12010,7 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
-$as_echo "#define HAVE_ST_BLOCKS 1" >>confdefs.h
-
-else
-  case " $LIBOBJS " in
-  *" fileblocks.$ac_objext "* ) ;;
-  *) LIBOBJS="$LIBOBJS fileblocks.$ac_objext"
- ;;
-esac
-
 fi
-
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for time.h that defines altzone" >&5
@@ -13887,6 +13969,50 @@ $as_echo "$ac_cv_lib_readline_rl_completion_display_matches_hook" >&6; }
 if test "x$ac_cv_lib_readline_rl_completion_display_matches_hook" = xyes; then :
 
 $as_echo "#define HAVE_RL_COMPLETION_DISPLAY_MATCHES_HOOK 1" >>confdefs.h
+
+fi
+
+
+# also in 4.0, but not in editline
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for rl_resize_terminal in -lreadline" >&5
+$as_echo_n "checking for rl_resize_terminal in -lreadline... " >&6; }
+if ${ac_cv_lib_readline_rl_resize_terminal+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lreadline $READLINE_LIBS $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char rl_resize_terminal ();
+int
+main ()
+{
+return rl_resize_terminal ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_readline_rl_resize_terminal=yes
+else
+  ac_cv_lib_readline_rl_resize_terminal=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_readline_rl_resize_terminal" >&5
+$as_echo "$ac_cv_lib_readline_rl_resize_terminal" >&6; }
+if test "x$ac_cv_lib_readline_rl_resize_terminal" = xyes; then :
+
+$as_echo "#define HAVE_RL_RESIZE_TERMINAL 1" >>confdefs.h
 
 fi
 

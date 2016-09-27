@@ -21,13 +21,13 @@ Tkinter
 Standard builds of Python include an object-oriented interface to the Tcl/Tk
 widget set, called Tkinter.  This is probably the easiest to install and use.
 For more info about Tk, including pointers to the source, see the Tcl/Tk home
-page at http://www.tcl.tk.  Tcl/Tk is fully portable to the Mac OS X, Windows,
+page at https://www.tcl.tk.  Tcl/Tk is fully portable to the Mac OS X, Windows,
 and Unix platforms.
 
 wxWidgets
 ---------
 
-wxWidgets (http://www.wxwidgets.org) is a free, portable GUI class
+wxWidgets (https://www.wxwidgets.org) is a free, portable GUI class
 library written in C++ that provides a native look and feel on a
 number of platforms, with Windows, Mac OS X, GTK, X11, all listed as
 current stable targets.  Language bindings are available for a number
@@ -48,14 +48,14 @@ Qt
 ---
 
 There are bindings available for the Qt toolkit (using either `PyQt
-<http://www.riverbankcomputing.co.uk/software/pyqt/intro>`_ or `PySide
-<http://www.pyside.org/>`_) and for KDE (`PyKDE <https://techbase.kde.org/Development/Languages/Python>`__).
+<https://riverbankcomputing.com/software/pyqt/intro>`_ or `PySide
+<https://wiki.qt.io/PySide>`_) and for KDE (`PyKDE4 <https://techbase.kde.org/Languages/Python/Using_PyKDE_4>`__).
 PyQt is currently more mature than PySide, but you must buy a PyQt license from
-`Riverbank Computing <http://www.riverbankcomputing.co.uk/software/pyqt/license>`_
+`Riverbank Computing <https://www.riverbankcomputing.com/commercial/license-faq>`_
 if you want to write proprietary applications.  PySide is free for all applications.
 
 Qt 4.5 upwards is licensed under the LGPL license; also, commercial licenses
-are available from `The Qt Company <http://www.qt.io/licensing/>`_.
+are available from `The Qt Company <https://www.qt.io/licensing/>`_.
 
 Gtk+
 ----

@@ -1377,15 +1377,13 @@ s_init(PyObject *self, PyObject *args, PyObject *kwds)
 
     if (PyString_Check(o_format)) {
         Py_INCREF(o_format);
-        Py_CLEAR(soself->s_format);
-        soself->s_format = o_format;
+        Py_XSETREF(soself->s_format, o_format);
     }
     else if (PyUnicode_Check(o_format)) {
         PyObject *str = PyUnicode_AsEncodedString(o_format, "ascii", NULL);
         if (str == NULL)
             return -1;
-        Py_CLEAR(soself->s_format);
-        soself->s_format = str;
+        Py_XSETREF(soself->s_format, str);
     }
     else {
         PyErr_Format(PyExc_TypeError,
@@ -1737,7 +1735,7 @@ s_sizeof(PyStructObject *self, void *unused)
 {
     Py_ssize_t size;
 
-    size = sizeof(PyStructObject) + sizeof(formatcode) * (self->s_len + 1);
+    size = _PyObject_SIZE(Py_TYPE(self)) + sizeof(formatcode) * (self->s_len + 1);
     return PyLong_FromSsize_t(size);
 }
 

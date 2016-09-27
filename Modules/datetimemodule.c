@@ -197,7 +197,7 @@ days_in_month(int year, int month)
         return _days_in_month[month];
 }
 
-/* year, month -> number of days in year preceeding first day of month */
+/* year, month -> number of days in year preceding first day of month */
 static int
 days_before_month(int year, int month)
 {
@@ -613,7 +613,7 @@ time_alloc(PyTypeObject *type, Py_ssize_t aware)
                 sizeof(_PyDateTime_BaseTime));
     if (self == NULL)
         return (PyObject *)PyErr_NoMemory();
-    PyObject_INIT(self, type);
+    (void)PyObject_INIT(self, type);
     return self;
 }
 
@@ -628,7 +628,7 @@ datetime_alloc(PyTypeObject *type, Py_ssize_t aware)
                 sizeof(_PyDateTime_BaseDateTime));
     if (self == NULL)
         return (PyObject *)PyErr_NoMemory();
-    PyObject_INIT(self, type);
+    (void)PyObject_INIT(self, type);
     return self;
 }
 

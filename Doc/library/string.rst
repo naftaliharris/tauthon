@@ -105,8 +105,8 @@ The constants defined in this module are:
 
 .. _new-string-formatting:
 
-String Formatting
------------------
+Custom String Formatting
+------------------------
 
 .. versionadded:: 2.6
 
@@ -115,7 +115,7 @@ to do complex variable substitutions and value formatting via the
 :meth:`str.format` method described in :pep:`3101`.  The :class:`Formatter`
 class in the :mod:`string` module allows you to create and customize your own
 string formatting behaviors using the same implementation as the built-in
-:meth:`format` method.
+:meth:`~str.format` method.
 
 .. class:: Formatter
 
@@ -123,9 +123,9 @@ string formatting behaviors using the same implementation as the built-in
 
    .. method:: format(format_string, *args, **kwargs)
 
-      :meth:`format` is the primary API method.  It takes a format string and
+      The primary API method.  It takes a format string and
       an arbitrary set of positional and keyword arguments.
-      :meth:`format` is just a wrapper that calls :meth:`vformat`.
+      It is just a wrapper that calls :meth:`vformat`.
 
    .. method:: vformat(format_string, args, kwargs)
 
@@ -262,12 +262,12 @@ does an index lookup using :func:`__getitem__`.
 
 Some simple format string examples::
 
-   "First, thou shalt count to {0}" # References first positional argument
-   "Bring me a {}"                  # Implicitly references the first positional argument
-   "From {} to {}"                  # Same as "From {0} to {1}"
-   "My quest is {name}"             # References keyword argument 'name'
-   "Weight in tons {0.weight}"      # 'weight' attribute of first positional arg
-   "Units destroyed: {players[0]}"  # First element of keyword argument 'players'.
+   "First, thou shalt count to {0}"  # References first positional argument
+   "Bring me a {}"                   # Implicitly references the first positional argument
+   "From {} to {}"                   # Same as "From {0} to {1}"
+   "My quest is {name}"              # References keyword argument 'name'
+   "Weight in tons {0.weight}"       # 'weight' attribute of first positional arg
+   "Units destroyed: {players[0]}"   # First element of keyword argument 'players'.
 
 The *conversion* field causes a type coercion before formatting.  Normally, the
 job of formatting a value is done by the :meth:`__format__` method of the value
@@ -293,8 +293,9 @@ Most built-in types support a common formatting mini-language, which is
 described in the next section.
 
 A *format_spec* field can also include nested replacement fields within it.
-These nested replacement fields can contain only a field name; conversion flags
-and format specifications are not allowed.  The replacement fields within the
+These nested replacement fields may contain a field name, conversion flag
+and format specification, but deeper nesting is
+not allowed.  The replacement fields within the
 format_spec are substituted before the *format_spec* string is interpreted.
 This allows the formatting of a value to be dynamically specified.
 
@@ -332,8 +333,10 @@ The general form of a *standard format specifier* is:
 
 If a valid *align* value is specified, it can be preceded by a *fill*
 character that can be any character and defaults to a space if omitted.
-Note that it is not possible to use ``{`` and ``}`` as *fill* char while
-using the :meth:`str.format` method; this limitation however doesn't
+It is not possible to use a literal curly brace ("``{``" or "``}``") as
+the *fill* character when using the :meth:`str.format`
+method.  However, it is possible to insert a curly brace
+with a nested replacement field.  This limitation doesn't
 affect the :func:`format` function.
 
 The meaning of the various alignment options is as follows:
@@ -350,7 +353,8 @@ The meaning of the various alignment options is as follows:
    | ``'='`` | Forces the padding to be placed after the sign (if any)  |
    |         | but before the digits.  This is used for printing fields |
    |         | in the form '+000000120'. This alignment option is only  |
-   |         | valid for numeric types.                                 |
+   |         | valid for numeric types.  It becomes the default when '0'|
+   |         | immediately precedes the field width.                    |
    +---------+----------------------------------------------------------+
    | ``'^'`` | Forces the field to be centered within the available     |
    |         | space.                                                   |
@@ -390,7 +394,8 @@ instead.
 *width* is a decimal integer defining the minimum field width.  If not
 specified, then the field width will be determined by the content.
 
-Preceding the *width* field by a zero (``'0'``) character enables
+When no explicit alignment is given, preceding the *width* field by a zero
+(``'0'``) character enables
 sign-aware zero-padding for numeric types.  This is equivalent to a *fill*
 character of ``'0'`` with an *alignment* type of ``'='``.
 
@@ -508,8 +513,8 @@ The available presentation types for floating point and decimal values are:
 Format examples
 ^^^^^^^^^^^^^^^
 
-This section contains examples of the new format syntax and comparison with
-the old ``%``-formatting.
+This section contains examples of the :meth:`str.format` syntax and
+comparison with the old ``%``-formatting.
 
 In most of the cases the syntax is similar to the old ``%``-formatting, with the
 addition of the ``{}`` and with ``:`` used instead of ``%``.

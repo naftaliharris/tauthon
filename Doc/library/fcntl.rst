@@ -12,7 +12,9 @@
    pair: UNIX; I/O control
 
 This module performs file control and I/O control on file descriptors. It is an
-interface to the :c:func:`fcntl` and :c:func:`ioctl` Unix routines.
+interface to the :c:func:`fcntl` and :c:func:`ioctl` Unix routines.  For a
+complete description of these calls, see :manpage:`fcntl(2)` and
+:manpage:`ioctl(2)` Unix manual pages.
 
 All functions in this module take a file descriptor *fd* as their first
 argument.  This can be an integer file descriptor, such as returned by
@@ -82,6 +84,8 @@ The module defines the following functions:
    which is a change from versions 2.3 and 2.4. Supply the argument explicitly if
    version portability is a priority.
 
+   If the :c:func:`ioctl` fails, an :exc:`IOError` exception is raised.
+
    An example::
 
       >>> import array, fcntl, struct, termios, os
@@ -102,6 +106,8 @@ The module defines the following functions:
    a :meth:`~io.IOBase.fileno` method are accepted as well). See the Unix manual
    :manpage:`flock(2)` for details.  (On some systems, this function is emulated
    using :c:func:`fcntl`.)
+
+   If the :c:func:`flock` fails, an :exc:`IOError` exception is raised.
 
 
 .. function:: lockf(fd, operation, [length, [start, [whence]]])
