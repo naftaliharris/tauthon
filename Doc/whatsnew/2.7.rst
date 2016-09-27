@@ -1029,7 +1029,7 @@ changes, or look through the Subversion logs for all the details.
 
 * Updated module: the :mod:`bsddb` module has been updated from 4.7.2devel9
   to version 4.8.4 of
-  `the pybsddb package <http://www.jcea.es/programacion/pybsddb.htm>`__.
+  `the pybsddb package <https://www.jcea.es/programacion/pybsddb.htm>`__.
   The new version features better Python 3.x compatibility, various bug fixes,
   and adds several new BerkeleyDB flags and methods.
   (Updated by Jesús Cea Avión; :issue:`8156`.  The pybsddb
@@ -1157,7 +1157,7 @@ changes, or look through the Subversion logs for all the details.
 * The :mod:`ctypes` module now always converts ``None`` to a C NULL
   pointer for arguments declared as pointers.  (Changed by Thomas
   Heller; :issue:`4606`.)  The underlying `libffi library
-  <http://sourceware.org/libffi/>`__ has been updated to version
+  <https://sourceware.org/libffi/>`__ has been updated to version
   3.0.9, containing various fixes for different platforms.  (Updated
   by Matthias Klose; :issue:`8142`.)
 
@@ -1513,7 +1513,7 @@ changes, or look through the Subversion logs for all the details.
   (Contributed by Kristján Valur Jónsson; :issue:`6192` and :issue:`6267`.)
 
 * Updated module: the :mod:`sqlite3` module has been updated to
-  version 2.6.0 of the `pysqlite package <http://code.google.com/p/pysqlite/>`__. Version 2.6.0 includes a number of bugfixes, and adds
+  version 2.6.0 of the `pysqlite package <https://github.com/ghaering/pysqlite>`__. Version 2.6.0 includes a number of bugfixes, and adds
   the ability to load SQLite extensions from shared libraries.
   Call the ``enable_load_extension(True)`` method to enable extensions,
   and then call :meth:`~sqlite3.Connection.load_extension` to load a particular shared library.
@@ -1530,7 +1530,7 @@ changes, or look through the Subversion logs for all the details.
   *ciphers* argument that's a string listing the encryption algorithms
   to be allowed; the format of the string is described
   `in the OpenSSL documentation
-  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>`__.
+  <https://www.openssl.org/docs/apps/ciphers.html#CIPHER-LIST-FORMAT>`__.
   (Added by Antoine Pitrou; :issue:`8322`.)
 
   Another change makes the extension load all of OpenSSL's ciphers and
@@ -1783,7 +1783,7 @@ on being added to Tcl/Tck release 8.5.
 To learn more, read the :mod:`ttk` module documentation.  You may also
 wish to read the Tcl/Tk manual page describing the
 Ttk theme engine, available at
-http://www.tcl.tk/man/tcl8.5/TkCmd/ttk_intro.htm. Some
+https://www.tcl.tk/man/tcl8.5/TkCmd/ttk_intro.htm. Some
 screenshots of the Python/Ttk code in use are at
 http://code.google.com/p/python-ttk/wiki/Screenshots.
 
@@ -1820,12 +1820,12 @@ Consult the :mod:`unittest` module documentation for more details.
 
 The :func:`~unittest.main` function supports some other new options:
 
-* :option:`-b` or :option:`--buffer` will buffer the standard output
+* :option:`-b <unittest -b>` or :option:`--buffer` will buffer the standard output
   and standard error streams during each test.  If the test passes,
   any resulting output will be discarded; on failure, the buffered
   output will be displayed.
 
-* :option:`-c` or :option:`--catch` will cause the control-C interrupt
+* :option:`-c <unittest -c>` or :option:`--catch` will cause the control-C interrupt
   to be handled more gracefully.  Instead of interrupting the test
   process immediately, the currently running test will be completed
   and then the partial results up to the interruption will be reported.
@@ -1839,7 +1839,7 @@ The :func:`~unittest.main` function supports some other new options:
   :func:`~unittest.removeHandler` decorator that can be used to mark tests that
   should have the control-C handling disabled.
 
-* :option:`-f` or :option:`--failfast` makes
+* :option:`-f <unittest -f>` or :option:`--failfast` makes
   test execution stop immediately when a test fails instead of
   continuing to execute further tests.  (Suggested by Cliff Dyer and
   implemented by Michael Foord; :issue:`8074`.)
@@ -2079,7 +2079,7 @@ Changes to Python's build process and to the C API include:
 
 * The latest release of the GNU Debugger, GDB 7, can be `scripted
   using Python
-  <http://sourceware.org/gdb/current/onlinedocs/gdb/Python.html>`__.
+  <https://sourceware.org/gdb/current/onlinedocs/gdb/Python.html>`__.
   When you begin debugging an executable program P, GDB will look for
   a file named ``P-gdb.py`` and automatically read it.  Dave Malcolm
   contributed a :file:`python-gdb.py` that adds a number of
@@ -2149,7 +2149,7 @@ Changes to Python's build process and to the C API include:
   with *updatepath* set to false.
 
   Security issue reported as `CVE-2008-5983
-  <http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-5983>`_;
+  <https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-5983>`_;
   discussed in :issue:`5753`, and fixed by Antoine Pitrou.
 
 * New macros: the Python header files now define the following macros:
@@ -2381,7 +2381,7 @@ Other Changes and Fixes
   takes an integer specifying how many tests run in parallel. This
   allows reducing the total runtime on multi-core machines.
   This option is compatible with several other options, including the
-  :option:`-R` switch which is known to produce long runtimes.
+  :option:`!-R` switch which is known to produce long runtimes.
   (Added by Antoine Pitrou, :issue:`6152`.)  This can also be used
   with a new :option:`-F` switch that runs selected tests in a loop
   until they fail.  (Added by Antoine Pitrou; :issue:`7312`.)
@@ -2588,7 +2588,7 @@ PEP 477: Backport ensurepip (PEP 453) to Python 2.7
 
 :pep:`477` approves the inclusion of the :pep:`453` ensurepip module and the
 improved documentation that was enabled by it in the Python 2.7 maintenance
-releases, appearing first in the the Python 2.7.9 release.
+releases, appearing first in the Python 2.7.9 release.
 
 
 Bootstrapping pip By Default
@@ -2649,11 +2649,12 @@ and :ref:`distutils-index`.
 PEP 476: Enabling certificate verification by default for stdlib http clients
 -----------------------------------------------------------------------------
 
-:mod:`httplib` and modules which use it, such as :mod:`urllib2` and
-:mod:`xmlrpclib`, will now verify that the server presents a certificate
-which is signed by a CA in the platform trust store and whose hostname matches
-the hostname being requested by default, significantly improving security for
-many applications.
+:pep:`476` updated :mod:`httplib` and modules which use it, such as
+:mod:`urllib2` and :mod:`xmlrpclib`, to now verify that the server
+presents a certificate which is signed by a Certificate Authority in the
+platform trust store and whose hostname matches the hostname being requested
+by default, significantly improving security for many applications. This
+change was made in the Python 2.7.9 release.
 
 For applications which require the old previous behavior, they can pass an
 alternate context::
@@ -2669,6 +2670,29 @@ alternate context::
     context = ssl.create_default_context(cafile="/path/to/file.crt")
 
     urllib2.urlopen("https://invalid-cert", context=context)
+
+
+PEP 493: HTTPS verification migration tools for Python 2.7
+----------------------------------------------------------
+
+:pep:`493` provides additional migration tools to support a more incremental
+infrastructure upgrade process for environments containing applications and
+services relying on the historically permissive processing of server
+certificates when establishing client HTTPS connections.  These additions were
+made in the Python 2.7.12 release.
+
+These tools are intended for use in cases where affected applications and
+services can't be modified to explicitly pass a more permissive SSL context
+when establishing the connection.
+
+For applications and services which can't be modified at all, the new
+``PYTHONHTTPSVERIFY`` environment variable may be set to ``0`` to revert an
+entire Python process back to the default permissive behaviour of Python 2.7.8
+and earlier.
+
+For cases where the connection establishment code can't be modified, but the
+overall application can be, the new :func:`ssl._https_verify_certificates`
+function can be used to adjust the default behaviour at runtime.
 
 .. ======================================================================
 

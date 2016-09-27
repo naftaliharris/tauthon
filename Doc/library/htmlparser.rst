@@ -66,8 +66,10 @@ as they are encountered::
    class MyHTMLParser(HTMLParser):
        def handle_starttag(self, tag, attrs):
            print "Encountered a start tag:", tag
+
        def handle_endtag(self, tag):
            print "Encountered an end tag :", tag
+
        def handle_data(self, data):
            print "Encountered some data  :", data
 
@@ -148,8 +150,8 @@ implementations do nothing (except for :meth:`~HTMLParser.handle_startendtag`):
    and quotes in the *value* have been removed, and character and entity references
    have been replaced.
 
-   For instance, for the tag ``<A HREF="http://www.cwi.nl/">``, this method
-   would be called as ``handle_starttag('a', [('href', 'http://www.cwi.nl/')])``.
+   For instance, for the tag ``<A HREF="https://www.cwi.nl/">``, this method
+   would be called as ``handle_starttag('a', [('href', 'https://www.cwi.nl/')])``.
 
    .. versionchanged:: 2.6
       All entity references from :mod:`htmlentitydefs` are now replaced in the
@@ -252,21 +254,27 @@ examples::
            print "Start tag:", tag
            for attr in attrs:
                print "     attr:", attr
+
        def handle_endtag(self, tag):
            print "End tag  :", tag
+
        def handle_data(self, data):
            print "Data     :", data
+
        def handle_comment(self, data):
            print "Comment  :", data
+
        def handle_entityref(self, name):
            c = unichr(name2codepoint[name])
            print "Named ent:", c
+
        def handle_charref(self, name):
            if name.startswith('x'):
                c = unichr(int(name[1:], 16))
            else:
                c = unichr(int(name))
            print "Num ent  :", c
+
        def handle_decl(self, data):
            print "Decl     :", data
 
@@ -298,7 +306,7 @@ further parsing::
         attr: ('type', 'text/css')
    Data     : #python { color: green }
    End tag  : style
-   >>>
+
    >>> parser.feed('<script type="text/javascript">'
    ...             'alert("<strong>hello!</strong>");</script>')
    Start tag: script

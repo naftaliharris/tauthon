@@ -11,6 +11,8 @@
     Give a default for BasePlatformToolset as well, it's used by ICC and ignored otherwise
     -->
     <BasePlatformToolset Condition="'$(BasePlatformToolset)' == '' and '$(PlatformToolset)' != 'v90'">v90</BasePlatformToolset>
+    <ICCBuild>false</ICCBuild>
+    <ICCBuild Condition="$(PlatformToolset.StartsWith('Intel C++ Compiler'))">true</ICCBuild>
     <!--
     Convincing MSVC/MSBuild to prefer our platform names is too difficult,
     so we define our own constant ArchName and use wherever we need it.
@@ -30,10 +32,12 @@
 
     <!-- Directories of external projects. tcltk is handled in tcltk.props -->
     <ExternalsDir>$([System.IO.Path]::GetFullPath(`$(PySourcePath)externals\`))</ExternalsDir>
-    <sqlite3Dir>$(ExternalsDir)sqlite-3.6.21\</sqlite3Dir>
+    <sqlite3Dir>$(ExternalsDir)sqlite-3.8.11.0\</sqlite3Dir>
     <bz2Dir>$(ExternalsDir)bzip2-1.0.6\</bz2Dir>
     <bsddbDir>$(ExternalsDir)db-4.7.25.0</bsddbDir>
-    <opensslDir>$(ExternalsDir)openssl-1.0.2d\</opensslDir>
+    <opensslDir>$(ExternalsDir)openssl-1.0.2h\</opensslDir>
+    <opensslIncludeDir>$(opensslDir)include32</opensslIncludeDir>
+    <opensslIncludeDir Condition="'$(ArchName)' == 'amd64'">$(opensslDir)include64</opensslIncludeDir>
     <nasmDir>$(ExternalsDir)\nasm-2.11.06\</nasmDir>
 
     <!-- Suffix for all binaries when building for debug -->
@@ -102,7 +106,6 @@
 
     <!-- The version number for sys.winver -->
     <SysWinVer>$(MajorVersionNumber).$(MinorVersionNumber)</SysWinVer>
-    <SysWinVer Condition="$(Platform) == 'Win32' or $(Platform) == 'x86'">$(SysWinVer)-32</SysWinVer>
   </PropertyGroup>
 
   <!-- Displays the calculated version info -->

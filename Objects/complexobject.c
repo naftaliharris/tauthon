@@ -239,7 +239,7 @@ PyComplex_FromCComplex(Py_complex cval)
     op = (PyComplexObject *) PyObject_MALLOC(sizeof(PyComplexObject));
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT(op, &PyComplex_Type);
+    (void)PyObject_INIT(op, &PyComplex_Type);
     op->cval = cval;
     return (PyObject *) op;
 }
@@ -1000,7 +1000,7 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
         len = strlen(s);
     }
 #endif
-    else if (PyObject_AsCharBuffer(v, &s, &len)) {
+    else {
         PyErr_SetString(PyExc_TypeError,
                         "complex() arg is not a string");
         return NULL;

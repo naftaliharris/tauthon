@@ -35,7 +35,7 @@ static PyObject *interned;
    For PyString_FromString(), the parameter `str' points to a null-terminated
    string containing exactly `size' bytes.
 
-   For PyString_FromStringAndSize(), the parameter the parameter `str' is
+   For PyString_FromStringAndSize(), the parameter `str' is
    either NULL or else points to a string containing at least `size' bytes.
    For PyString_FromStringAndSize(), the string in the `str' parameter does
    not have to be null-terminated.  (Therefore it is safe to construct a
@@ -88,7 +88,7 @@ PyString_FromStringAndSize(const char *str, Py_ssize_t size)
     op = (PyStringObject *)PyObject_MALLOC(PyStringObject_SIZE + size);
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT_VAR(op, &PyString_Type, size);
+    (void)PyObject_INIT_VAR(op, &PyString_Type, size);
     op->ob_shash = -1;
     op->ob_sstate = SSTATE_NOT_INTERNED;
     if (str != NULL)
@@ -143,7 +143,7 @@ PyString_FromString(const char *str)
     op = (PyStringObject *)PyObject_MALLOC(PyStringObject_SIZE + size);
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT_VAR(op, &PyString_Type, size);
+    (void)PyObject_INIT_VAR(op, &PyString_Type, size);
     op->ob_shash = -1;
     op->ob_sstate = SSTATE_NOT_INTERNED;
     Py_MEMCPY(op->ob_sval, str, size+1);
@@ -1061,7 +1061,7 @@ string_concat(register PyStringObject *a, register PyObject *bb)
     op = (PyStringObject *)PyObject_MALLOC(PyStringObject_SIZE + size);
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT_VAR(op, &PyString_Type, size);
+    (void)PyObject_INIT_VAR(op, &PyString_Type, size);
     op->ob_shash = -1;
     op->ob_sstate = SSTATE_NOT_INTERNED;
     Py_MEMCPY(op->ob_sval, a->ob_sval, Py_SIZE(a));
@@ -1103,7 +1103,7 @@ string_repeat(register PyStringObject *a, register Py_ssize_t n)
     op = (PyStringObject *)PyObject_MALLOC(PyStringObject_SIZE + nbytes);
     if (op == NULL)
         return PyErr_NoMemory();
-    PyObject_INIT_VAR(op, &PyString_Type, size);
+    (void)PyObject_INIT_VAR(op, &PyString_Type, size);
     op->ob_shash = -1;
     op->ob_sstate = SSTATE_NOT_INTERNED;
     op->ob_sval[size] = '\0';
@@ -1627,7 +1627,7 @@ string_join(PyStringObject *self, PyObject *orig)
 #ifdef Py_USING_UNICODE
             if (PyUnicode_Check(item)) {
                 /* Defer to Unicode join.
-                 * CAUTION:  There's no gurantee that the
+                 * CAUTION:  There's no guarantee that the
                  * original sequence can be iterated over
                  * again, so we must pass seq here.
                  */
@@ -3719,7 +3719,7 @@ str_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     tmp = string_new(&PyString_Type, args, kwds);
     if (tmp == NULL)
         return NULL;
-    assert(PyString_CheckExact(tmp));
+    assert(PyString_Check(tmp));
     n = PyString_GET_SIZE(tmp);
     pnew = type->tp_alloc(type, n);
     if (pnew != NULL) {
@@ -3865,8 +3865,7 @@ PyString_Concat(register PyObject **pv, register PyObject *w)
         return;
     }
     v = string_concat((PyStringObject *) *pv, w);
-    Py_DECREF(*pv);
-    *pv = v;
+    Py_SETREF(*pv, v);
 }
 
 void
@@ -4751,8 +4750,7 @@ PyString_InternInPlace(PyObject **p)
     t = PyDict_GetItem(interned, (PyObject *)s);
     if (t) {
         Py_INCREF(t);
-        Py_DECREF(*p);
-        *p = t;
+        Py_SETREF(*p, t);
         return;
     }
 

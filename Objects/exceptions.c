@@ -58,14 +58,12 @@ BaseException_init(PyBaseExceptionObject *self, PyObject *args, PyObject *kwds)
     if (!_PyArg_NoKeywords(Py_TYPE(self)->tp_name, kwds))
         return -1;
 
-    Py_DECREF(self->args);
-    self->args = args;
-    Py_INCREF(self->args);
+    Py_INCREF(args);
+    Py_SETREF(self->args, args);
 
     if (PyTuple_GET_SIZE(self->args) == 1) {
-        Py_CLEAR(self->message);
-        self->message = PyTuple_GET_ITEM(self->args, 0);
-        Py_INCREF(self->message);
+        Py_INCREF(PyTuple_GET_ITEM(self->args, 0));
+        Py_XSETREF(self->message, PyTuple_GET_ITEM(self->args, 0));
     }
     return 0;
 }
@@ -280,9 +278,8 @@ BaseException_set_dict(PyBaseExceptionObject *self, PyObject *val)
         PyErr_SetString(PyExc_TypeError, "__dict__ must be a dictionary");
         return -1;
     }
-    Py_CLEAR(self->dict);
     Py_INCREF(val);
-    self->dict = val;
+    Py_XSETREF(self->dict, val);
     return 0;
 }
 
@@ -308,8 +305,7 @@ BaseException_set_args(PyBaseExceptionObject *self, PyObject *val)
     seq = PySequence_Tuple(val);
     if (!seq)
         return -1;
-    Py_CLEAR(self->args);
-    self->args = seq;
+    Py_XSETREF(self->args, seq);
     return 0;
 }
 
@@ -581,12 +577,14 @@ SystemExit_init(PySystemExitObject *self, PyObject *args, PyObject *kwds)
 
     if (size == 0)
         return 0;
-    Py_CLEAR(self->code);
-    if (size == 1)
-        self->code = PyTuple_GET_ITEM(args, 0);
-    else if (size > 1)
-        self->code = args;
-    Py_INCREF(self->code);
+    if (size == 1) {
+        Py_INCREF(PyTuple_GET_ITEM(args, 0));
+        Py_XSETREF(self->code, PyTuple_GET_ITEM(args, 0));
+    }
+    else { /* size > 1 */
+        Py_INCREF(args);
+        Py_XSETREF(self->code, args);
+    }
     return 0;
 }
 
@@ -669,26 +667,22 @@ EnvironmentError_init(PyEnvironmentErrorObject *self, PyObject *args,
                            &myerrno, &strerror, &filename)) {
         return -1;
     }
-    Py_CLEAR(self->myerrno);       /* replacing */
-    self->myerrno = myerrno;
-    Py_INCREF(self->myerrno);
+    Py_INCREF(myerrno);
+    Py_XSETREF(self->myerrno, myerrno);
 
-    Py_CLEAR(self->strerror);      /* replacing */
-    self->strerror = strerror;
-    Py_INCREF(self->strerror);
+    Py_INCREF(strerror);
+    Py_XSETREF(self->strerror, strerror);
 
     /* self->filename will remain Py_None otherwise */
     if (filename != NULL) {
-        Py_CLEAR(self->filename);      /* replacing */
-        self->filename = filename;
-        Py_INCREF(self->filename);
+        Py_INCREF(filename);
+        Py_XSETREF(self->filename, filename);
 
         subslice = PyTuple_GetSlice(args, 0, 2);
         if (!subslice)
             return -1;
 
-        Py_DECREF(self->args);  /* replacing args */
-        self->args = subslice;
+        Py_SETREF(self->args, subslice);
     }
     return 0;
 }
@@ -939,8 +933,7 @@ WindowsError_init(PyWindowsErrorObject *self, PyObject *args, PyObject *kwds)
         return -1;
     posix_errno = winerror_to_errno(errcode);
 
-    Py_CLEAR(self->winerror);
-    self->winerror = self->myerrno;
+    Py_XSETREF(self->winerror, self->myerrno);
 
     o_errcode = PyInt_FromLong(posix_errno);
     if (!o_errcode)
@@ -1125,9 +1118,8 @@ SyntaxError_init(PySyntaxErrorObject *self, PyObject *args, PyObject *kwds)
         return -1;
 
     if (lenargs >= 1) {
-        Py_CLEAR(self->msg);
-        self->msg = PyTuple_GET_ITEM(args, 0);
-        Py_INCREF(self->msg);
+        Py_INCREF(PyTuple_GET_ITEM(args, 0));
+        Py_XSETREF(self->msg, PyTuple_GET_ITEM(args, 0));
     }
     if (lenargs == 2) {
         info = PyTuple_GET_ITEM(args, 1);
@@ -1142,21 +1134,17 @@ SyntaxError_init(PySyntaxErrorObject *self, PyObject *args, PyObject *kwds)
             return -1;
         }
 
-        Py_CLEAR(self->filename);
-        self->filename = PyTuple_GET_ITEM(info, 0);
-        Py_INCREF(self->filename);
+        Py_INCREF(PyTuple_GET_ITEM(info, 0));
+        Py_XSETREF(self->filename, PyTuple_GET_ITEM(info, 0));
 
-        Py_CLEAR(self->lineno);
-        self->lineno = PyTuple_GET_ITEM(info, 1);
-        Py_INCREF(self->lineno);
+        Py_INCREF(PyTuple_GET_ITEM(info, 1));
+        Py_XSETREF(self->lineno, PyTuple_GET_ITEM(info, 1));
 
-        Py_CLEAR(self->offset);
-        self->offset = PyTuple_GET_ITEM(info, 2);
-        Py_INCREF(self->offset);
+        Py_INCREF(PyTuple_GET_ITEM(info, 2));
+        Py_XSETREF(self->offset, PyTuple_GET_ITEM(info, 2));
 
-        Py_CLEAR(self->text);
-        self->text = PyTuple_GET_ITEM(info, 3);
-        Py_INCREF(self->text);
+        Py_INCREF(PyTuple_GET_ITEM(info, 3));
+        Py_XSETREF(self->text, PyTuple_GET_ITEM(info, 3));
 
         Py_DECREF(info);
     }
@@ -1389,8 +1377,7 @@ set_string(PyObject **attr, const char *value)
     PyObject *obj = PyString_FromString(value);
     if (!obj)
         return -1;
-    Py_CLEAR(*attr);
-    *attr = obj;
+    Py_XSETREF(*attr, obj);
     return 0;
 }
 

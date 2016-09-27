@@ -1,5 +1,6 @@
 /*****************************************************************
-  This file should be kept compatible with Python 2.3, see PEP 291.
+  This file contains remnant Python 2.3 compatibility code that is no longer
+  strictly required.
  *****************************************************************/
 
 
@@ -54,7 +55,7 @@ from_address(addr)
 
 from_param(obj)
     - typecheck and convert a Python object into a C function call parameter
-      the result may be an instance of the type, or an integer or tuple
+      The result may be an instance of the type, or an integer or tuple
       (typecode, value[, obj])
 
 instance methods/properties
@@ -424,8 +425,7 @@ StructUnionType_new(PyTypeObject *type, PyObject *args, PyObject *kwds, int isSt
         Py_DECREF((PyObject *)dict);
         return NULL;
     }
-    Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)dict;
+    Py_SETREF(result->tp_dict, (PyObject *)dict);
     dict->format = _ctypes_alloc_format_string(NULL, "B");
     if (dict->format == NULL) {
         Py_DECREF(result);
@@ -903,8 +903,7 @@ PyCPointerType_SetProto(StgDictObject *stgdict, PyObject *proto)
         return -1;
     }
     Py_INCREF(proto);
-    Py_XDECREF(stgdict->proto);
-    stgdict->proto = proto;
+    Py_XSETREF(stgdict->proto, proto);
     return 0;
 }
 
@@ -994,8 +993,7 @@ PyCPointerType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_DECREF((PyObject *)stgdict);
         return NULL;
     }
-    Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    Py_SETREF(result->tp_dict, (PyObject *)stgdict);
 
     return (PyObject *)result;
 }
@@ -1176,7 +1174,7 @@ CharArray_get_raw(CDataObject *self)
 static PyObject *
 CharArray_get_value(CDataObject *self)
 {
-    int i;
+    Py_ssize_t i;
     char *ptr = self->b_ptr;
     for (i = 0; i < self->b_size; ++i)
         if (*ptr++ == '\0')
@@ -1238,9 +1236,9 @@ static PyGetSetDef CharArray_getsets[] = {
 static PyObject *
 WCharArray_get_value(CDataObject *self)
 {
-    unsigned int i;
+    Py_ssize_t i;
     wchar_t *ptr = (wchar_t *)self->b_ptr;
-    for (i = 0; i < self->b_size/sizeof(wchar_t); ++i)
+    for (i = 0; i < self->b_size/(Py_ssize_t)sizeof(wchar_t); ++i)
         if (*ptr++ == (wchar_t)0)
             break;
     return PyUnicode_FromWideChar((wchar_t *)self->b_ptr, i);
@@ -1269,7 +1267,7 @@ WCharArray_set_value(CDataObject *self, PyObject *value)
         return -1;
     } else
         Py_INCREF(value);
-    if ((unsigned)PyUnicode_GET_SIZE(value) > self->b_size/sizeof(wchar_t)) {
+    if ((size_t)PyUnicode_GET_SIZE(value) > self->b_size/sizeof(wchar_t)) {
         PyErr_SetString(PyExc_ValueError,
                         "string too long");
         result = -1;
@@ -1310,8 +1308,10 @@ add_methods(PyTypeObject *type, PyMethodDef *meth)
         descr = PyDescr_NewMethod(type, meth);
         if (descr == NULL)
             return -1;
-        if (PyDict_SetItemString(dict,meth->ml_name, descr) < 0)
+        if (PyDict_SetItemString(dict, meth->ml_name, descr) < 0) {
+            Py_DECREF(descr);
             return -1;
+        }
         Py_DECREF(descr);
     }
     return 0;
@@ -1326,8 +1326,10 @@ add_members(PyTypeObject *type, PyMemberDef *memb)
         descr = PyDescr_NewMember(type, memb);
         if (descr == NULL)
             return -1;
-        if (PyDict_SetItemString(dict, memb->name, descr) < 0)
+        if (PyDict_SetItemString(dict, memb->name, descr) < 0) {
+            Py_DECREF(descr);
             return -1;
+        }
         Py_DECREF(descr);
     }
     return 0;
@@ -1343,8 +1345,10 @@ add_getset(PyTypeObject *type, PyGetSetDef *gsp)
         descr = PyDescr_NewGetSet(type, gsp);
         if (descr == NULL)
             return -1;
-        if (PyDict_SetItemString(dict, gsp->name, descr) < 0)
+        if (PyDict_SetItemString(dict, gsp->name, descr) < 0) {
+            Py_DECREF(descr);
             return -1;
+        }
         Py_DECREF(descr);
     }
     return 0;
@@ -1460,8 +1464,7 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_DECREF((PyObject *)stgdict);
         return NULL;
     }
-    Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    Py_SETREF(result->tp_dict, (PyObject *)stgdict);
 
     /* Special case for character arrays.
        A permanent annoyance: char arrays are also strings!
@@ -1846,8 +1849,10 @@ static PyObject *CreateSwappedType(PyTypeObject *type, PyObject *args, PyObject 
 
     Py_INCREF(name);
     PyString_Concat(&name, suffix);
-    if (name == NULL)
+    if (name == NULL) {
+        Py_DECREF(swapped_args);
         return NULL;
+    }
 
     PyTuple_SET_ITEM(swapped_args, 0, name);
     for (i=1; i<PyTuple_GET_SIZE(args); ++i) {
@@ -1865,8 +1870,10 @@ static PyObject *CreateSwappedType(PyTypeObject *type, PyObject *args, PyObject 
 
     stgdict = (StgDictObject *)PyObject_CallObject(
         (PyObject *)&PyCStgDict_Type, NULL);
-    if (!stgdict) /* XXX leaks result! */
+    if (!stgdict) {
+        Py_DECREF(result);
         return NULL;
+    }
 
     stgdict->ffi_type_pointer = *fmt->pffi_type;
     stgdict->align = fmt->pffi_type->alignment;
@@ -1884,8 +1891,7 @@ static PyObject *CreateSwappedType(PyTypeObject *type, PyObject *args, PyObject 
         Py_DECREF((PyObject *)stgdict);
         return NULL;
     }
-    Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    Py_SETREF(result->tp_dict, (PyObject *)stgdict);
 
     return (PyObject *)result;
 }
@@ -2049,20 +2055,25 @@ PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             PyObject *meth;
             int x;
             meth = PyDescr_NewClassMethod(result, ml);
-            if (!meth)
+            if (!meth) {
+                Py_DECREF(result);
                 return NULL;
+            }
 #else
 #error
             PyObject *meth, *func;
             int x;
             func = PyCFunction_New(ml, NULL);
-            if (!func)
+            if (!func) {
+                Py_DECREF(result);
                 return NULL;
+            }
             meth = PyObject_CallFunctionObjArgs(
                 (PyObject *)&PyClassMethod_Type,
                 func, NULL);
             Py_DECREF(func);
             if (!meth) {
+                Py_DECREF(result);
                 return NULL;
             }
 #endif
@@ -2245,8 +2256,10 @@ converters_from_argtypes(PyObject *ob)
 
     nArgs = PyTuple_GET_SIZE(ob);
     converters = PyTuple_New(nArgs);
-    if (!converters)
+    if (!converters) {
+        Py_DECREF(ob);
         return NULL;
+    }
 
     /* I have to check if this is correct. Using c_char, which has a size
        of 1, will be assumed to be pushed as only one byte!
@@ -2393,8 +2406,7 @@ PyCFuncPtrType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_DECREF((PyObject *)stgdict);
         return NULL;
     }
-    Py_DECREF(result->tp_dict);
-    result->tp_dict = (PyObject *)stgdict;
+    Py_SETREF(result->tp_dict, (PyObject *)stgdict);
 
     if (-1 == make_funcptrtype_dict(stgdict)) {
         Py_DECREF(result);
@@ -2536,8 +2548,7 @@ KeepRef(CDataObject *target, Py_ssize_t index, PyObject *keep)
     }
     ob = PyCData_GetContainer(target);
     if (ob->b_objects == NULL || !PyDict_CheckExact(ob->b_objects)) {
-        Py_XDECREF(ob->b_objects);
-        ob->b_objects = keep; /* refcount consumed */
+        Py_XSETREF(ob->b_objects, keep); /* refcount consumed */
         return 0;
     }
     key = unique_key(target, index);
@@ -3059,9 +3070,8 @@ PyCFuncPtr_set_errcheck(PyCFuncPtrObject *self, PyObject *ob)
                         "the errcheck attribute must be callable");
         return -1;
     }
-    Py_XDECREF(self->errcheck);
     Py_XINCREF(ob);
-    self->errcheck = ob;
+    Py_XSETREF(self->errcheck, ob);
     return 0;
 }
 
@@ -3089,11 +3099,9 @@ PyCFuncPtr_set_restype(PyCFuncPtrObject *self, PyObject *ob)
                         "restype must be a type, a callable, or None");
         return -1;
     }
-    Py_XDECREF(self->checker);
-    Py_XDECREF(self->restype);
     Py_INCREF(ob);
-    self->restype = ob;
-    self->checker = PyObject_GetAttrString(ob, "_check_retval_");
+    Py_XSETREF(self->restype, ob);
+    Py_XSETREF(self->checker, PyObject_GetAttrString(ob, "_check_retval_"));
     if (self->checker == NULL)
         PyErr_Clear();
     return 0;
@@ -3130,11 +3138,9 @@ PyCFuncPtr_set_argtypes(PyCFuncPtrObject *self, PyObject *ob)
         converters = converters_from_argtypes(ob);
         if (!converters)
             return -1;
-        Py_XDECREF(self->converters);
-        self->converters = converters;
-        Py_XDECREF(self->argtypes);
+        Py_XSETREF(self->converters, converters);
         Py_INCREF(ob);
-        self->argtypes = ob;
+        Py_XSETREF(self->argtypes, ob);
     }
     return 0;
 }
@@ -3509,7 +3515,7 @@ PyCFuncPtr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    /* XXX XXX This would allow to pass additional options.  For COM
+    /* XXX XXX This would allow passing additional options.  For COM
        method *implementations*, we would probably want different
        behaviour than in 'normal' callback functions: return a HRESULT if
        an exception occurs in the callback, and print the traceback not
@@ -3911,7 +3917,7 @@ PyCFuncPtr_call(PyCFuncPtrObject *self, PyObject *inargs, PyObject *kwds)
             return NULL;
         }
         /* there should be more checks? No, in Python */
-        /* First arg is an pointer to an interface instance */
+        /* First arg is a pointer to an interface instance */
         if (!this->b_ptr || *(void **)this->b_ptr == NULL) {
             PyErr_SetString(PyExc_ValueError,
                             "NULL COM pointer access");

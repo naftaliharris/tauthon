@@ -46,12 +46,15 @@ OS X specific arguments to configure
   The optional argument specifies which OS X SDK should be used to perform the
   build. This defaults to ``/Developer/SDKs/MacOSX.10.4u.sdk``.  When building
   on OS X 10.5 or later, you can specify ``/`` to use the installed system
-  headers rather than an SDK.
+  headers rather than an SDK.  As of OS X 10.9, you should install the optional
+  system headers from the Command Line Tools component using ``xcode-select``::
+
+     $ sudo xcode-select --install
 
   See the section _`Building and using a universal binary of Python on Mac OS X`
   for more information.
 
-* ``--with-univeral-archs=VALUE``
+* ``--with-universal-archs=VALUE``
 
   Specify the kind of universal binary that should be created. This option is 
   only valid when ``--enable-universalsdk`` is specified.
@@ -122,7 +125,7 @@ values are available:
 
 To build a universal binary that includes a 64-bit architecture, you must build
 on a system running OS X 10.5 or later.  The ``all`` and ``64-bit`` flavors can
-only be built with an 10.5 SDK because ``ppc64`` support was only included with
+only be built with a 10.5 SDK because ``ppc64`` support was only included with
 OS X 10.5.  Although legacy ``ppc`` support was included with Xcode 3 on OS X
 10.6, it was removed in Xcode 4, versions of which were released on OS X 10.6
 and which is the standard for OS X 10.7.  To summarize, the

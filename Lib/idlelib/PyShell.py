@@ -158,7 +158,7 @@ class PyShellEditorWindow(EditorWindow):
             # possible due to update in restore_file_breaks
             return
         if color:
-            theme = idleConf.GetOption('main','Theme','name')
+            theme = idleConf.CurrentTheme()
             cfg = idleConf.GetHighlight(theme, "break")
         else:
             cfg = {'foreground': '', 'background': ''}
@@ -343,7 +343,7 @@ class ModifiedColorDelegator(ColorDelegator):
 
     def LoadTagDefs(self):
         ColorDelegator.LoadTagDefs(self)
-        theme = idleConf.GetOption('main','Theme','name')
+        theme = idleConf.CurrentTheme()
         self.tagdefs.update({
             "stdin": {'background':None,'foreground':None},
             "stdout": idleConf.GetHighlight(theme, "stdout"),
@@ -631,7 +631,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
         item = RemoteObjectBrowser.StubObjectTreeItem(self.rpcclt, oid)
         from idlelib.TreeWidget import ScrolledCanvas, TreeNode
         top = Toplevel(self.tkconsole.root)
-        theme = idleConf.GetOption('main','Theme','name')
+        theme = idleConf.CurrentTheme()
         background = idleConf.GetHighlight(theme, 'normal')['background']
         sc = ScrolledCanvas(top, bg=background, highlightthickness=0)
         sc.frame.pack(expand=1, fill="both")
@@ -1006,7 +1006,7 @@ class PyShell(OutputWindow):
         if self.executing:
             response = tkMessageBox.askokcancel(
                 "Kill?",
-                "The program is still running!\n Do you want to kill it?",
+                "Your program is still running!\n Do you want to kill it?",
                 default="ok",
                 parent=self.text)
             if response is False:
@@ -1408,6 +1408,17 @@ class PseudoInputFile(PseudoFile):
         self.shell.close()
 
 
+def fix_x11_paste(root):
+    "Make paste replace selection on x11.  See issue #5124."
+    if root._windowingsystem == 'x11':
+        for cls in 'Text', 'Entry', 'Spinbox':
+            root.bind_class(
+                cls,
+                '<<Paste>>',
+                'catch {%W delete sel.first sel.last}\n' +
+                        root.bind_class(cls, '<<Paste>>'))
+
+
 usage_msg = """\
 
 USAGE: idle  [-deins] [-t title] [file]*
@@ -1537,8 +1548,10 @@ def main():
                                     'editor-on-startup', type='bool')
     enable_edit = enable_edit or edit_start
     enable_shell = enable_shell or not enable_edit
+
     # start editor and/or shell windows:
     root = Tk(className="Idle")
+    root.withdraw()
 
     # set application icon
     icondir = os.path.join(os.path.dirname(__file__), 'Icons')
@@ -1553,7 +1566,7 @@ def main():
         root.tk.call('wm', 'iconphoto', str(root), "-default", *icons)
 
     fixwordbreaks(root)
-    root.withdraw()
+    fix_x11_paste(root)
     flist = PyShellFileList(root)
     macosxSupport.setupApp(root, flist)
 

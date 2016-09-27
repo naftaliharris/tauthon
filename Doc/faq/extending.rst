@@ -45,7 +45,7 @@ very little effort, as long as you're running on a machine with an
 x86-compatible processor.
 
 `Cython <http://cython.org>`_ and its relative `Pyrex
-<http://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/>`_ are compilers
+<https://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/>`_ are compilers
 that accept a slightly modified form of Python and generate the corresponding
 C code.  Pyrex makes it possible to write an extension without having to learn
 Python's C API.
@@ -53,10 +53,10 @@ Python's C API.
 If you need to interface to some C or C++ library for which no Python extension
 currently exists, you can try wrapping the library's data types and functions
 with a tool such as `SWIG <http://www.swig.org>`_.  `SIP
-<http://www.riverbankcomputing.co.uk/software/sip/intro>`__, `CXX
+<https://riverbankcomputing.com/software/sip/intro>`__, `CXX
 <http://cxx.sourceforge.net/>`_ `Boost
 <http://www.boost.org/libs/python/doc/index.html>`_, or `Weave
-<http://docs.scipy.org/doc/scipy-dev/reference/tutorial/weave.html>`_ are also
+<https://scipy.github.io/devdocs/tutorial/weave.html>`_ are also
 alternatives for wrapping C++ libraries.
 
 

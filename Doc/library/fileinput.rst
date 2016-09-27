@@ -60,6 +60,9 @@ The following function is the primary interface of this module:
    .. versionchanged:: 2.5
       Added the *mode* and *openhook* parameters.
 
+   .. versionchanged:: 2.7.12
+      The *bufsize* parameter is no longer used.
+
 The following functions use the global state created by :func:`fileinput.input`;
 if there is no active state, :exc:`RuntimeError` is raised.
 
@@ -143,6 +146,9 @@ available for subclassing as well:
    .. versionchanged:: 2.5
       Added the *mode* and *openhook* parameters.
 
+   .. versionchanged:: 2.7.12
+      The *bufsize* parameter is no longer used.
+
 **Optional in-place filtering:** if the keyword argument ``inplace=1`` is passed
 to :func:`fileinput.input` or to the :class:`FileInput` constructor, the file is
 moved to a backup file and standard output is directed to the input file (if a
@@ -175,7 +181,7 @@ The two following opening hooks are provided by this module:
 
 .. function:: hook_encoded(encoding)
 
-   Returns a hook which opens each file with :func:`codecs.open`, using the given
+   Returns a hook which opens each file with :func:`io.open`, using the given
    *encoding* to read the file.
 
    Usage example: ``fi =

@@ -2395,23 +2395,21 @@ static PyObject *
 bytearray_remove(PyByteArrayObject *self, PyObject *arg)
 {
     int value;
-    Py_ssize_t where, n = Py_SIZE(self);
+    Py_ssize_t n = Py_SIZE(self);
+    char *where;
 
     if (! _getbytevalue(arg, &value))
         return NULL;
 
-    for (where = 0; where < n; where++) {
-        if (self->ob_bytes[where] == value)
-            break;
-    }
-    if (where == n) {
+    where = memchr(self->ob_bytes, value, n);
+    if (!where) {
         PyErr_SetString(PyExc_ValueError, "value not found in bytearray");
         return NULL;
     }
     if (!_canresize(self))
         return NULL;
 
-    memmove(self->ob_bytes + where, self->ob_bytes + where + 1, n - where);
+    memmove(where, where + 1, self->ob_bytes + n - where);
     if (PyByteArray_Resize((PyObject *)self, n - 1) < 0)
         return NULL;
 
@@ -2780,7 +2778,7 @@ bytearray_sizeof(PyByteArrayObject *self)
 {
     Py_ssize_t res;
 
-    res = sizeof(PyByteArrayObject) + self->ob_alloc * sizeof(char);
+    res = _PyObject_SIZE(Py_TYPE(self)) + self->ob_alloc * sizeof(char);
     return PyInt_FromSsize_t(res);
 }
 
@@ -2883,7 +2881,7 @@ bytearray(string, encoding[, errors]) -> bytearray.\n\
 bytearray(bytes_or_bytearray) -> mutable copy of bytes_or_bytearray.\n\
 bytearray(memory_view) -> bytearray.\n\
 \n\
-Construct an mutable bytearray object from:\n\
+Construct a mutable bytearray object from:\n\
   - an iterable yielding integers in range(256)\n\
   - a text string encoded using the specified encoding\n\
   - a bytes or a bytearray object\n\
@@ -2982,8 +2980,8 @@ bytearrayiter_next(bytesiterobject *it)
         return item;
     }
 
-    Py_DECREF(seq);
     it->it_seq = NULL;
+    Py_DECREF(seq);
     return NULL;
 }
 
