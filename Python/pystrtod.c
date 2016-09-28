@@ -431,7 +431,7 @@ _Py_string_to_number_with_underscores(
     PyMem_Free(dup);
     PyErr_Format(PyExc_ValueError,
                 "could not convert string to %s: "
-                "%R", what, obj);
+                "%.200s", what, s);
     return NULL;
 }
 
