@@ -163,7 +163,6 @@ class TokenTests(unittest.TestCase):
         for lit in VALID_UNDERSCORE_LITERALS:
             self.assertEqual(eval(lit), eval(lit.replace('_', '')))
         for lit in INVALID_UNDERSCORE_LITERALS:
-            print lit
             self.assertRaises(SyntaxError, eval, lit)
         # Sanity check: no literal begins with an underscore
         self.assertRaises(NameError, eval, "_0")

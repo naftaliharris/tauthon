@@ -51,16 +51,18 @@ Comment = r'#[^\r\n]*'
 Ignore = Whitespace + any(r'\\\r?\n' + Whitespace) + maybe(Comment)
 Name = r'[a-zA-Z_]\w*'
 
-Hexnumber = r'0[xX][\da-fA-F]+[lL]?'
-Octnumber = r'(0[oO][0-7]+)|(0[0-7]*)[lL]?'
-Binnumber = r'0[bB][01]+[lL]?'
-Decnumber = r'[1-9]\d*[lL]?'
+Hexnumber = r'0[xX](?:_?[0-9a-fA-F])+[lL]?'
+Octnumber = r'(0[oO](?:_?[0-7])+)|(0(?:_?[0-7])*)[lL]?'
+Binnumber = r'0[bB](?:_?[01])+[lL]?'
+Decnumber = r'[1-9](?:_?[0-9])*[lL]?'
 Intnumber = group(Hexnumber, Binnumber, Octnumber, Decnumber)
-Exponent = r'[eE][-+]?\d+'
-Pointfloat = group(r'\d+\.\d*', r'\.\d+') + maybe(Exponent)
-Expfloat = r'\d+' + Exponent
+
+Exponent = r'[eE][-+]?[0-9](?:_?[0-9])*'
+Pointfloat = group(r'[0-9](?:_?[0-9])*\.(?:[0-9](?:_?[0-9])*)?',
+                   r'\.[0-9](?:_?[0-9])*') + maybe(Exponent)
+Expfloat = r'[0-9](?:_?[0-9])*' + Exponent
 Floatnumber = group(Pointfloat, Expfloat)
-Imagnumber = group(r'\d+[jJ]', Floatnumber + r'[jJ]')
+Imagnumber = group(r'[0-9](?:_?[0-9])*[jJ]', Floatnumber + r'[jJ]')
 Number = group(Imagnumber, Floatnumber, Intnumber)
 
 # Tail end of ' string.
