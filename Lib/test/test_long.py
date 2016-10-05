@@ -5,6 +5,9 @@ import random
 import math
 
 from test import test_int, test_support
+from test.test_grammar import (VALID_UNDERSCORE_LITERALS,
+                               INVALID_UNDERSCORE_LITERALS)
+
 
 # Used for lazy formatting of failure messages
 class Frm(object):
@@ -460,6 +463,24 @@ class LongTest(test_int.IntLongCommonTests, unittest.TestCase):
         self.assertEqual(long('2br45qc', 35), 4294967297)
         self.assertEqual(long('1z141z5', 36), 4294967297)
 
+    def test_underscores(self):
+        for lit in VALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertEqual(long(lit, 0), eval(lit))
+            self.assertEqual(long(lit, 0), long(lit.replace('_', ''), 0))
+        for lit in INVALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertRaises(ValueError, long, lit, 0)
+        # Additional test cases with bases != 0, only for the constructor:
+        self.assertEqual(long("1_00", 3), 9)
+        self.assertEqual(long("0_100"), 100)  # not valid as a literal!
+        self.assertEqual(long(b"1_00"), 100)  # byte underscore
+        self.assertRaises(ValueError, long, "_100")
+        self.assertRaises(ValueError, long, "+_100")
+        self.assertRaises(ValueError, long, "1__00")
+        self.assertRaises(ValueError, long, "100_")
 
     def test_conversion(self):
         # Test __long__()

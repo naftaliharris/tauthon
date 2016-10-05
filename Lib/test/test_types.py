@@ -304,6 +304,8 @@ class TypesTests(unittest.TestCase):
 
         test(123456789, 'd', '123456789')
         test(123456789, 'd', '123456789')
+        test(123456789, ',', '123,456,789')
+        test(123456789, '_', '123_456_789')
 
         test(1, 'c', '\01')
 
@@ -334,6 +336,9 @@ class TypesTests(unittest.TestCase):
         test(int('be', 16), "X", "BE")
         test(-int('be', 16), "x", "-be")
         test(-int('be', 16), "X", "-BE")
+        test(1234567890, '_x', '4996_02d2')
+        test(1234567890, '_X', '4996_02D2')
+        self.assertRaises(ValueError, format, 1234567890, ',x')
 
         # octal
         test(3, "o", "3")
@@ -348,6 +353,9 @@ class TypesTests(unittest.TestCase):
         test(-1234, " o", "-2322")
         test(1234, "+o", "+2322")
         test(-1234, "+o", "-2322")
+        test(1234567890, '_o', '111_4540_1322')
+        self.assertRaises(ValueError, format, 1234567890, ',o')
+
 
         # binary
         test(3, "b", "11")
@@ -360,6 +368,8 @@ class TypesTests(unittest.TestCase):
         test(-1234, " b", "-10011010010")
         test(1234, "+b", "+10011010010")
         test(-1234, "+b", "-10011010010")
+        test(12345, '_b', '11_0000_0011_1001')
+        self.assertRaises(ValueError, format, 1234567890, ',b')
 
         # alternate (#) formatting
         test(0, "#b", '0b0')
@@ -413,14 +423,19 @@ class TypesTests(unittest.TestCase):
 
         # precision disallowed
         self.assertRaises(ValueError, 3 .__format__, "1.3")
-        # sign not allowed with 'c'
+        # underscore, comma, and sign not allowed with 'c'
+        self.assertRaises(ValueError, 3 .__format__, "_c")
+        self.assertRaises(ValueError, 3 .__format__, ",c")
         self.assertRaises(ValueError, 3 .__format__, "+c")
+
         # format spec must be string
         self.assertRaises(TypeError, 3 .__format__, None)
         self.assertRaises(TypeError, 3 .__format__, 0)
 
-        # can't have ',' with 'c'
-        self.assertRaises(ValueError, 3 .__format__, ",c")
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3, '_,')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3, ',_')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3, '_,d')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3, ',_d')
 
         # ensure that only int and float type specifiers work
         for format_spec in ([chr(x) for x in range(ord('a'), ord('z')+1)] +
@@ -461,6 +476,8 @@ class TypesTests(unittest.TestCase):
 
         test(123456789L, 'd', '123456789')
         test(123456789L, 'd', '123456789')
+        test(123456789L, ',', '123,456,789')
+        test(123456789L, '_', '123_456_789')
 
         # sign and aligning are interdependent
         test(1L, "-", '1')
@@ -491,6 +508,9 @@ class TypesTests(unittest.TestCase):
         test(long('be', 16), "X", "BE")
         test(-long('be', 16), "x", "-be")
         test(-long('be', 16), "X", "-BE")
+        test(1234567890L, '_x', '4996_02d2')
+        test(1234567890L, '_X', '4996_02D2')
+        self.assertRaises(ValueError, format, 1234567890L, ',x')
 
         # octal
         test(3L, "o", "3")
@@ -505,6 +525,8 @@ class TypesTests(unittest.TestCase):
         test(-1234L, " o", "-2322")
         test(1234L, "+o", "+2322")
         test(-1234L, "+o", "-2322")
+        test(1234567890L, '_o', '111_4540_1322')
+        self.assertRaises(ValueError, format, 1234567890L, ',o')
 
         # binary
         test(3L, "b", "11")
@@ -517,12 +539,16 @@ class TypesTests(unittest.TestCase):
         test(-1234L, " b", "-10011010010")
         test(1234L, "+b", "+10011010010")
         test(-1234L, "+b", "-10011010010")
+        test(12345L, '_b', '11_0000_0011_1001')
+        self.assertRaises(ValueError, format, 1234567890L, ',b')
 
         # make sure these are errors
 
         # precision disallowed
         self.assertRaises(ValueError, 3L .__format__, "1.3")
-        # sign not allowed with 'c'
+        # underscore, comma, and sign not allowed with 'c'
+        self.assertRaises(ValueError, 3L .__format__, "_c")
+        self.assertRaises(ValueError, 3L .__format__, ",c")
         self.assertRaises(ValueError, 3L .__format__, "+c")
         # format spec must be string
         self.assertRaises(TypeError, 3L .__format__, None)
@@ -530,6 +556,11 @@ class TypesTests(unittest.TestCase):
         # alternate specifier in wrong place
         self.assertRaises(ValueError, 1L .__format__, "#+5x")
         self.assertRaises(ValueError, 1L .__format__, "+5#x")
+
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3L, '_,')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3L, ',_')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3L, '_,d')
+        self.assertRaisesRegexp(ValueError, 'Cannot specify both', format, 3L, ',_d')
 
         # ensure that only int and float type specifiers work
         for format_spec in ([chr(x) for x in range(ord('a'), ord('z')+1)] +
