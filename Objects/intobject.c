@@ -353,18 +353,12 @@ PyInt_AsUnsignedLongLongMask(register PyObject *op)
 #endif
 
 PyObject *
-PyInt_FromString(char *s, char **pend, int base)
+int_from_string_inner(char *s, char *sorig, char **pend, int base)
 {
     char *end;
     long x;
     Py_ssize_t slen;
     PyObject *sobj, *srepr;
-
-    if ((base != 0 && base < 2) || base > 36) {
-        PyErr_SetString(PyExc_ValueError,
-                        "int() base must be >= 2 and <= 36");
-        return NULL;
-    }
 
     while (*s && isspace(Py_CHARMASK(*s)))
         s++;
@@ -372,7 +366,7 @@ PyInt_FromString(char *s, char **pend, int base)
     if (base == 0 && s[0] == '0') {
         x = (long) PyOS_strtoul(s, &end, base);
         if (x < 0)
-            return PyLong_FromString(s, pend, base);
+            return PyLong_FromString(sorig, pend, base);
     }
     else
         x = PyOS_strtol(s, &end, base);
@@ -382,8 +376,8 @@ PyInt_FromString(char *s, char **pend, int base)
         end++;
     if (*end != '\0') {
   bad:
-        slen = strlen(s) < 200 ? strlen(s) : 200;
-        sobj = PyString_FromStringAndSize(s, slen);
+        slen = strlen(sorig) < 200 ? strlen(sorig) : 200;
+        sobj = PyString_FromStringAndSize(sorig, slen);
         if (sobj == NULL)
             return NULL;
         srepr = PyObject_Repr(sobj);
@@ -397,10 +391,122 @@ PyInt_FromString(char *s, char **pend, int base)
         return NULL;
     }
     else if (errno != 0)
-        return PyLong_FromString(s, pend, base);
+        return PyLong_FromString(sorig, pend, base);
     if (pend)
         *pend = end;
     return PyInt_FromLong(x);
+}
+
+PyObject *
+PyInt_FromString(char *s, char **pend, int base)
+{
+    char prev;
+    char *sorig, *dup, *end;
+    PyObject *res;
+    int slen, mybase;
+    char buffer[256]; /* for errors */
+
+    sorig = s;
+
+    if ((base != 0 && base < 2) || base > 36) {
+        PyErr_SetString(PyExc_ValueError,
+                        "int() base must be >= 2 and <= 36");
+        return NULL;
+    }
+
+    if (strchr(sorig, '_') == NULL) {
+        return int_from_string_inner(sorig, sorig, pend, base);
+    }
+
+    /* Figure out what the base should be */
+    mybase = base;
+    if (mybase == 0) {
+        if (s[0] == '0') {
+            switch(s[1]) {
+                case 'b':
+                case 'B':
+                    mybase = 2;
+                    break;
+                case 'o':
+                case 'O':
+                    mybase = 8;
+                    break;
+                case 'x':
+                case 'X':
+                    mybase = 16;
+                    break;
+                default:
+                    mybase = 8;
+            }
+        }
+        else {
+            mybase = 10;
+        }
+    }
+
+    /* Create a duplicate without underscores; reject if bad formatting. */
+    slen = strlen(sorig);
+    dup = PyMem_Malloc(slen + 1);
+    end = dup;
+    prev = '\0';
+
+    /* Special case base specifiers and figure out what base we're in */
+    if (slen >= 3 && s[0] == '0') {
+        if ((mybase == 2  && (s[1] == 'b' || s[1] == 'B')) ||
+            (mybase == 8  && (s[1] == 'o' || s[1] == 'O')) ||
+            (mybase == 16 && (s[1] == 'x' || s[1] == 'X'))) {
+
+            *end++ = *s++;
+            *end++ = *s++;
+            prev = '0';  /* Underscores may follow base specifiers */
+        }
+    }
+
+    for (; *s; s++) {
+        if (*s == '_') {
+            /* Underscores are only allowed after digits. */
+            if (_PyLong_DigitValue[Py_CHARMASK(prev)] >= mybase) {
+                goto error;
+            }
+        }
+        else {
+            /* Underscores are only allowed before digits. */
+            if (prev == '_' && _PyLong_DigitValue[Py_CHARMASK(*s)] >= mybase) {
+                goto error;
+            }
+            *end++ = *s;
+        }
+        prev = *s;
+    }
+    /* Underscores are not allowed at the end. */
+    if (prev == '_') {
+        goto error;
+    }
+    *end = '\0';
+    res = int_from_string_inner(dup, sorig, pend, base);
+
+    /* Find the ending location in the original string */
+    if (pend && res) {
+        end = dup;
+        s = sorig;
+        while (end != *pend) {
+            if (*s != '_') {
+                end++;
+            }
+            s++;
+        }
+        *pend = s;
+    }
+
+    PyMem_Free(dup);
+    return res;
+
+  error:
+    PyOS_snprintf(buffer, sizeof(buffer),
+                  "invalid literal for int() with base %d: %.200s",
+                  base, sorig);
+    PyErr_SetString(PyExc_ValueError, buffer);
+    return NULL;
 }
 
 #ifdef Py_USING_UNICODE
