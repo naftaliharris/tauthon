@@ -971,40 +971,12 @@ static PyMemberDef complex_members[] = {
 };
 
 static PyObject *
-complex_subtype_from_string(PyTypeObject *type, PyObject *v)
+complex_from_string_inner(const char *s, Py_ssize_t len, void *type)
 {
-    const char *s, *start;
-    char *end;
     double x=0.0, y=0.0, z;
     int got_bracket=0;
-#ifdef Py_USING_UNICODE
-    char *s_buffer = NULL;
-#endif
-    Py_ssize_t len;
-
-    if (PyString_Check(v)) {
-        s = PyString_AS_STRING(v);
-        len = PyString_GET_SIZE(v);
-    }
-#ifdef Py_USING_UNICODE
-    else if (PyUnicode_Check(v)) {
-        s_buffer = (char *)PyMem_MALLOC(PyUnicode_GET_SIZE(v)+1);
-        if (s_buffer == NULL)
-            return PyErr_NoMemory();
-        if (PyUnicode_EncodeDecimal(PyUnicode_AS_UNICODE(v),
-                                    PyUnicode_GET_SIZE(v),
-                                    s_buffer,
-                                    NULL))
-            goto error;
-        s = s_buffer;
-        len = strlen(s);
-    }
-#endif
-    else {
-        PyErr_SetString(PyExc_TypeError,
-                        "complex() arg is not a string");
-        return NULL;
-    }
+    const char *start;
+    char *end;
 
     /* position on first nonblank */
     start = s;
@@ -1045,7 +1017,7 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
         if (PyErr_ExceptionMatches(PyExc_ValueError))
             PyErr_Clear();
         else
-            goto error;
+            return NULL;
     }
     if (end != s) {
         /* all 4 forms starting with <float> land here */
@@ -1058,7 +1030,7 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
                 if (PyErr_ExceptionMatches(PyExc_ValueError))
                     PyErr_Clear();
                 else
-                    goto error;
+                    return NULL;
             }
             if (end != s)
                 /* <float><signed-float>j */
@@ -1113,22 +1085,56 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
     if (s-start != len)
         goto parse_error;
 
-
-#ifdef Py_USING_UNICODE
-    if (s_buffer)
-        PyMem_FREE(s_buffer);
-#endif
     return complex_subtype_from_doubles(type, x, y);
 
   parse_error:
     PyErr_SetString(PyExc_ValueError,
                     "complex() arg is a malformed string");
-  error:
+    return NULL;
+}
+
+static PyObject *
+complex_subtype_from_string(PyTypeObject *type, PyObject *v)
+{
+    const char *s;
+    PyObject *result = NULL;
+#ifdef Py_USING_UNICODE
+    char *s_buffer = NULL;
+#endif
+    Py_ssize_t len;
+
+    if (PyString_Check(v)) {
+        s = PyString_AS_STRING(v);
+        len = PyString_GET_SIZE(v);
+    }
+#ifdef Py_USING_UNICODE
+    else if (PyUnicode_Check(v)) {
+        s_buffer = (char *)PyMem_MALLOC(PyUnicode_GET_SIZE(v)+1);
+        if (s_buffer == NULL)
+            return PyErr_NoMemory();
+        if (PyUnicode_EncodeDecimal(PyUnicode_AS_UNICODE(v),
+                                    PyUnicode_GET_SIZE(v),
+                                    s_buffer,
+                                    NULL))
+            goto exit;
+        s = s_buffer;
+        len = strlen(s);
+    }
+#endif
+    else {
+        PyErr_SetString(PyExc_TypeError,
+                        "complex() arg is not a string");
+        return NULL;
+    }
+
+    result = _Py_string_to_number_with_underscores(s, len, "complex", v, type,
+                                                   complex_from_string_inner);
+  exit:
 #ifdef Py_USING_UNICODE
     if (s_buffer)
         PyMem_FREE(s_buffer);
 #endif
-    return NULL;
+    return result;
 }
 
 static PyObject *

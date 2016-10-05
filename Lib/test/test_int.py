@@ -3,6 +3,8 @@ import sys
 import unittest
 from test import test_support
 from test.test_support import run_unittest, have_unicode
+from test.test_grammar import (VALID_UNDERSCORE_LITERALS,
+                               INVALID_UNDERSCORE_LITERALS)
 import math
 
 L = [
@@ -390,6 +392,25 @@ class IntTestCases(IntLongCommonTests, unittest.TestCase):
 
     def test_error_on_string_base(self):
         self.assertRaises(TypeError, int, 100, base='foo')
+
+    def test_underscores(self):
+        for lit in VALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertEqual(int(lit, 0), eval(lit))
+            self.assertEqual(int(lit, 0), int(lit.replace('_', ''), 0))
+        for lit in INVALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertRaises(ValueError, int, lit, 0)
+        # Additional test cases with bases != 0, only for the constructor:
+        self.assertEqual(int("1_00", 3), 9)
+        self.assertEqual(int("0_100"), 100)  # not valid as a literal!
+        self.assertEqual(int(b"1_00"), 100)  # byte underscore
+        self.assertRaises(ValueError, int, "_100")
+        self.assertRaises(ValueError, int, "+_100")
+        self.assertRaises(ValueError, int, "1__00")
+        self.assertRaises(ValueError, int, "100_")
 
     @test_support.cpython_only
     def test_small_ints(self):

@@ -154,6 +154,34 @@ PyFloat_FromDouble(double fval)
     return (PyObject *) op;
 }
 
+static PyObject *
+float_from_string_inner(const char *s, Py_ssize_t len, void *obj)
+{
+    double x;
+    const char *end;
+    const char *last = s + len;
+    char buffer[256]; /* for errors */
+
+    while (Py_ISSPACE(*s))
+        s++;
+    /* We don't care about overflow or underflow.  If the platform
+     * supports them, infinities and signed zeroes (on underflow) are
+     * fine. */
+    x = PyOS_string_to_double(s, (char **)&end, NULL);
+    if (x == -1.0 && PyErr_Occurred())
+        return NULL;
+    while (Py_ISSPACE(*end))
+        end++;
+    if (end == last)
+        return PyFloat_FromDouble(x);
+    else {
+        PyOS_snprintf(buffer, sizeof(buffer),
+                      "invalid literal for float(): %.200s", s);
+        PyErr_SetString(PyExc_ValueError, buffer);
+        return NULL;
+    }
+}
+
 /**************************************************************************
 RED_FLAG 22-Sep-2000 tim
 PyFloat_FromString's pend argument is braindead.  Prior to this RED_FLAG,
@@ -173,9 +201,7 @@ still supported but now *officially* useless:  if pend is not NULL,
 PyObject *
 PyFloat_FromString(PyObject *v, char **pend)
 {
-    const char *s, *last, *end;
-    double x;
-    char buffer[256]; /* for errors */
+    const char *s;
 #ifdef Py_USING_UNICODE
     char *s_buffer = NULL;
 #endif
@@ -215,26 +241,9 @@ PyFloat_FromString(PyObject *v, char **pend)
             "float() argument must be a string or a number");
         return NULL;
     }
-    last = s + len;
 
-    while (Py_ISSPACE(*s))
-        s++;
-    /* We don't care about overflow or underflow.  If the platform
-     * supports them, infinities and signed zeroes (on underflow) are
-     * fine. */
-    x = PyOS_string_to_double(s, (char **)&end, NULL);
-    if (x == -1.0 && PyErr_Occurred())
-        goto error;
-    while (Py_ISSPACE(*end))
-        end++;
-    if (end == last)
-        result = PyFloat_FromDouble(x);
-    else {
-        PyOS_snprintf(buffer, sizeof(buffer),
-                      "invalid literal for float(): %.200s", s);
-        PyErr_SetString(PyExc_ValueError, buffer);
-        result = NULL;
-    }
+    result = _Py_string_to_number_with_underscores(s, len, "float", v, v,
+                                                   float_from_string_inner);
 
   error:
 #ifdef Py_USING_UNICODE

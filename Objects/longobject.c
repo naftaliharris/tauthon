@@ -1650,12 +1650,18 @@ int _PyLong_DigitValue[256] = {
  * non-digit (which may be *str!).  A normalized long is returned.
  * The point to this routine is that it takes time linear in the number of
  * string characters.
+ *
+ * Return values:
+ *   -1 on syntax error (exception needs to be set, *res is untouched)
+ *   0 else (exception may be set, in that case *res is set to NULL)
  */
-static PyLongObject *
-long_from_binary_base(char **str, int base)
+static int
+long_from_binary_base(char **str, int base, PyLongObject **res)
 {
     char *p = *str;
     char *start = p;
+    char prev = 0;
+    int digits = 0;
     int bits_per_char;
     Py_ssize_t n;
     PyLongObject *z;
@@ -1667,21 +1673,40 @@ long_from_binary_base(char **str, int base)
     n = base;
     for (bits_per_char = -1; n; ++bits_per_char)
         n >>= 1;
-    /* n <- total # of bits needed, while setting p to end-of-string */
-    while (_PyLong_DigitValue[Py_CHARMASK(*p)] < base)
-        ++p;
+    /* count digits and set p to end-of-string */
+    while (_PyLong_DigitValue[Py_CHARMASK(*p)] < base || *p == '_') {
+        if (*p == '_') {
+            if (prev == '_') {
+                *str = p - 1;
+                return -1;
+            }
+        } else {
+            ++digits;
+        }
+        prev = *p;
+         ++p;
+    }
+    if (prev == '_') {
+        /* Trailing underscore not allowed. */
+        *str = p - 1;
+        return -1;
+    }
+
     *str = p;
     /* n <- # of Python digits needed, = ceiling(n/PyLong_SHIFT). */
-    n = (p - start) * bits_per_char + PyLong_SHIFT - 1;
+    n = digits * bits_per_char + PyLong_SHIFT - 1;
     if (n / bits_per_char < p - start) {
         PyErr_SetString(PyExc_ValueError,
                         "long string too large to convert");
-        return NULL;
+        *res = NULL;
+        return 0;
     }
     n = n / PyLong_SHIFT;
     z = _PyLong_New(n);
-    if (z == NULL)
-        return NULL;
+    if (z == NULL) {
+        *res = NULL;
+        return 0;
+    }
     /* Read string from right, and fill in long from left; i.e.,
      * from least to most significant in both.
      */
@@ -1689,7 +1714,11 @@ long_from_binary_base(char **str, int base)
     bits_in_accum = 0;
     pdigit = z->ob_digit;
     while (--p >= start) {
-        int k = _PyLong_DigitValue[Py_CHARMASK(*p)];
+        int k;
+        if (*p == '_') {
+            continue;
+        }
+        k = (int)_PyLong_DigitValue[Py_CHARMASK(*p)];
         assert(k >= 0 && k < base);
         accum |= (twodigits)k << bits_in_accum;
         bits_in_accum += bits_per_char;
@@ -1708,7 +1737,8 @@ long_from_binary_base(char **str, int base)
     }
     while (pdigit - z->ob_digit < n)
         *pdigit++ = 0;
-    return long_normalize(z);
+    *res = long_normalize(z);
+    return 0;
 }
 
 PyObject *
@@ -1716,7 +1746,7 @@ PyLong_FromString(char *str, char **pend, int base)
 {
     int sign = 1;
     char *start, *orig_str = str;
-    PyLongObject *z;
+    PyLongObject *z = NULL;
     PyObject *strobj, *strrepr;
     Py_ssize_t slen;
 
@@ -1756,12 +1786,26 @@ PyLong_FromString(char *str, char **pend, int base)
     if (str[0] == '0' &&
         ((base == 16 && (str[1] == 'x' || str[1] == 'X')) ||
          (base == 8  && (str[1] == 'o' || str[1] == 'O')) ||
-         (base == 2  && (str[1] == 'b' || str[1] == 'B'))))
+         (base == 2  && (str[1] == 'b' || str[1] == 'B')))) {
         str += 2;
+        /* One underscore allowed here. */
+        if (*str == '_') {
+            ++str;
+        }
+    }
+    if (str[0] == '_') {
+           /* May not start with underscores. */
+           goto onError;
+    }
 
     start = str;
-    if ((base & (base - 1)) == 0)
-        z = long_from_binary_base(&str, base);
+    if ((base & (base - 1)) == 0) {
+        int res = long_from_binary_base(&str, base, &z);
+        if (res < 0) {
+            /* Syntax error. */
+            goto onError;
+        }
+    }
     else {
 /***
 Binary bases can be converted in time linear in the number of digits, because
@@ -1852,11 +1896,13 @@ digit beyond the first.
 ***/
         register twodigits c;           /* current input character */
         Py_ssize_t size_z;
+        int digits = 0;
         int i;
         int convwidth;
         twodigits convmultmax, convmult;
         digit *pz, *pzstop;
-        char* scan;
+        char *scan, *lastdigit;
+        char prev = 0;
 
         static double log_base_PyLong_BASE[37] = {0.0e0,};
         static int convwidth_base[37] = {0,};
@@ -1882,15 +1928,36 @@ digit beyond the first.
 
         /* Find length of the string of numeric characters. */
         scan = str;
-        while (_PyLong_DigitValue[Py_CHARMASK(*scan)] < base)
-            ++scan;
+        lastdigit = str;
+
+        while (_PyLong_DigitValue[Py_CHARMASK(*scan)] < base || *scan == '_') {
+            if (*scan == '_') {
+                if (prev == '_') {
+                    /* Only one underscore allowed. */
+                    str = lastdigit + 1;
+                    goto onError;
+                }
+            }
+            else {
+                ++digits;
+                lastdigit = scan;
+            }
+            prev = *scan;
+             ++scan;
+        }
+        if (prev == '_') {
+            /* Trailing underscore not allowed. */
+            /* Set error pointer to first underscore. */
+            str = lastdigit + 1;
+            goto onError;
+        }
 
         /* Create a long object that can contain the largest possible
          * integer with this base and length.  Note that there's no
          * need to initialize z->ob_digit -- no slot is read up before
          * being stored into.
          */
-        size_z = (Py_ssize_t)((scan - str) * log_base_PyLong_BASE[base]) + 1;
+        size_z = (Py_ssize_t)(digits * log_base_PyLong_BASE[base]) + 1;
         /* Uncomment next line to test exceedingly rare copy code */
         /* size_z = 1; */
         assert(size_z > 0);
@@ -1907,9 +1974,17 @@ digit beyond the first.
 
         /* Work ;-) */
         while (str < scan) {
+            if (*str == '_') {
+                str++;
+                continue;
+            }
             /* grab up to convwidth digits from the input string */
             c = (digit)_PyLong_DigitValue[Py_CHARMASK(*str++)];
-            for (i = 1; i < convwidth && str != scan; ++i, ++str) {
+            for (i = 1; i < convwidth && str != scan; ++str) {
+                if (*str == '_') {
+                    continue;
+                }
+                i++;
                 c = (twodigits)(c *  base +
                                 _PyLong_DigitValue[Py_CHARMASK(*str)]);
                 assert(c < PyLong_BASE);
