@@ -52,14 +52,20 @@ invalid_comma_type(STRINGLIB_CHAR presentation_type)
     if (presentation_type > 32 && presentation_type < 128)
 #endif
         PyErr_Format(PyExc_ValueError,
-                     "Cannot specify ',' with '%c'.",
+                     "Cannot specify ',' or '_' with '%c'.",
                      (char)presentation_type);
 #if STRINGLIB_IS_UNICODE
     else
         PyErr_Format(PyExc_ValueError,
-                     "Cannot specify ',' with '\\x%x'.",
+                     "Cannot specify ',' or '_' with '\\x%x'.",
                      (unsigned int)presentation_type);
 #endif
+}
+
+static void
+invalid_comma_and_underscore()
+{
+    PyErr_Format(PyExc_ValueError, "Cannot specify both ',' and '_'.");
 }
 
 /*
@@ -127,6 +133,12 @@ is_sign_element(STRINGLIB_CHAR c)
     }
 }
 
+/* Locale type codes. LT_NO_LOCALE must be zero. */
+#define LT_NO_LOCALE 0
+#define LT_DEFAULT_LOCALE 1
+#define LT_UNDERSCORE_LOCALE 2
+#define LT_UNDER_FOUR_LOCALE 3
+#define LT_CURRENT_LOCALE 4
 
 typedef struct {
     STRINGLIB_CHAR fill_char;
@@ -242,8 +254,21 @@ parse_internal_render_format_spec(STRINGLIB_CHAR *format_spec,
 
     /* Comma signifies add thousands separators */
     if (end-ptr && ptr[0] == ',') {
-        format->thousands_separators = 1;
+        format->thousands_separators = LT_DEFAULT_LOCALE;
         ++ptr;
+    }
+    /* Underscore signifies add thousands separators */
+    if (end-ptr && ptr[0] == '_') {
+        if (format->thousands_separators != 0) {
+            invalid_comma_and_underscore();
+            return 0;
+        }
+        format->thousands_separators = LT_UNDERSCORE_LOCALE;
+        ++ptr;
+    }
+    if (end-ptr && ptr[0] == ',') {
+        invalid_comma_and_underscore();
+        return 0;
     }
 
     /* Parse field precision */
@@ -294,6 +319,16 @@ parse_internal_render_format_spec(STRINGLIB_CHAR *format_spec,
         case '\0':
             /* These are allowed. See PEP 378.*/
             break;
+        case 'b':
+        case 'o':
+        case 'x':
+        case 'X':
+            /* Underscores are allowed in bin/oct/hex. See PEP 515. */
+            if (format->thousands_separators == LT_UNDERSCORE_LOCALE) {
+                /* Every four digits, not every three, in bin/oct/hex. */
+                format->thousands_separators = LT_UNDER_FOUR_LOCALE;
+                break;
+            }
         default:
             invalid_comma_type(format->type);
             return 0;
@@ -359,11 +394,6 @@ fill_padding(STRINGLIB_CHAR *p, Py_ssize_t nchars, STRINGLIB_CHAR fill_char,
 /************************************************************************/
 /*********** common routines for numeric formatting *********************/
 /************************************************************************/
-
-/* Locale type codes. */
-#define LT_CURRENT_LOCALE 0
-#define LT_DEFAULT_LOCALE 1
-#define LT_NO_LOCALE 2
 
 /* Locale info needed for formatting integers and the part of floats
    before and including the decimal. Note that locales only support
@@ -633,8 +663,8 @@ static char no_grouping[1] = {CHAR_MAX};
 
 /* Find the decimal point character(s?), thousands_separator(s?), and
    grouping description, either for the current locale if type is
-   LT_CURRENT_LOCALE, a hard-coded locale if LT_DEFAULT_LOCALE, or
-   none if LT_NO_LOCALE. */
+   LT_CURRENT_LOCALE, a hard-coded locale if LT_DEFAULT_LOCALE or
+   LT_UNDERSCORE_LOCALE/LT_UNDER_FOUR_LOCALE, or none if LT_NO_LOCALE. */
 static void
 get_locale_info(int type, LocaleInfo *locale_info)
 {
@@ -647,11 +677,16 @@ get_locale_info(int type, LocaleInfo *locale_info)
         break;
     }
     case LT_DEFAULT_LOCALE:
+    case LT_UNDERSCORE_LOCALE:
+    case LT_UNDER_FOUR_LOCALE:
         locale_info->decimal_point = ".";
-        locale_info->thousands_sep = ",";
-        locale_info->grouping = "\3"; /* Group every 3 characters.  The
-                                         (implicit) trailing 0 means repeat
-                                         infinitely. */
+        locale_info->thousands_sep = (type == LT_DEFAULT_LOCALE ? "," : "_");
+        if (type != LT_UNDER_FOUR_LOCALE)
+            locale_info->grouping = "\3"; /* Group every 3 characters.  The
+                                          (implicit) trailing 0 means repeat
+                                          infinitely. */
+        else
+            locale_info->grouping = "\4"; /* Bin/oct/hex group every four. */
         break;
     case LT_NO_LOCALE:
         locale_info->decimal_point = ".";
@@ -886,9 +921,7 @@ format_int_or_long_internal(PyObject *value, const InternalFormatSpec *format,
 
     /* Determine the grouping, separator, and decimal point, if any. */
     get_locale_info(format->type == 'n' ? LT_CURRENT_LOCALE :
-                    (format->thousands_separators ?
-                     LT_DEFAULT_LOCALE :
-                     LT_NO_LOCALE),
+                    format->thousands_separators,
                     &locale);
 
     /* Calculate how much memory we'll need. */
@@ -1040,9 +1073,7 @@ format_float_internal(PyObject *value,
 
     /* Determine the grouping, separator, and decimal point, if any. */
     get_locale_info(format->type == 'n' ? LT_CURRENT_LOCALE :
-                    (format->thousands_separators ?
-                     LT_DEFAULT_LOCALE :
-                     LT_NO_LOCALE),
+                    format->thousands_separators,
                     &locale);
 
     /* Calculate how much memory we'll need. */
@@ -1233,9 +1264,7 @@ format_complex_internal(PyObject *value,
 
     /* Determine the grouping, separator, and decimal point, if any. */
     get_locale_info(format->type == 'n' ? LT_CURRENT_LOCALE :
-                    (format->thousands_separators ?
-                     LT_DEFAULT_LOCALE :
-                     LT_NO_LOCALE),
+                    format->thousands_separators,
                     &locale);
 
     /* Turn off any padding. We'll do it later after we've composed
