@@ -661,6 +661,63 @@ set_name:
     return result;
 }
 
+/* returns -1 if failed to handle keyword only arguments
+   returns new position to keep processing if successful
+               (',' NAME ['=' test])* 
+                     ^^^
+   start pointing here
+ */
+static int
+handle_keywordonly_args(struct compiling *c, const node *n, int start,
+                        asdl_seq *kwonlyargs, asdl_seq *kwdefaults)
+{
+    node *ch;
+    expr_ty name;
+    int i = start;
+    int j = 0; /* index for kwdefaults and kwonlyargs */
+    assert((kwonlyargs != NULL && kwdefaults != NULL) ||
+           TYPE(CHILD(n, i)) == DOUBLESTAR);
+    while (i < NCH(n)) {
+        ch = CHILD(n, i);
+        switch (TYPE(ch)) {
+            case NAME:
+                if (i + 1 < NCH(n) && TYPE(CHILD(n, i + 1)) == EQUAL) {
+                    expr_ty expression = ast_for_expr(c, CHILD(n, i + 2));
+                    if (!expression) {
+                        ast_error(ch, "assignment to None");
+                        goto error;
+                    }
+                    asdl_seq_SET(kwdefaults, j, expression);
+                    i += 2; /* '=' and test */
+                }
+                else { /* setting NULL if no default value exists */
+                    asdl_seq_SET(kwdefaults, j, NULL);
+                }
+                if (!strcmp(STR(ch), "None")) {
+                    ast_error(ch, "assignment to None");
+                    goto error;
+                }
+                name = Name(NEW_IDENTIFIER(ch),
+                            Param, LINENO(ch), ch->n_col_offset,
+                            c->c_arena);
+                if (!name) {
+                    ast_error(ch, "expecting name");
+                    goto error;
+                }
+                asdl_seq_SET(kwonlyargs, j++, name);
+                i += 2; /* the name and the comma */
+                break;
+            case DOUBLESTAR:
+                return i;
+            default:
+                ast_error(ch, "unexpected node");
+                goto error;
+        }
+    }
+    return i;
+ error:
+    return -1;   
+}
 
 /* Create AST for argument list. */
 
@@ -668,35 +725,71 @@ static arguments_ty
 ast_for_arguments(struct compiling *c, const node *n)
 {
     /* parameters: '(' [varargslist] ')'
-       varargslist: (fpdef ['=' test] ',')* ('*' NAME [',' '**' NAME]
-            | '**' NAME) | fpdef ['=' test] (',' fpdef ['=' test])* [',']
+       varargslist: (fpdef ['=' test] ',')* 
+             ('*' [NAME] (',' fpdef ['=' test])* [',' '**' NAME] | '**' NAME)
+             | fpdef ['=' test] (',' fpdef ['=' test])* [',']
     */
-    int i, j, k, n_args = 0, n_defaults = 0, found_default = 0;
-    asdl_seq *args, *defaults;
+    int i, j, k, nposargs = 0, nkwonlyargs = 0;
+    int nposdefaults = 0, found_default = 0;
+    asdl_seq *posargs, *posdefaults, *kwonlyargs, *kwdefaults;
     identifier vararg = NULL, kwarg = NULL;
     node *ch;
 
     if (TYPE(n) == parameters) {
         if (NCH(n) == 2) /* () as argument list */
-            return arguments(NULL, NULL, NULL, NULL, c->c_arena);
+            return arguments(NULL, NULL, NULL, NULL, NULL, NULL, c->c_arena);
         n = CHILD(n, 1);
     }
     REQ(n, varargslist);
 
-    /* first count the number of normal args & defaults */
+    /* first count the number of positional args & defaults */
     for (i = 0; i < NCH(n); i++) {
         ch = CHILD(n, i);
-        if (TYPE(ch) == fpdef)
-            n_args++;
-        if (TYPE(ch) == EQUAL)
-            n_defaults++;
+        if (TYPE(ch) == STAR) {
+            if (TYPE(CHILD(n, i+1)) == NAME) {
+            /* skip NAME of vararg */
+            /* so that following can count only keyword only args */
+                i += 2;
+            }
+            else {
+                i++;
+            }
+            break; 
+        }
+        if (TYPE(ch) == fpdef) nposargs++;
+        if (TYPE(ch) == EQUAL) nposdefaults++;
     }
-    args = (n_args ? asdl_seq_new(n_args, c->c_arena) : NULL);
-    if (!args && n_args)
-        return NULL;
-    defaults = (n_defaults ? asdl_seq_new(n_defaults, c->c_arena) : NULL);
-    if (!defaults && n_defaults)
-        return NULL;
+    /* count the number of keyword only args & 
+       defaults for keyword only args */
+    for ( ; i < NCH(n); ++i) {
+        ch = CHILD(n, i);
+        if (TYPE(ch) == DOUBLESTAR) break;
+        if (TYPE(ch) == NAME) nkwonlyargs++;
+    }
+
+    posargs = (nposargs ? asdl_seq_new(nposargs, c->c_arena) : NULL);
+    if (!posargs && nposargs)
+            return NULL; /* Don't need to goto error; no objects allocated */
+    kwonlyargs = (nkwonlyargs ?
+                   asdl_seq_new(nkwonlyargs, c->c_arena) : NULL);
+    if (!kwonlyargs && nkwonlyargs)
+            return NULL; /* Don't need to goto error; no objects allocated */
+    posdefaults = (nposdefaults ? 
+                    asdl_seq_new(nposdefaults, c->c_arena) : NULL);
+    if (!posdefaults && nposdefaults)
+            return NULL; /* Don't need to goto error; no objects allocated */
+    /* The length of kwonlyargs and kwdefaults are same 
+       since we set NULL as default for keyword only argument w/o default
+       - we have sequence data structure, but no dictionary */
+    kwdefaults = (nkwonlyargs ? 
+                   asdl_seq_new(nkwonlyargs, c->c_arena) : NULL);
+    if (!kwdefaults && nkwonlyargs)
+            return NULL; /* Don't need to goto error; no objects allocated */
+
+    if (nposargs + nkwonlyargs > 255) {
+		ast_error(n, "more than 255 arguments");
+		return NULL;
+    }
 
     /* fpdef: NAME | '(' fplist ')'
        fplist: fpdef (',' fpdef)* [',']
@@ -716,9 +809,10 @@ ast_for_arguments(struct compiling *c, const node *n)
                 if (i + 1 < NCH(n) && TYPE(CHILD(n, i + 1)) == EQUAL) {
                     expr_ty expression = ast_for_expr(c, CHILD(n, i + 2));
                     if (!expression)
-                        return NULL;
-                    assert(defaults != NULL);
-                    asdl_seq_SET(defaults, j++, expression);
+                        goto error;
+                    assert(posdefaults != NULL);
+                    asdl_seq_SET(posdefaults, j++, expression);
+
                     i += 2;
                     found_default = 1;
                 }
@@ -738,6 +832,7 @@ ast_for_arguments(struct compiling *c, const node *n)
                     /* def foo((x)): is not complex, special case. */
                     if (NCH(ch) != 1) {
                         /* We have complex arguments, setup for unpacking. */
+<<<<<<< ours
                         if (Py_Py3kWarningFlag && !ast_warn(c, ch,
                             "tuple parameter unpacking has been removed in 3.x"))
                             return NULL;
@@ -769,6 +864,28 @@ ast_for_arguments(struct compiling *c, const node *n)
                         return NULL;
                     asdl_seq_SET(args, k++, name);
 
+=======
+                        asdl_seq_SET(posargs, k++,
+                                     compiler_complex_args(c, ch));
+                    } else {
+                        /* def foo((x)): setup for checking NAME below. */
+                        ch = CHILD(ch, 0);
+                    }
+                }
+                if (TYPE(CHILD(ch, 0)) == NAME) {
+                    expr_ty name;
+                    if (!strcmp(STR(CHILD(ch, 0)), "None")) {
+                            ast_error(CHILD(ch, 0), "assignment to None");
+                            goto error;
+                    }
+                    name = Name(NEW_IDENTIFIER(CHILD(ch, 0)),
+                                Param, LINENO(ch), ch->n_col_offset,
+                                c->c_arena);
+                    if (!name)
+                        goto error;
+                    asdl_seq_SET(posargs, k++, name);
+                                         
+>>>>>>> theirs
                 }
                 i += 2; /* the name and the comma */
                 if (parenthesized && Py_Py3kWarningFlag &&
@@ -779,6 +896,7 @@ ast_for_arguments(struct compiling *c, const node *n)
                 break;
             }
             case STAR:
+<<<<<<< ours
                 if (!forbidden_check(c, CHILD(n, i+1), STR(CHILD(n, i+1))))
                     return NULL;
                 vararg = NEW_IDENTIFIER(CHILD(n, i+1));
@@ -789,6 +907,41 @@ ast_for_arguments(struct compiling *c, const node *n)
             case DOUBLESTAR:
                 if (!forbidden_check(c, CHILD(n, i+1), STR(CHILD(n, i+1))))
                     return NULL;
+=======
+                if (i+1 >= NCH(n)) {
+                    ast_error(CHILD(n, i), "no name for vararg");
+		    goto error;
+                }
+                if (!strcmp(STR(CHILD(n, i+1)), "None")) {
+                        ast_error(CHILD(n, i+1), "assignment to None");
+                        goto error;
+                }
+                if (TYPE(CHILD(n, i+1)) == COMMA) {
+                    int res = 0;    
+                    i += 2; /* now follows keyword only arguments */
+                    res = handle_keywordonly_args(c, n, i,
+                                                  kwonlyargs, kwdefaults);
+                    if (res == -1) goto error;
+                    i = res; /* res has new position to process */
+                }
+                else {
+                    vararg = NEW_IDENTIFIER(CHILD(n, i+1));
+                    i += 3;
+                    if (i < NCH(n) && TYPE(CHILD(n, i)) == NAME) {
+                        int res = 0;
+                        res = handle_keywordonly_args(c, n, i,
+                                                      kwonlyargs, kwdefaults);
+                        if (res == -1) goto error;
+                        i = res; /* res has new position to process */
+                    }
+                }
+                break;
+            case DOUBLESTAR:
+                if (!strcmp(STR(CHILD(n, i+1)), "None")) {
+                        ast_error(CHILD(n, i+1), "assignment to None");
+                        goto error;
+                }
+>>>>>>> theirs
                 kwarg = NEW_IDENTIFIER(CHILD(n, i+1));
                 if (!kwarg)
                     return NULL;
@@ -798,11 +951,23 @@ ast_for_arguments(struct compiling *c, const node *n)
                 PyErr_Format(PyExc_SystemError,
                              "unexpected node in varargslist: %d @ %d",
                              TYPE(ch), i);
+<<<<<<< ours
                 return NULL;
         }
     }
 
     return arguments(args, vararg, kwarg, defaults, c->c_arena);
+=======
+                goto error;
+        }
+    }
+    return arguments(posargs, vararg, kwonlyargs, kwarg, 
+                     posdefaults, kwdefaults, c->c_arena);
+ error:
+    Py_XDECREF(vararg);
+    Py_XDECREF(kwarg);
+    return NULL;
+>>>>>>> theirs
 }
 
 static expr_ty
@@ -959,7 +1124,7 @@ ast_for_lambdef(struct compiling *c, const node *n)
     expr_ty expression;
 
     if (NCH(n) == 3) {
-        args = arguments(NULL, NULL, NULL, NULL, c->c_arena);
+        args = arguments(NULL, NULL, NULL, NULL, NULL, NULL, c->c_arena);
         if (!args)
             return NULL;
         expression = ast_for_expr(c, CHILD(n, 2));
