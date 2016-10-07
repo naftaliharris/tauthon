@@ -10,6 +10,7 @@ extern "C" {
 typedef struct {
     PyObject_HEAD
     int co_argcount;		/* #arguments, except *args */
+    int co_kwonlyargcount;     /* #keyword only arguments */
     int co_nlocals;		/* #local variables */
     int co_stacksize;		/* #entries needed for evaluation stack */
     int co_flags;		/* CO_..., see below */
@@ -71,6 +72,13 @@ PyAPI_DATA(PyTypeObject) PyCode_Type;
 PyAPI_FUNC(PyCodeObject *) PyCode_New(
 	int, int, int, int, PyObject *, PyObject *, PyObject *, PyObject *,
 	PyObject *, PyObject *, PyObject *, PyObject *, int, PyObject *);
+        /* same as struct above */
+
+/* Define a new API so we don't break C-API backward compatibility */
+PyAPI_FUNC(PyCodeObject *) PyCode_New28(
+        int, int, int, int, int, PyObject *, PyObject *,
+        PyObject *, PyObject *, PyObject *, PyObject *,
+        PyObject *, PyObject *, int, PyObject *); 
         /* same as struct above */
 
 /* Creates a new empty code object with the specified source location. */
