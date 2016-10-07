@@ -78,9 +78,10 @@ typedef unsigned short mode_t;
        Python 2.7a0  62201 (introduce BUILD_SET)
        Python 2.7a0  62211 (introduce MAP_ADD and SET_ADD)
        Python 2.8a0  62221 (introduce matrix multiplication operator)
+       Python 2.8a0  62231 (added keyword-only parameters)
 .
 */
-#define MAGIC (62221 | ((long)'\r'<<16) | ((long)'\n'<<24))
+#define MAGIC (62231 | ((long)'\r'<<16) | ((long)'\n'<<24))
 
 /* Magic word as global; note that _PyImport_Init() can change the
    value of this global to accommodate for alterations of how the
