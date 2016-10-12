@@ -67,9 +67,9 @@ class PythonValuesTestCase(unittest.TestCase):
                 break
             items.append((entry.name, entry.size))
 
-        expected = [("__hello__", 104),
-                    ("__phello__", -104),
-                    ("__phello__.spam", 104)]
+        expected = [("__hello__", 118),
+                    ("__phello__", -118),
+                    ("__phello__.spam", 118)]
         self.assertEqual(items, expected)
 
         from ctypes import _pointer_type_cache
