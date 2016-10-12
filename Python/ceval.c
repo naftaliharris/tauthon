@@ -3483,10 +3483,11 @@ PyEval_EvalCodeEx28(PyCodeObject *co, PyObject *globals, PyObject *locals,
             if (!(co->co_flags & CO_VARARGS)) {
                 PyErr_Format(PyExc_TypeError,
                     "%.200s() takes %s %d "
-                    "positional argument%s (%d given)",
+                    "%sargument%s (%d given)",
                     PyString_AsString(co->co_name),
                     defcount ? "at most" : "exactly",
                     co->co_argcount,
+                    co->co_kwonlyargcount > 0 ? "positional " : "",
                     co->co_argcount == 1 ? "" : "s",
                     argcount + kwcount);
                 goto fail;
@@ -3607,12 +3608,13 @@ PyEval_EvalCodeEx28(PyCodeObject *co, PyObject *globals, PyObject *locals,
                             given++;
                     PyErr_Format(PyExc_TypeError,
                         "%.200s() takes %s %d "
-                        "positional argument%s (%d given)",
+                        "%sargument%s (%d given)",
                         PyString_AsString(co->co_name),
                         ((co->co_flags & CO_VARARGS) ||
                          defcount) ? "at least"
                                    : "exactly",
-                        m, m == 1 ? "" : "s", given);
+                        m, co->co_kwonlyargcount > 0 ? "positional " : "",
+                        m == 1 ? "" : "s", given);
                     goto fail;
                 }
             }
