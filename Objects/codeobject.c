@@ -50,7 +50,7 @@ PyCode_New28(int argcount, int kwonlyargcount,
     PyCodeObject *co;
     Py_ssize_t i;
     /* Check argument types */
-    if (argcount < 0 || nlocals < 0 ||
+    if (argcount < 0 || kwonlyargcount < 0 || nlocals < 0 ||
         code == NULL ||
         consts == NULL || !PyTuple_Check(consts) ||
         names == NULL || !PyTuple_Check(names) ||
@@ -238,7 +238,8 @@ validate_and_copy_tuple(PyObject *tup)
 
 PyDoc_STRVAR(code_doc,
 "code(argcount, nlocals, stacksize, flags, codestring, constants, names,\n\
-      varnames, filename, name, firstlineno, lnotab[, freevars[, cellvars]])\n\
+      varnames, filename, name, firstlineno, lnotab[, freevars[, cellvars[,\n\
+      kwonlyargcount]]])\n\
 \n\
 Create a code object.  Not for the faint of heart.");
 
@@ -246,7 +247,6 @@ static PyObject *
 code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
     int argcount;
-    int kwonlyargcount;
     int nlocals;
     int stacksize;
     int flags;
@@ -257,14 +257,14 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     PyObject *varnames, *ourvarnames = NULL;
     PyObject *freevars = NULL, *ourfreevars = NULL;
     PyObject *cellvars = NULL, *ourcellvars = NULL;
+    int kwonlyargcount = 0;
     PyObject *filename;
     PyObject *name;
     int firstlineno;
     PyObject *lnotab;
 
-    if (!PyArg_ParseTuple(args, "iiiiiSO!O!O!SSiS|O!O!:code",
-                          &argcount, &kwonlyargcount,
-                          &nlocals, &stacksize, &flags,
+    if (!PyArg_ParseTuple(args, "iiiiSO!O!O!SSiS|O!O!i:code",
+                          &argcount, &nlocals, &stacksize, &flags,
                           &code,
                           &PyTuple_Type, &consts,
                           &PyTuple_Type, &names,
@@ -272,7 +272,7 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
                           &filename, &name,
                           &firstlineno, &lnotab,
                           &PyTuple_Type, &freevars,
-                          &PyTuple_Type, &cellvars))
+                          &PyTuple_Type, &cellvars, &kwonlyargcount))
         return NULL;
 
     if (argcount < 0) {
