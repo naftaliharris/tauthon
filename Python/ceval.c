@@ -3140,7 +3140,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 err = PyFunction_SetDefaults(x, v);
                 Py_DECREF(v);
             }
-            if (x != NULL && kwdefaults > 0) {
+            if (x != NULL && kwdefaults > 0 && !err) {
                 v = PyDict_New();
                 if (v == NULL) {
                     Py_DECREF(x);
