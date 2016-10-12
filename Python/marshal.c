@@ -1012,7 +1012,7 @@ r_object(RFILE *p)
 
             /* XXX ignore long->int overflows for now */
             argcount = (int)r_long(p);
-            kwonlyargcount = r_long(p);
+            kwonlyargcount = (int)r_long(p);
             nlocals = (int)r_long(p);
             stacksize = (int)r_long(p);
             flags = (int)r_long(p);
