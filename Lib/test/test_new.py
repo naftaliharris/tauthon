@@ -105,10 +105,11 @@ class NewTest(unittest.TestCase):
     if hasattr(new, 'code'):
         def test_code(self):
             # bogus test of new.code()
-            def f(a): pass
+            def f(a, *, b): pass
 
             c = f.func_code
             argcount = c.co_argcount
+            kwonlyargcount = c.co_kwonlyargcount
             nlocals = c.co_nlocals
             stacksize = c.co_stacksize
             flags = c.co_flags
@@ -123,6 +124,12 @@ class NewTest(unittest.TestCase):
             freevars = c.co_freevars
             cellvars = c.co_cellvars
 
+            d = new.code(argcount, nlocals, stacksize, flags, codestring,
+                         constants, names, varnames, filename, name,
+                         firstlineno, lnotab, freevars, cellvars,
+                         kwonlyargcount)
+
+            # test backwards-compatibility version with no kwonlyargcount
             d = new.code(argcount, nlocals, stacksize, flags, codestring,
                          constants, names, varnames, filename, name,
                          firstlineno, lnotab, freevars, cellvars)
@@ -146,6 +153,12 @@ class NewTest(unittest.TestCase):
             self.assertRaises(TypeError, new.code,
                 argcount, nlocals, stacksize, flags, codestring,
                 constants, (5,), varnames, filename, name, firstlineno, lnotab)
+
+            # negative co_kwonlyargcount should fail gracefully
+            self.assertRaises(ValueError, new.code,
+                argcount, nlocals, stacksize, flags, codestring,
+                constants, names, varnames, filename, name, firstlineno, lnotab,
+                freevars, cellvars, -kwonlyargcount)
 
             # new.code used to be a way to mutate a tuple...
             class S(str):
