@@ -562,7 +562,7 @@ class SizeofTest(unittest.TestCase):
         # complex
         check(complex(0,1), size('2d'))
         # code
-        check(get_cell().func_code, size('4i8Pi3P'))
+        check(get_cell().func_code, size('5i8Pi3P'))
         # BaseException
         check(BaseException(), size('3P'))
         # UnicodeEncodeError
@@ -623,7 +623,7 @@ class SizeofTest(unittest.TestCase):
         check(x, vsize('12P3i' + CO_MAXBLOCKS*'3i' + 'P' + extras*'P'))
         # function
         def func(): pass
-        check(func, size('9P'))
+        check(func, size('10P'))
         class c():
             @staticmethod
             def foo():

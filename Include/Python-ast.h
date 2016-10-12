@@ -362,8 +362,10 @@ struct _excepthandler {
 struct _arguments {
         asdl_seq *args;
         identifier vararg;
+        asdl_seq *kwonlyargs;
         identifier kwarg;
         asdl_seq *defaults;
+        asdl_seq *kw_defaults;
 };
 
 struct _keyword {
@@ -530,9 +532,10 @@ comprehension_ty _Py_comprehension(expr_ty target, expr_ty iter, asdl_seq *
 #define ExceptHandler(a0, a1, a2, a3, a4, a5) _Py_ExceptHandler(a0, a1, a2, a3, a4, a5)
 excepthandler_ty _Py_ExceptHandler(expr_ty type, expr_ty name, asdl_seq * body,
                                    int lineno, int col_offset, PyArena *arena);
-#define arguments(a0, a1, a2, a3, a4) _Py_arguments(a0, a1, a2, a3, a4)
-arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, identifier
-                           kwarg, asdl_seq * defaults, PyArena *arena);
+#define arguments(a0, a1, a2, a3, a4, a5, a6) _Py_arguments(a0, a1, a2, a3, a4, a5, a6)
+arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, asdl_seq *
+                           kwonlyargs, identifier kwarg, asdl_seq * defaults,
+                           asdl_seq * kw_defaults, PyArena *arena);
 #define keyword(a0, a1, a2) _Py_keyword(a0, a1, a2)
 keyword_ty _Py_keyword(identifier arg, expr_ty value, PyArena *arena);
 #define alias(a0, a1, a2) _Py_alias(a0, a1, a2)
