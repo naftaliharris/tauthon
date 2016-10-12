@@ -20,6 +20,8 @@ def mixedargs_sum(a, b=0, *arg, k1, k2=0):
     return a + b + k1 + k2 + sum(arg)
 def mixedargs_sum2(a, b=0, *arg, k1, k2=0, **kwargs):
     return a + b + k1 + k2 + sum(arg) + sum(kwargs.values())
+def unpack_sum((a, b), *, c=0):
+    return a + b + c
 
 def sortnum(*nums, reverse=False):
     return sorted(list(nums), reverse=reverse)
@@ -53,18 +55,6 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
         self.assertRaisesSyntaxError("def f(p, *, (k1, k2), **kw):\n  pass\n")
 
     def testSyntaxForManyArguments(self):
-        fundef = "def f("
-        for i in range(255):
-            fundef += "i%d, "%i
-        fundef += "*, key=100):\n pass\n"
-        self.assertRaisesSyntaxError(fundef)
-
-        fundef2 = "def foo(i,*,"
-        for i in range(255):
-            fundef2 += "i%d, "%i
-        fundef2 += "lastarg):\n  pass\n"
-        self.assertRaisesSyntaxError(fundef2)
-
         # exactly 255 arguments, should compile ok
         fundef3 = "def f(i,*,"
         for i in range(253):
@@ -74,7 +64,6 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
  
     def testSyntaxErrorForFunctionCall(self):
         self.assertRaisesSyntaxError("f(p, k=1, p2)")
-        self.assertRaisesSyntaxError("f(p, *(1,2), k1=100)")
 
     def testRaiseErrorFuncallWithUnexpectedKeywordArgument(self):
         self.assertRaises(TypeError, keywordonly_sum, ())
@@ -119,6 +108,9 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
                           mixedargs_sum2(1, 2, 3, k1=4, k2=5, k3=6))
         self.assertEquals(1+2+3+4+5+6,
                           mixedargs_sum2(1, 2, 3, k1=4, **{'k2':5, 'k3':6}))
+
+        self.assertEquals(1+2+3, unpack_sum((1, 2), c=3))
+        self.assertEquals(1+2, unpack_sum((1, 2)))
 
         self.assertEquals(1, Foo(k1=1).sum())
         self.assertEquals(1+2, Foo(k1=1,k2=2).sum())
