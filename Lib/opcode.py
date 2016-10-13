@@ -82,6 +82,12 @@ def_op('STORE_SLICE+1', 41)
 def_op('STORE_SLICE+2', 42)
 def_op('STORE_SLICE+3', 43)
 
+def_op('GET_AITER', 45)
+def_op('GET_ANEXT', 46)
+def_op('BEFORE_ASYNC_WITH', 47)
+def_op('GET_YIELD_FROM_ITER', 48)
+def_op('GET_AWAITABLE', 49)
+
 def_op('DELETE_SLICE+0', 50)
 def_op('DELETE_SLICE+1', 51)
 def_op('DELETE_SLICE+2', 52)
