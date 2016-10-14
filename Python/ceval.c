@@ -3210,6 +3210,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             else
                 err = 0;
             Py_DECREF(x);
+            //Py_DECREF(u);  RSI/TODO Possibly???!!!
 
             if (err < 0)
                 break; /* Go to error exit */
@@ -3823,7 +3824,22 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
         }
     }
 
-    if (co->co_flags & CO_GENERATOR) {
+    if (co->co_flags & (CO_GENERATOR | CO_COROUTINE)) {
+        PyObject *gen;
+        PyObject *coro_wrapper = tstate->coroutine_wrapper;
+        int is_coro = co->co_flags & CO_COROUTINE;
+
+        if (is_coro && tstate->in_coroutine_wrapper) {
+            assert(coro_wrapper != NULL);
+            PyErr_Format(PyExc_RuntimeError,
+                         "coroutine wrapper %.200R attempted "
+                         "to recursively wrap %.200R",
+                         coro_wrapper,
+                         co);
+                        /* TODO/RSI: Fix the format string above! */
+            goto fail;
+        }
+
         /* Don't need to keep the reference to f_back, it will be set
          * when the generator is resumed. */
         Py_CLEAR(f->f_back);
@@ -3832,7 +3848,23 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
 
         /* Create a new generator that owns the ready to run frame
          * and return that as the value. */
-        return PyGen_New(f);
+        if (is_coro) {
+            gen = PyCoro_New(f);
+        } else {
+            gen = PyGen_New(f);
+        }
+        if (gen == NULL)
+            return NULL;
+
+        if (is_coro && coro_wrapper != NULL) {
+            PyObject *wrapped;
+            tstate->in_coroutine_wrapper = 1;
+            wrapped = PyObject_CallFunction(coro_wrapper, "N", gen);
+            tstate->in_coroutine_wrapper = 0;
+            return wrapped;
+        }
+
+        return gen;
     }
 
     retval = PyEval_EvalFrameEx(f,0);
@@ -4363,6 +4395,24 @@ PyEval_SetTrace(Py_tracefunc func, PyObject *arg)
     /* Flag that tracing or profiling is turned on */
     tstate->use_tracing = ((func != NULL)
                            || (tstate->c_profilefunc != NULL));
+}
+
+void
+_PyEval_SetCoroutineWrapper(PyObject *wrapper)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+
+    Py_CLEAR(tstate->coroutine_wrapper);
+
+    Py_XINCREF(wrapper);
+    tstate->coroutine_wrapper = wrapper;
+}
+
+PyObject *
+_PyEval_GetCoroutineWrapper(void)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    return tstate->coroutine_wrapper;
 }
 
 PyObject *

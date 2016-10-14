@@ -1713,7 +1713,6 @@ compiler_for(struct compiler *c, stmt_ty s)
 static int
 compiler_async_for(struct compiler *c, stmt_ty s)
 {
-    printf("here!\n");
     //static PyObject *stopiter_error = NULL;
     basicblock *try, *except, *end, *after_try, *try_cleanup,
                *after_loop, *after_loop_else;

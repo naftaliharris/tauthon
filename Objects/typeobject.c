@@ -2338,6 +2338,7 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
         type->tp_flags |= Py_TPFLAGS_CHECKTYPES;
 
     /* Initialize essential fields */
+    type->tp_as_async = &et->as_async;
     type->tp_as_number = &et->as_number;
     type->tp_as_sequence = &et->as_sequence;
     type->tp_as_mapping = &et->as_mapping;
@@ -3787,6 +3788,7 @@ inherit_slots(PyTypeObject *type, PyTypeObject *base)
 #define COPYSLOT(SLOT) \
     if (!type->SLOT && SLOTDEFINED(SLOT)) type->SLOT = base->SLOT
 
+#define COPYASYNC(SLOT) COPYSLOT(tp_as_async->SLOT)
 #define COPYNUM(SLOT) COPYSLOT(tp_as_number->SLOT)
 #define COPYSEQ(SLOT) COPYSLOT(tp_as_sequence->SLOT)
 #define COPYMAP(SLOT) COPYSLOT(tp_as_mapping->SLOT)
@@ -3844,6 +3846,15 @@ inherit_slots(PyTypeObject *type, PyTypeObject *base)
         }
         COPYNUM(nb_matrix_multiply);
         COPYNUM(nb_inplace_matrix_multiply);
+    }
+
+    if (type->tp_as_async != NULL && base->tp_as_async != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_async == NULL)
+            basebase = NULL;
+        COPYASYNC(am_await);
+        COPYASYNC(am_aiter);
+        COPYASYNC(am_anext);
     }
 
     if (type->tp_as_sequence != NULL && base->tp_as_sequence != NULL) {
@@ -4123,6 +4134,8 @@ PyType_Ready(PyTypeObject *type)
     /* Some more special stuff */
     base = type->tp_base;
     if (base != NULL) {
+        if (type->tp_as_async == NULL)
+            type->tp_as_async = base->tp_as_async;
         if (type->tp_as_number == NULL)
             type->tp_as_number = base->tp_as_number;
         if (type->tp_as_sequence == NULL)
@@ -5818,6 +5831,59 @@ slot_tp_del(PyObject *self)
 #endif
 }
 
+static PyObject *
+slot_am_await(PyObject *self)
+{
+    PyObject *func, *res;
+    static PyObject *await_str;
+
+    func = lookup_method(self, "__await__", &await_str);
+    if (func != NULL) {
+        res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        return res;
+    }
+    PyErr_Format(PyExc_AttributeError,
+                 "object %.50s does not have __await__ method",
+                 Py_TYPE(self)->tp_name);
+    return NULL;
+}
+
+static PyObject *
+slot_am_aiter(PyObject *self)
+{
+    PyObject *func, *res;
+    static PyObject *aiter_str;
+
+    func = lookup_method(self, "__aiter__", &aiter_str);
+    if (func != NULL) {
+        res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        return res;
+    }
+    PyErr_Format(PyExc_AttributeError,
+                 "object %.50s does not have __aiter__ method",
+                 Py_TYPE(self)->tp_name);
+    return NULL;
+}
+
+static PyObject *
+slot_am_anext(PyObject *self)
+{
+    PyObject *func, *res;
+    static PyObject *anext_str;
+
+    func = lookup_method(self, "__anext__", &anext_str);
+    if (func != NULL) {
+        res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        return res;
+    }
+    PyErr_Format(PyExc_AttributeError,
+                 "object %.50s does not have __anext__ method",
+                 Py_TYPE(self)->tp_name);
+    return NULL;
+}
 
 /*
 Table mapping __foo__ names to tp_foo offsets and slot_tp_foo wrapper functions.
@@ -5834,6 +5900,7 @@ typedef struct wrapperbase slotdef;
 
 #undef TPSLOT
 #undef FLSLOT
+#undef AMSLOT
 #undef ETSLOT
 #undef SQSLOT
 #undef MPSLOT
@@ -5852,6 +5919,8 @@ typedef struct wrapperbase slotdef;
 #define ETSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) \
     {NAME, offsetof(PyHeapTypeObject, SLOT), (void *)(FUNCTION), WRAPPER, \
      PyDoc_STR(DOC)}
+#define AMSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) \
+    ETSLOT(NAME, as_async.SLOT, FUNCTION, WRAPPER, DOC)
 #define SQSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) \
     ETSLOT(NAME, as_sequence.SLOT, FUNCTION, WRAPPER, DOC)
 #define MPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC) \
@@ -5929,6 +5998,14 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
     TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
+
+    AMSLOT("__await__", am_await, slot_am_await, wrap_unaryfunc,
+           "__await__($self, /)\n--\n\nReturn an iterator to be used in await expression."),
+    AMSLOT("__aiter__", am_aiter, slot_am_aiter, wrap_unaryfunc,
+           "__aiter__($self, /)\n--\n\nReturn an awaitable, that resolves in asynchronous iterator."),
+    AMSLOT("__anext__", am_anext, slot_am_anext, wrap_unaryfunc,
+           "__anext__($self, /)\n--\n\nReturn a value or raise StopAsyncIteration."),
+
     BINSLOT("__add__", nb_add, slot_nb_add,
         "+"),
     RBINSLOT("__radd__", nb_add, slot_nb_add,
@@ -6101,6 +6178,10 @@ slotptr(PyTypeObject *type, int ioffset)
     else if ((size_t)offset >= offsetof(PyHeapTypeObject, as_number)) {
         ptr = (char *)type->tp_as_number;
         offset -= offsetof(PyHeapTypeObject, as_number);
+    }
+    else if ((size_t)offset >= offsetof(PyHeapTypeObject, as_async)) {
+        ptr = (char *)type->tp_as_async;
+        offset -= offsetof(PyHeapTypeObject, as_async);
     }
     else {
         ptr = (char *)type;
