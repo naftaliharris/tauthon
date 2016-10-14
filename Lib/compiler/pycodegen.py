@@ -869,7 +869,8 @@ class CodeGenerator:
         self.emit('LOAD_CONST', None)
         self.nextBlock(final)
         self.setups.push((END_FINALLY, final))
-        self.emit('WITH_CLEANUP')
+        self.emit('WITH_CLEANUP_START')
+        self.emit('WITH_CLEANUP_FINISH')
         self.emit('END_FINALLY')
         self.setups.pop()
         self.__with_count -= 1

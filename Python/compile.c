@@ -1713,6 +1713,7 @@ compiler_for(struct compiler *c, stmt_ty s)
 static int
 compiler_async_for(struct compiler *c, stmt_ty s)
 {
+    // TODO/RSI
     //static PyObject *stopiter_error = NULL;
     basicblock *try, *except, *end, *after_try, *try_cleanup,
                *after_loop, *after_loop_else;
@@ -1762,6 +1763,7 @@ compiler_async_for(struct compiler *c, stmt_ty s)
 
     compiler_use_next_block(c, except);
     ADDOP(c, DUP_TOP);
+    // TODO/RSI
     //ADDOP_O(c, LOAD_GLOBAL, stopiter_error, names);
     ADDOP_I(c, COMPARE_OP, PyCmp_EXC_MATCH);
     ADDOP_JABS(c, POP_JUMP_IF_FALSE, try_cleanup);
@@ -1769,6 +1771,7 @@ compiler_async_for(struct compiler *c, stmt_ty s)
     ADDOP(c, POP_TOP);
     ADDOP(c, POP_TOP);
     ADDOP(c, POP_TOP);
+    // TODO/RSI
     //ADDOP(c, POP_EXCEPT); /* for SETUP_EXCEPT */
     ADDOP(c, POP_BLOCK); /* for SETUP_LOOP */
     ADDOP_JABS(c, JUMP_ABSOLUTE, after_loop_else);
