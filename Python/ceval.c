@@ -3066,7 +3066,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             DISPATCH();
         }
 
-        TARGET(BEFORE_ASYNC_WITH) {
+        TARGET_NOARG(BEFORE_ASYNC_WITH) {
             static PyObject *__aexit__, *__aenter__;
             PyObject *mgr = TOP();
             PyObject *exit = special_lookup(mgr, "__aexit__", &__aexit__),
@@ -3191,7 +3191,19 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (x == NULL)
                 break; /* Go to error exit */
 
-            /* TODO/RSI: There are supposed to be more stuff here?!! */
+            Py_INCREF(u); /* Duplicating the exception on the stack */
+            PUSH(u);
+            PUSH(x);
+            PREDICT(WITH_CLEANUP_FINISH);
+            DISPATCH();
+        }
+
+        PREDICTED(WITH_CLEANUP_FINISH);
+        TARGET_NOARG(WITH_CLEANUP_FINISH)
+        {
+            int err;
+            x = POP();
+            u = POP();
 
             if (u != Py_None)
                 err = PyObject_IsTrue(x);
@@ -3207,20 +3219,17 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 STACKADJ(-2);
                 Py_INCREF(Py_None);
                 SET_TOP(Py_None);
+                /* RSI/TODO: FIGURE OUT WTF TO DO IN THIS CASE!!!
                 Py_DECREF(u);
                 Py_DECREF(v);
                 Py_DECREF(w);
+                */
             } else {
                 /* The stack was rearranged to remove EXIT
                    above. Let END_FINALLY do its thing */
             }
             PREDICT(END_FINALLY);
             break;
-        }
-
-        TARGET_NOARG(WITH_CLEANUP_FINISH)
-        {
-            /* TODO/RSI: Need to put shit in here!!! */
         }
 
         TARGET(CALL_FUNCTION)

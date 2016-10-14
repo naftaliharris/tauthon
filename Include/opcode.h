@@ -50,6 +50,7 @@ extern "C" {
 #define STORE_SLICE_2   42
 #define STORE_SLICE_3   43
 
+#define WITH_CLEANUP_FINISH 44
 #define GET_AITER           45
 #define GET_ANEXT           46
 #define BEFORE_ASYNC_WITH   47
@@ -169,7 +170,6 @@ extern "C" {
 #define SET_ADD         146
 #define MAP_ADD         147
 #define SETUP_ASYNC_WITH 154
-#define WITH_CLEANUP_FINISH 155
 
 
 enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyCmp_GT=Py_GT, PyCmp_GE=Py_GE,

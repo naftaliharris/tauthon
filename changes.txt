@@ -2,7 +2,6 @@ git diff e42d34 3_pep0492 --stat
 
 Haven't done yet:
  Include/typeslots.h                  |    3 +
- Lib/opcode.py                        |   11 +-
  Lib/symbol.py                        |  155 +-
  Lib/token.py                         |    6 +-
  Lib/tokenize.py                      |   72 +-
@@ -11,13 +10,10 @@ Haven't done yet:
  Objects/typeobject.c                 |   91 +-
  Objects/typeslots.inc                |    3 +
  Objects/typeslots.py                 |    2 +
- Python/ceval.c                       |  241 +-
+ Python/ceval.c                       |  241 +-   (Made progress, but has TODO/RSI issues still)
  Python/importlib.h                   | 3466 +++++++++++------------
  Python/importlib_external.h          | 4994 +++++++++++++++++-----------------
- Python/opcode_targets.h              |   16 +-
- Python/peephole.c                    |    3 +
  Python/pymath.c                      |    2 +-
- Python/pystate.c                     |    5 +
  Python/sysmodule.c                   |   46 +
  Tools/parser/unparse.py              |   32 +-
 
@@ -33,6 +29,7 @@ Already did:
  Include/pyerrors.h                   |    1 +
  Include/pystate.h                    |    3 +
  Include/token.h                      |    6 +-
+ Lib/opcode.py                        |   11 +-
  Modules/parsermodule.c               |  115 +-
  Objects/exceptions.c                 |    9 +
  Objects/frameobject.c                |    8 +-
@@ -45,7 +42,10 @@ Already did:
  Python/ast.c                         |  174 +-
  Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
  Python/graminit.c                    | 2496 ++++++++---------
+ Python/opcode_targets.h              |   16 +-
  Python/symtable.c                    |   51 +-
+ Python/peephole.c                    |    3 +
+ Python/pystate.c                     |    5 +
 
 Haven't done yet (tests):
  Lib/test/badsyntax_async1.py         |    2 +

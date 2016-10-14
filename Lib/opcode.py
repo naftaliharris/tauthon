@@ -82,6 +82,7 @@ def_op('STORE_SLICE+1', 41)
 def_op('STORE_SLICE+2', 42)
 def_op('STORE_SLICE+3', 43)
 
+def_op('WITH_CLEANUP_FINISH', 44)
 def_op('GET_AITER', 45)
 def_op('GET_ANEXT', 46)
 def_op('BEFORE_ASYNC_WITH', 47)
@@ -199,7 +200,6 @@ EXTENDED_ARG = 145
 def_op('SET_ADD', 146)
 def_op('MAP_ADD', 147)
 
-def_op('SETUP_ASYNC_WITH', 154)
-def_op('WITH_CLEANUP_FINISH', 155)
+jrel_op('SETUP_ASYNC_WITH', 154)
 
 del def_op, name_op, jrel_op, jabs_op

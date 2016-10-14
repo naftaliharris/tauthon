@@ -1029,10 +1029,7 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             return 0;
         break;
     case AsyncWith_kind:
-        VISIT(st, expr, s->v.AsyncWith.context_expr);
-        if (s->v.AsyncWith.optional_vars) {
-            VISIT(st, expr, s->v.AsyncWith.optional_vars);
-        }
+        VISIT_SEQ(st, withitem, s->v.AsyncWith.items);
         VISIT_SEQ(st, stmt, s->v.AsyncWith.body);
         break;
     case AsyncFor_kind:
