@@ -29,6 +29,7 @@ Already did:
  Include/pyerrors.h                   |    1 +
  Include/pystate.h                    |    3 +
  Include/token.h                      |    6 +-
+ Lib/ast.py                           |    2 +-
  Lib/opcode.py                        |   11 +-
  Modules/parsermodule.c               |  115 +-
  Objects/exceptions.c                 |    9 +
@@ -99,7 +100,6 @@ Not doing:
  Doc/reference/expressions.rst        |   19 +-
  Doc/whatsnew/3.5.rst                 |  272 +-
  Lib/_collections_abc.py              |  116 +-
- Lib/ast.py                           |    2 +-
  Lib/asyncio/base_events.py           |   80 +-
  Lib/asyncio/coroutines.py            |  109 +-
  Lib/asyncio/locks.py                 |  108 +-
