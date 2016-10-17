@@ -1795,7 +1795,7 @@ ast_for_trailer(struct compiling *c, const node *n, expr_ty left_expr)
 static expr_ty
 ast_for_factor(struct compiling *c, const node *n)
 {
-    node *pfactor, *ppower, *patom, *pnum;
+    node *pfactor, *ppower, *patom, *patomexpr, *pnum;
     expr_ty expression;
 
     /* If the unary - operator is applied to a constant, don't generate
@@ -1811,7 +1811,9 @@ ast_for_factor(struct compiling *c, const node *n)
         NCH(pfactor) == 1 &&
         TYPE((ppower = CHILD(pfactor, 0))) == power &&
         NCH(ppower) == 1 &&
-        TYPE((patom = CHILD(ppower, 0))) == atom &&
+        TYPE((patomexpr = CHILD(ppower, 0))) == atom_expr &&
+        NCH(patomexpr) == 1 &&
+        TYPE((patom = CHILD(patomexpr, 0))) == atom &&
         TYPE((pnum = CHILD(patom, 0))) == NUMBER) {
         PyObject *pynum;
         char *s = PyObject_MALLOC(strlen(STR(pnum)) + 2);

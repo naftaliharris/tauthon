@@ -2224,13 +2224,13 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (send == NULL) {
                 send = PyString_InternFromString("send");
                 if (send == NULL) {
-                    return NULL;  /* TODO: is this correct? */
+                    return NULL;  /* RSI/TODO: is this correct? */
                 }
             }
             if (next == NULL) {
                 next = PyString_InternFromString("next");
                 if (next == NULL) {
-                    return NULL;  /* TODO: is this correct? */
+                    return NULL;  /* RSI/TODO: is this correct? */
                 }
             }
 
