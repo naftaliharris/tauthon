@@ -4,6 +4,7 @@ BaseException
  +-- GeneratorExit
  +-- Exception
       +-- StopIteration
+      +-- StopAsyncIteration
       +-- StandardError
       |    +-- BufferError
       |    +-- ArithmeticError
