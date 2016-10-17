@@ -2237,7 +2237,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             u = POP();
             x = TOP();
             /* send u to x */
-            if (PyGen_CheckExact(x)) {
+            if (PyGen_CheckExact(x) || PyCoro_CheckExact(x)) {
                 retval = _PyGen_Send((PyGenObject *)x, u);
             } else {
                 if (u == Py_None) {
@@ -3210,21 +3210,21 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             else
                 err = 0;
             Py_DECREF(x);
-            //Py_DECREF(u);  RSI/TODO Possibly???!!!
+            Py_DECREF(u);
 
             if (err < 0)
                 break; /* Go to error exit */
             else if (err > 0) {
                 err = 0;
                 /* There was an exception and a true return */
+                v = SECOND();
+                w = THIRD();
                 STACKADJ(-2);
                 Py_INCREF(Py_None);
                 SET_TOP(Py_None);
-                /* RSI/TODO: FIGURE OUT WTF TO DO IN THIS CASE!!!
                 Py_DECREF(u);
                 Py_DECREF(v);
                 Py_DECREF(w);
-                */
             } else {
                 /* The stack was rearranged to remove EXIT
                    above. Let END_FINALLY do its thing */
