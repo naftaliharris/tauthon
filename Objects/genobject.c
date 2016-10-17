@@ -559,7 +559,6 @@ PyTypeObject PyGen_Type = {
     0,                                          /* tp_new */
     0,                                          /* tp_free */
     0,                                          /* tp_is_gc */
-    0,                                          /* tp_as_async */
     0,                                          /* tp_bases */
     0,                                          /* tp_mro */
     0,                                          /* tp_cache */
@@ -567,7 +566,8 @@ PyTypeObject PyGen_Type = {
     0,                                          /* tp_weaklist */
     gen_del,                                    /* tp_del */
     // TODO(mlucy): shouldn't this be here?
-    // 0,                                          /* tp_version_tag */
+    0,                                          /* tp_version_tag */
+    0,                                          /* tp_as_async */
 };
 
 static PyObject *
@@ -579,8 +579,6 @@ gen_new(PyTypeObject *type, PyFrameObject *f)
         return NULL;
     }
     gen->gi_frame = f;
-    // RSI: do we need this?
-    // f->f_gen = (PyObject *) gen;
     Py_INCREF(f->f_code);
     gen->gi_code = (PyObject *)(f->f_code);
     gen->gi_running = 0;
@@ -723,7 +721,7 @@ static PyGetSetDef coro_getsetlist[] = {
 
 static PyMemberDef coro_memberlist[] = {
     {"cr_frame",     T_OBJECT, offsetof(PyCoroObject, cr_frame),    READONLY},
-    {"cr_running",   T_BOOL,   offsetof(PyCoroObject, cr_running),  READONLY},
+    {"cr_running",   T_INT,    offsetof(PyCoroObject, cr_running),  READONLY},
     {"cr_code",      T_OBJECT, offsetof(PyCoroObject, cr_code),     READONLY},
     {NULL}      /* Sentinel */
 };
@@ -773,7 +771,7 @@ PyTypeObject PyCoro_Type = {
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    // RSI: set `as_async` flag once we have it.
+    // TODO/RSI: set `as_async` flag once we have it.
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,    /* tp_flags */
     0,                                          /* tp_doc */
     (traverseproc)gen_traverse,                 /* tp_traverse */
@@ -796,7 +794,6 @@ PyTypeObject PyCoro_Type = {
     0,                                          /* tp_new */
     0,                                          /* tp_free */
     0,                                          /* tp_is_gc */
-    &coro_as_async,                             /* tp_as_async */
     0,                                          /* tp_bases */
     0,                                          /* tp_mro */
     0,                                          /* tp_cache */
@@ -804,6 +801,7 @@ PyTypeObject PyCoro_Type = {
     0,                                          /* tp_weaklist */
     gen_del,                                    /* tp_del */
     0,                                          /* tp_version_tag */
+    &coro_as_async,                             /* tp_as_async */
 };
 
 static void
