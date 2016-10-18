@@ -56,3 +56,6 @@ class ParrotDroppings:
 
 class FesteringGob(MalodorousPervert, ParrotDroppings):
     pass
+
+async def lobbest(grenade):
+    pass

@@ -465,15 +465,15 @@ def generate_tokens(readline):
 
                     if token == 'def':
                         if (stashed
-                                and stashed.type == NAME
-                                and stashed.string == 'async'):
+                                and stashed[0] == NAME
+                                and stashed[1] == 'async'):
 
                             async_def = True
                             async_def_indent = indents[-1]
 
-                            yield (ASYNC, stashed.string,
-                                            stashed.start, stashed.end,
-                                            stashed.line)
+                            yield (ASYNC, stashed[1],
+                                            stashed[2], stashed[3],
+                                            stashed[4])
                             stashed = None
 
                     if stashed:

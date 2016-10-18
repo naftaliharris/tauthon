@@ -1,11 +1,10 @@
 git diff e42d34 3_pep0492 --stat
 
 Haven't done yet:
- Lib/_collections_abc.py              |  116 +-
- Lib/inspect.py                       |  103 +-
+ Lib/test/test_inspect.py             |  298 +-  WITH RSIs/TODO in it!
  Lib/xml/dom/xmlbuilder.py            |   26 +-
  Python/ceval.c                       |  241 +-   (Made progress, but has TODO/RSI issues still)
- Python/sysmodule.c                   |   46 +
+ Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
  Tools/parser/unparse.py              |   32 +-
 
 Already did:
@@ -20,8 +19,10 @@ Already did:
  Include/pyerrors.h                   |    1 +
  Include/pystate.h                    |    3 +
  Include/token.h                      |    6 +-
+ Lib/_collections_abc.py              |  116 +-
  Lib/ast.py                           |    2 +-
  Lib/dis.py                           |    2 +
+ Lib/inspect.py                       |  103 +-
  Lib/opcode.py                        |   11 +-
  Lib/symbol.py                        |  155 +-
  Lib/token.py                         |    6 +-
@@ -38,13 +39,13 @@ Already did:
  Parser/tokenizer.h                   |    7 +
  Python/Python-ast.c                  |  473 ++++
  Python/ast.c                         |  174 +-
- Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
  Python/graminit.c                    | 2496 ++++++++---------
  Python/opcode_targets.h              |   16 +-
- Python/symtable.c                    |   51 +-
  Python/peephole.c                    |    3 +
  Python/pymath.c                      |    2 +-
  Python/pystate.c                     |    5 +
+ Python/symtable.c                    |   51 +-
+ Python/sysmodule.c                   |   46 +
 
 Haven't done yet (tests):
  Lib/test/badsyntax_async1.py         |    2 +
@@ -66,7 +67,6 @@ Haven't done yet (tests):
  Lib/test/test_exceptions.py          |    2 +
  Lib/test/test_generators.py          |   37 +-
  Lib/test/test_grammar.py             |   87 +-
- Lib/test/test_inspect.py             |  298 +-
  Lib/test/test_minidom.py             |   15 +
  Lib/test/test_parser.py              |   16 +
  Lib/test/test_pickle.py              |    4 +-
