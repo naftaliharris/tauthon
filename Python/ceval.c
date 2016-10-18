@@ -3201,7 +3201,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         PREDICTED(WITH_CLEANUP_FINISH);
         TARGET_NOARG(WITH_CLEANUP_FINISH)
         {
-            int err;
             x = POP();
             u = POP();
 
