@@ -2129,6 +2129,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 Py_DECREF(obj);
                 if (iter == NULL) {
                     SET_TOP(NULL);
+                    why = WHY_EXCEPTION;
                     break;
                 }
             }
@@ -2140,6 +2141,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     "__aiter__ method, got %.100s",
                     type->tp_name);
                 Py_DECREF(obj);
+                why = WHY_EXCEPTION;
                 break;
             }
 
@@ -2153,6 +2155,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     Py_TYPE(iter)->tp_name);
 
                 Py_DECREF(iter);
+                why = WHY_EXCEPTION;
                 break;
             } else
                 Py_DECREF(iter);
@@ -2174,6 +2177,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (getter != NULL) {
                 next_iter = (*getter)(aiter);
                 if (next_iter == NULL) {
+                    why = WHY_EXCEPTION;
                     break;
                 }
             }
@@ -2183,6 +2187,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     "'async for' requires an iterator with "
                     "__anext__ method, got %.100s",
                     type->tp_name);
+                why = WHY_EXCEPTION;
                 break;
             }
 
@@ -2195,6 +2200,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     Py_TYPE(next_iter)->tp_name);
 
                 Py_DECREF(next_iter);
+                why = WHY_EXCEPTION;
                 break;
             } else
                 Py_DECREF(next_iter);
@@ -2205,13 +2211,13 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         TARGET_NOARG(GET_AWAITABLE) {
             PyObject *iterable = TOP();
-            PyObject *iter = _PyCoro_GetAwaitableIter(iterable);
+            x = _PyCoro_GetAwaitableIter(iterable);
 
             Py_DECREF(iterable);
 
-            SET_TOP(iter); /* Even if it's NULL */
+            SET_TOP(x); /* Even if it's NULL */
 
-            if (iter == NULL) {
+            if (x == NULL) {
                 break;
             }
 
@@ -2995,6 +3001,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     PyErr_SetString(PyExc_TypeError,
                                     "cannot 'yield from' a coroutine object "
                                     "in a non-coroutine generator");
+                    why = WHY_EXCEPTION;
                     break;
                 }
             }
@@ -3003,8 +3010,10 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 iter = PyObject_GetIter(iterable);
                 Py_DECREF(iterable);
                 SET_TOP(iter);
-                if (iter == NULL)
+                if (iter == NULL) {
+                    why = WHY_EXCEPTION;
                     break;
+                }
             }
             DISPATCH();
         }
@@ -3069,21 +3078,20 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         TARGET_NOARG(BEFORE_ASYNC_WITH) {
             static PyObject *__aexit__, *__aenter__;
             PyObject *mgr = TOP();
-            PyObject *exit = special_lookup(mgr, "__aexit__", &__aexit__),
-                     *enter;
-            PyObject *res;
-            if (exit == NULL)
+            x = special_lookup(mgr, "__aexit__", &__aexit__);
+            if (x == NULL)
                 break;
-            SET_TOP(exit);
-            enter = special_lookup(mgr, "__aenter__", &__aenter__);
+            SET_TOP(x);
+            x = special_lookup(mgr, "__aenter__", &__aenter__);
             Py_DECREF(mgr);
-            if (enter == NULL)
+            if (x == NULL)
                 break;
-            res = PyObject_CallFunctionObjArgs(enter, NULL);
-            Py_DECREF(enter);
-            if (res == NULL)
+            u = x;
+            x = PyObject_CallFunctionObjArgs(u, NULL);
+            Py_DECREF(u);
+            if (x == NULL)
                 break;
-            PUSH(res);
+            PUSH(x);
             DISPATCH();
         }
 

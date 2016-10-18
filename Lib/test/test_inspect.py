@@ -938,16 +938,14 @@ class TestGetGeneratorState(unittest.TestCase):
     def test_created(self):
         self.assertEqual(self._generatorstate(), inspect.GEN_CREATED)
 
-    # RSI/TODO
-    #def test_suspended(self):
-    #    next(self.generator)
-    #    self.assertEqual(self._generatorstate(), inspect.GEN_SUSPENDED)
+    def test_suspended(self):
+        next(self.generator)
+        self.assertEqual(self._generatorstate(), inspect.GEN_SUSPENDED)
 
-    # RSI/TODO
-    #def test_closed_after_exhaustion(self):
-    #    for i in self.generator:
-    #        pass
-    #    self.assertEqual(self._generatorstate(), inspect.GEN_CLOSED)
+    def test_closed_after_exhaustion(self):
+        for i in self.generator:
+            pass
+        self.assertEqual(self._generatorstate(), inspect.GEN_CLOSED)
 
     def test_closed_after_immediate_exception(self):
         with self.assertRaises(RuntimeError):
