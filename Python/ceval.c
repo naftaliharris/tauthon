@@ -3838,12 +3838,23 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
 
         if (is_coro && tstate->in_coroutine_wrapper) {
             assert(coro_wrapper != NULL);
+
+            PyObject *coro_wrap_rep = PyObject_Repr(coro_wrapper);
+            if (coro_wrap_rep == NULL)
+                goto fail;
+            PyObject *co_rep = PyObject_Repr((PyObject *)co);
+            if (co_rep == NULL) {
+                Py_DECREF(coro_wrap_rep);
+                goto fail;
+            }
+
             PyErr_Format(PyExc_RuntimeError,
-                         "coroutine wrapper %.200R attempted "
-                         "to recursively wrap %.200R",
-                         coro_wrapper,
-                         co);
-                        /* TODO/RSI: Fix the format string above! */
+                         "coroutine wrapper %.200s attempted "
+                         "to recursively wrap %.200s",
+                         PyString_AS_STRING(coro_wrap_rep),
+                         PyString_AS_STRING(co_rep));
+            Py_DECREF(coro_wrap_rep);
+            Py_DECREF(co_rep);
             goto fail;
         }
 
