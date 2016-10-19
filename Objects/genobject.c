@@ -565,9 +565,6 @@ PyTypeObject PyGen_Type = {
     0,                                          /* tp_subclasses */
     0,                                          /* tp_weaklist */
     gen_del,                                    /* tp_del */
-    // TODO(mlucy): shouldn't this be here?
-    0,                                          /* tp_version_tag */
-    0,                                          /* tp_as_async */
 };
 
 static PyObject *

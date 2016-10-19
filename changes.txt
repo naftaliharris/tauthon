@@ -1,7 +1,6 @@
 git diff e42d34 3_pep0492 --stat
 
 Haven't done yet:
- Lib/test/test_inspect.py             |  298 +-  WITH RSIs/TODO in it!
  Lib/xml/dom/xmlbuilder.py            |   26 +-
  Python/ceval.c                       |  241 +-   (Made progress, but has TODO/RSI issues still)
  Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -28,6 +27,8 @@ Already did:
  Lib/token.py                         |    6 +-
  Lib/tokenize.py                      |   72 +-
  Lib/types.py                         |  102 +-
+ Lib/test/test_inspect.py             |  298 +-
+ Modules/_testcapimodule.c            |   97 +
  Modules/parsermodule.c               |  115 +-
  Objects/exceptions.c                 |    9 +
  Objects/frameobject.c                |    8 +-
@@ -74,7 +75,6 @@ Haven't done yet (tests):
  Lib/test/test_sys.py                 |    4 +-
  Lib/test/test_tokenize.py            |  281 ++
  Lib/test/test_types.py               |  319 ++-
- Modules/_testcapimodule.c            |   97 +
 
 Not doing:
  Doc/c-api/concrete.rst               |    1 +
