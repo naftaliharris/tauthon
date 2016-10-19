@@ -1043,20 +1043,18 @@ class TestGetCoroutineState(unittest.TestCase):
     def test_created(self):
         self.assertEqual(self._coroutinestate(), inspect.CORO_CREATED)
 
-    # TODO/RSI
-    #def test_suspended(self):
-    #    self.coroutine.send(None)
-    #    self.assertEqual(self._coroutinestate(), inspect.CORO_SUSPENDED)
+    def test_suspended(self):
+        self.coroutine.send(None)
+        self.assertEqual(self._coroutinestate(), inspect.CORO_SUSPENDED)
 
-    # TODO/RSI
-    #def test_closed_after_exhaustion(self):
-    #    while True:
-    #        try:
-    #            self.coroutine.send(None)
-    #        except StopIteration:
-    #            break
+    def test_closed_after_exhaustion(self):
+        while True:
+            try:
+                self.coroutine.send(None)
+            except StopIteration:
+                break
 
-    #    self.assertEqual(self._coroutinestate(), inspect.CORO_CLOSED)
+        self.assertEqual(self._coroutinestate(), inspect.CORO_CLOSED)
 
     def test_closed_after_immediate_exception(self):
         with self.assertRaises(RuntimeError):

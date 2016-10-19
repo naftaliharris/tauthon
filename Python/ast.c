@@ -1873,7 +1873,7 @@ ast_for_atom_expr(struct compiling *c, const node *n)
         return Await(e, LINENO(n), n->n_col_offset, c->c_arena);
     }
 
-    for (i = 1; i < nch; i++) {
+    for (i = start + 1; i < nch; i++) {
         node *ch = CHILD(n, i);
         if (TYPE(ch) != trailer)
             break;
