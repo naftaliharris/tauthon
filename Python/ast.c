@@ -3308,7 +3308,6 @@ ast_for_with_stmt(struct compiling *c, const node *n, int is_async)
     if (!body)
         return NULL;
 
-    return With(items, body, LINENO(n), n->n_col_offset, c->c_arena);
     if (is_async)
         return AsyncWith(items, body, LINENO(n), n->n_col_offset, c->c_arena);
     else

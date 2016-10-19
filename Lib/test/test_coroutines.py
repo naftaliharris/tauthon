@@ -357,6 +357,12 @@ class TokenizerRegrTest(unittest.TestCase):
 
 
 class CoroutineTest(unittest.TestCase):
+    def setUp(self):
+        # Workaround for no 'nonlocal' keyword: use self's mutable attributes
+        self.N = 0
+        self.CNT = 0
+        self.I = 0
+        self.aiter_calls = 0
 
     def test_gen_1(self):
         def gen(): yield
@@ -490,19 +496,16 @@ class CoroutineTest(unittest.TestCase):
             support.gc_collect()
 
     def test_func_10(self):
-        N = 0
-
         @types.coroutine
         def gen():
-            #nonlocal N
             try:
                 a = yield
                 yield (a ** 2)
             except ZeroDivisionError:
-                N += 100
+                self.N += 100
                 raise
             finally:
-                N += 1
+                self.N += 1
 
         async def foo():
             await gen()
@@ -513,16 +516,16 @@ class CoroutineTest(unittest.TestCase):
         next(aw)
         self.assertEqual(aw.send(10), 100)
 
-        self.assertEqual(N, 0)
+        self.assertEqual(self.N, 0)
         aw.close()
-        self.assertEqual(N, 1)
+        self.assertEqual(self.N, 1)
 
         coro = foo()
         aw = coro.__await__()
         next(aw)
         with self.assertRaises(ZeroDivisionError):
             aw.throw(ZeroDivisionError, None, None)
-        self.assertEqual(N, 102)
+        self.assertEqual(self.N, 102)
 
     def test_func_11(self):
         async def func(): pass
@@ -938,8 +941,6 @@ class CoroutineTest(unittest.TestCase):
 
 
     def test_with_8(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 return self
@@ -948,9 +949,8 @@ class CoroutineTest(unittest.TestCase):
                 return 456
 
         async def foo():
-            #nonlocal CNT
             async with CM():
-                CNT += 1
+                self.CNT += 1
 
 
         with self.assertRaisesRegexp(
@@ -958,12 +958,10 @@ class CoroutineTest(unittest.TestCase):
 
             run_async(foo())
 
-        self.assertEqual(CNT, 1)
+        self.assertEqual(self.CNT, 1)
 
 
     def test_with_9(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 return self
@@ -972,18 +970,15 @@ class CoroutineTest(unittest.TestCase):
                 1/0
 
         async def foo():
-            #nonlocal CNT
             async with CM():
-                CNT += 1
+                self.CNT += 1
 
         with self.assertRaises(ZeroDivisionError):
             run_async(foo())
 
-        self.assertEqual(CNT, 1)
+        self.assertEqual(self.CNT, 1)
 
     def test_with_10(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 return self
@@ -992,7 +987,6 @@ class CoroutineTest(unittest.TestCase):
                 1/0
 
         async def foo():
-            #nonlocal CNT
             async with CM():
                 async with CM():
                     raise RuntimeError
@@ -1008,8 +1002,6 @@ class CoroutineTest(unittest.TestCase):
             self.fail('exception from __aexit__ did not propagate')
 
     def test_with_11(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 raise NotImplementedError
@@ -1018,7 +1010,6 @@ class CoroutineTest(unittest.TestCase):
                 1/0
 
         async def foo():
-            #nonlocal CNT
             async with CM():
                 raise RuntimeError
 
@@ -1030,8 +1021,6 @@ class CoroutineTest(unittest.TestCase):
             self.fail('exception from __aenter__ did not propagate')
 
     def test_with_12(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 return self
@@ -1040,7 +1029,6 @@ class CoroutineTest(unittest.TestCase):
                 return True
 
         async def foo():
-            #nonlocal CNT
             async with CM() as cm:
                 self.assertIs(cm.__class__, CM)
                 raise RuntimeError
@@ -1048,8 +1036,6 @@ class CoroutineTest(unittest.TestCase):
         run_async(foo())
 
     def test_with_13(self):
-        CNT = 0
-
         class CM:
             async def __aenter__(self):
                 1/0
@@ -1058,26 +1044,24 @@ class CoroutineTest(unittest.TestCase):
                 return True
 
         async def foo():
-            #nonlocal CNT
-            CNT += 1
+            self.CNT += 1
             async with CM():
-                CNT += 1000
-            CNT += 10000
+                self.CNT += 1000
+            self.CNT += 10000
 
         with self.assertRaises(ZeroDivisionError):
             run_async(foo())
-        self.assertEqual(CNT, 1)
+        self.assertEqual(self.CNT, 1)
 
     def test_for_1(self):
-        aiter_calls = 0
+        their = self
 
         class AsyncIter:
             def __init__(self):
                 self.i = 0
 
             async def __aiter__(self):
-                #nonlocal aiter_calls
-                aiter_calls += 1
+                their.aiter_calls += 1
                 return self
 
             async def __anext__(self):
@@ -1099,14 +1083,13 @@ class CoroutineTest(unittest.TestCase):
 
         yielded, _ = run_async(test1())
         # Make sure that __aiter__ was called only once
-        self.assertEqual(aiter_calls, 1)
+        self.assertEqual(self.aiter_calls, 1)
         self.assertEqual(yielded, [i * 100 for i in range(1, 11)])
         self.assertEqual(buffer, [i*2 for i in range(1, 101)])
 
 
         buffer = []
         async def test2():
-            #nonlocal buffer
             async for i in AsyncIter():
                 buffer.append(i[0])
                 if i[0] == 20:
@@ -1124,7 +1107,6 @@ class CoroutineTest(unittest.TestCase):
 
         buffer = []
         async def test3():
-            #nonlocal buffer
             async for i in AsyncIter():
                 if i[0] > 20:
                     continue
@@ -1217,16 +1199,13 @@ class CoroutineTest(unittest.TestCase):
             run_async(foo())
 
     def test_for_6(self):
-        I = 0
-
+        their = self
         class Manager:
             async def __aenter__(self):
-                #nonlocal I
-                I += 10000
+                their.I += 10000
 
             async def __aexit__(self, *args):
-                #nonlocal I
-                I += 100000
+                their.I += 100000
 
         class Iterable:
             def __init__(self):
@@ -1249,15 +1228,13 @@ class CoroutineTest(unittest.TestCase):
         irefs_before = sys.getrefcount(iterable)
 
         async def main():
-            #nonlocal I
-
             async with manager:
                 async for i in iterable:
-                    I += 1
-            I += 1000
+                    self.I += 1
+            self.I += 1000
 
         run_async(main())
-        self.assertEqual(I, 111011)
+        self.assertEqual(self.I, 111011)
 
         self.assertEqual(sys.getrefcount(manager), mrefs_before)
         self.assertEqual(sys.getrefcount(iterable), irefs_before)
@@ -1265,58 +1242,52 @@ class CoroutineTest(unittest.TestCase):
         ##############
 
         async def main():
-            #nonlocal I
+            async with Manager():
+                async for i in Iterable():
+                    self.I += 1
+            self.I += 1000
 
             async with Manager():
                 async for i in Iterable():
-                    I += 1
-            I += 1000
-
-            async with Manager():
-                async for i in Iterable():
-                    I += 1
-            I += 1000
+                    self.I += 1
+            self.I += 1000
 
         run_async(main())
-        self.assertEqual(I, 333033)
+        self.assertEqual(self.I, 333033)
 
         ##############
 
         async def main():
-            #nonlocal I
+            async with Manager():
+                self.I += 100
+                async for i in Iterable():
+                    self.I += 1
+                else:
+                    self.I += 10000000
+            self.I += 1000
 
             async with Manager():
-                I += 100
+                self.I += 100
                 async for i in Iterable():
-                    I += 1
+                    self.I += 1
                 else:
-                    I += 10000000
-            I += 1000
-
-            async with Manager():
-                I += 100
-                async for i in Iterable():
-                    I += 1
-                else:
-                    I += 10000000
-            I += 1000
+                    self.I += 10000000
+            self.I += 1000
 
         run_async(main())
-        self.assertEqual(I, 20555255)
+        self.assertEqual(self.I, 20555255)
 
     def test_for_7(self):
-        CNT = 0
         class AI:
             async def __aiter__(self):
                 1/0
         async def foo():
-            #nonlocal CNT
             async for i in AI():
-                CNT += 1
-            CNT += 10
+                self.CNT += 1
+            self.CNT += 10
         with self.assertRaises(ZeroDivisionError):
             run_async(foo())
-        self.assertEqual(CNT, 0)
+        self.assertEqual(self.CNT, 0)
 
 
 class CoroAsyncIOCompatTest(unittest.TestCase):
@@ -1360,15 +1331,15 @@ class CoroAsyncIOCompatTest(unittest.TestCase):
 
 
 class SysSetCoroWrapperTest(unittest.TestCase):
+    def setUp(self):
+        self.wrapped = None
 
     def test_set_wrapper_1(self):
         async def foo():
             return 'spam'
 
-        wrapped = None
         def wrap(gen):
-            #nonlocal wrapped
-            wrapped = gen
+            self.wrapped = gen
             return gen
 
         self.assertIsNone(sys.get_coroutine_wrapper())
@@ -1377,7 +1348,7 @@ class SysSetCoroWrapperTest(unittest.TestCase):
         self.assertIs(sys.get_coroutine_wrapper(), wrap)
         try:
             f = foo()
-            self.assertTrue(wrapped)
+            self.assertTrue(self.wrapped)
 
             self.assertEqual(run_async(f), ([], 'spam'))
         finally:
@@ -1385,10 +1356,10 @@ class SysSetCoroWrapperTest(unittest.TestCase):
 
         self.assertIsNone(sys.get_coroutine_wrapper())
 
-        wrapped = None
+        self.wrapped = None
         with silence_coro_gc():
             foo()
-        self.assertFalse(wrapped)
+        self.assertFalse(self.wrapped)
 
     def test_set_wrapper_2(self):
         self.assertIsNone(sys.get_coroutine_wrapper())
@@ -1421,17 +1392,15 @@ class SysSetCoroWrapperTest(unittest.TestCase):
         def foo():
             return 'spam'
 
-        wrapped = None
         def wrap(gen):
-            #nonlocal wrapped
-            wrapped = gen
+            self.wrapped = gen
             return gen
 
         sys.set_coroutine_wrapper(wrap)
         try:
             foo()
             self.assertIs(
-                wrapped, None,
+                self.wrapped, None,
                 "generator-based coroutine was wrapped via "
                 "sys.set_coroutine_wrapper")
         finally:
