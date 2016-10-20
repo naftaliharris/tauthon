@@ -2204,6 +2204,17 @@ static PyNumberMethods instance_as_number = {
     instance_imatmul,                   /* nb_inplace_matmul */
 };
 
+
+UNARY(instance_await, "__await__")
+UNARY(instance_aiter, "__aiter__")
+UNARY(instance_anext, "__anext__")
+
+static PyAsyncMethods instance_as_async = {
+    (unaryfunc)instance_await,          /* am_await */
+    (unaryfunc)instance_aiter,          /* am_aiter */
+    (unaryfunc)instance_anext,          /* am_anext */
+};
+
 PyTypeObject PyInstance_Type = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
@@ -2244,6 +2255,16 @@ PyTypeObject PyInstance_Type = {
     0,                                          /* tp_init */
     0,                                          /* tp_alloc */
     instance_new,                               /* tp_new */
+    0,                                          /* tp_free */
+    0,                                          /* tp_is_gc */
+    0,                                          /* tp_bases */
+    0,                                          /* tp_mro */
+    0,                                          /* tp_cache */
+    0,                                          /* tp_subclasses */
+    0,                                          /* tp_weaklist */
+    0,                                          /* tp_del */
+    0,                                          /* tp_version_tag */
+    &instance_as_async,                         /* tp_as_async */
 };
 
 
