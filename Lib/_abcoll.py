@@ -12,7 +12,7 @@ from abc import ABCMeta, abstractmethod
 import sys
 
 __all__ = ["Awaitable", "Coroutine", "AsyncIterable", "AsyncIterator",
-           "Hashable", "Iterable", "Iterator",
+           "Hashable", "Iterable", "Iterator", "Generator",
            "Sized", "Container", "Callable",
            "Set", "MutableSet",
            "Mapping", "MutableMapping",
@@ -116,9 +116,7 @@ class Coroutine(Awaitable):
     def __subclasshook__(cls, C):
         if cls is Coroutine:
             for method in ('__await__', 'send', 'throw', 'close'):
-                if _hasattr(C, method):
-                    break
-                else:
+                if not _hasattr(C, method):
                     return NotImplemented
             return True
         return NotImplemented
@@ -203,6 +201,60 @@ class Iterator(Iterable):
             if _hasattr(C, "next") and _hasattr(C, "__iter__"):
                 return True
         return NotImplemented
+
+
+class Generator(Iterator):
+
+    __slots__ = ()
+
+    def next(self):
+        """Return the next item from the generator.
+        When exhausted, raise StopIteration.
+        """
+        return self.send(None)
+
+    @abstractmethod
+    def send(self, value):
+        """Send a value into the generator.
+        Return next yielded value or raise StopIteration.
+        """
+        raise StopIteration
+
+    @abstractmethod
+    def throw(self, typ, val=None, tb=None):
+        """Raise an exception in the generator.
+        Return next yielded value or raise StopIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
+
+    def close(self):
+        """Raise GeneratorExit inside generator.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("generator ignored GeneratorExit")
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Generator:
+            for method in ('__iter__', 'next', 'send', 'throw', 'close'):
+                if not _hasattr(C, method):
+                    return NotImplemented
+            return True
+        return NotImplemented
+
+
+generator = type((lambda: (yield))())
+Generator.register(generator)
 
 
 class Sized:

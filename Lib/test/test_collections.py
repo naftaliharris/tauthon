@@ -9,7 +9,7 @@ from random import randrange, shuffle
 import keyword
 import re
 import sys
-from collections import Hashable, Iterable, Iterator
+from collections import Hashable, Iterable, Iterator, Generator
 from collections import Sized, Container, Callable
 from collections import Set, MutableSet
 from collections import Mapping, MutableMapping
@@ -412,6 +412,77 @@ class TestOneTrickPonyABCs(ABCTestCase):
                 yield 1
                 raise StopIteration
         self.assertNotIsInstance(NextOnlyNew(), Iterator)
+
+    def test_Generator(self):
+        class NonGen1:
+            def __iter__(self): return self
+            def next(self): return None
+            def close(self): pass
+            def throw(self, typ, val=None, tb=None): pass
+
+        class NonGen2:
+            def __iter__(self): return self
+            def next(self): return None
+            def close(self): pass
+            def send(self, value): return value
+
+        class NonGen3:
+            def close(self): pass
+            def send(self, value): return value
+            def throw(self, typ, val=None, tb=None): pass
+
+        non_samples = [
+            None, 42, 3.14, 1j, b"", "", (), [], {}, set(),
+            iter(()), iter([]), NonGen1(), NonGen2(), NonGen3()]
+        for x in non_samples:
+            self.assertNotIsInstance(x, Generator)
+            self.assertFalse(issubclass(type(x), Generator), repr(type(x)))
+
+        class Gen(object):
+            def __iter__(self): return self
+            def next(self): return None
+            def close(self): pass
+            def send(self, value): return value
+            def throw(self, typ, val=None, tb=None): pass
+
+        class MinimalGen(Generator):
+            def send(self, value):
+                return value
+            def throw(self, typ, val=None, tb=None):
+                super(MinimalGen, self).throw(typ, val, tb)
+
+        def gen():
+            yield 1
+
+        samples = [gen(), (lambda: (yield))(), Gen(), MinimalGen()]
+        for x in samples:
+            self.assertIsInstance(x, Iterator)
+            self.assertIsInstance(x, Generator)
+            self.assertTrue(issubclass(type(x), Generator), repr(type(x)))
+        self.validate_abstract_methods(Generator, 'send', 'throw')
+
+        # mixin tests
+        mgen = MinimalGen()
+        self.assertIs(mgen, iter(mgen))
+        self.assertIs(mgen.send(None), next(mgen))
+        self.assertEqual(2, mgen.send(2))
+        self.assertIsNone(mgen.close())
+        self.assertRaises(ValueError, mgen.throw, ValueError)
+        self.assertRaisesRegexp(ValueError, "^huhu$",
+                               mgen.throw, ValueError, ValueError("huhu"))
+        self.assertRaises(StopIteration, mgen.throw, StopIteration())
+
+        class FailOnClose(Generator):
+            def send(self, value): return value
+            def throw(self, *args): raise ValueError
+
+        self.assertRaises(ValueError, FailOnClose().close)
+
+        class IgnoreGeneratorExit(Generator):
+            def send(self, value): return value
+            def throw(self, *args): pass
+
+        self.assertRaises(RuntimeError, IgnoreGeneratorExit().close)
 
     def test_Sized(self):
         non_samples = [None, 42, 3.14, 1j,

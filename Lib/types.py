@@ -91,7 +91,7 @@ del sys, _f, _g, _C, _x, _c,                      # Not for export
 
 try:
     import functools as _functools
-    import collections.abc as _collections_abc
+    import collections as _collections_abc
 except:  # Not built yet when this module is imported during the build process
     class Mock(object): pass
     _functools = Mock()
