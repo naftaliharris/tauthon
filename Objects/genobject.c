@@ -236,8 +236,9 @@ gen_del(PyObject *self)
             && gen->gi_frame->f_lasti == -1
             && !PyErr_Occurred()
             && PyErr_WarnFormat(PyExc_RuntimeWarning, 1,
-                                "coroutine '%.50S' was never awaited",
-                                ((PyCodeObject *)gen->gi_code)->co_name))
+                                "coroutine '%.50s' was never awaited",
+                                 PyString_AsString(
+                                     ((PyCodeObject *)gen->gi_code)->co_name)))
         return;
 
     if (gen->gi_frame == NULL || gen->gi_frame->f_stacktop == NULL)

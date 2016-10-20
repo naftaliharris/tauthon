@@ -678,7 +678,7 @@ class CoroutineTest(unittest.TestCase):
         self.assertEqual(run_async(foo()), ([42], 100))
 
     def test_await_8(self):
-        class Awaitable:
+        class Awaitable(object):
             pass
 
         async def foo(): return await Awaitable()
@@ -701,7 +701,7 @@ class CoroutineTest(unittest.TestCase):
             db = {'b':  lambda: wrap}
 
             class DB:
-                b = wrap
+                b = staticmethod(wrap)
 
             return (await bar() + await wrap()() + await db['b']()()() +
                     await bar() * 1000 + await DB.b()())
@@ -756,7 +756,7 @@ class CoroutineTest(unittest.TestCase):
             run_async(foo())
 
     def test_await_13(self):
-        class Awaitable:
+        class Awaitable(object):
             def __await__(self):
                 return self
 
