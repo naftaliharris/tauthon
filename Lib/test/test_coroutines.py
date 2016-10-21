@@ -278,7 +278,7 @@ class AsyncBadSyntaxTest(unittest.TestCase):
             """]
 
         for code in samples:
-            with self.subTest(code=code), self.assertRaises(SyntaxError):
+            with self.assertRaises(SyntaxError):
                 compile(code, "<test>", "exec")
 
     def test_goodsyntax_1(self):
@@ -399,7 +399,7 @@ class CoroutineTest(unittest.TestCase):
             raise StopIteration
 
         with silence_coro_gc():
-            self.assertRegex(repr(foo()), '^<coroutine object.* at 0x.*>$')
+            self.assertRegexpMatches(repr(foo()), '^<coroutine object.* at 0x.*>$')
 
     def test_func_4(self):
         async def foo():
@@ -489,11 +489,14 @@ class CoroutineTest(unittest.TestCase):
     def test_func_9(self):
         async def foo(): pass
 
-        with self.assertWarnsRegexp(
-            RuntimeWarning, "coroutine '.*test_func_9.*foo' was never awaited"):
-
+        with warnings.catch_warnings(record=True) as w:
             foo()
             support.gc_collect()
+
+            self.assertEqual(len(w), 1)
+            self.assertEqual(w[0].category, RuntimeWarning)
+            self.assertEqual(str(w[0].message),
+                             "coroutine 'foo' was never awaited")
 
     def test_func_10(self):
         @types.coroutine
@@ -606,7 +609,6 @@ class CoroutineTest(unittest.TestCase):
         self.assertIn('inside coroutine', ct.close.__doc__)
         self.assertIn('in coroutine', ct.throw.__doc__)
         self.assertIn('of the coroutine', ct.__dict__['__name__'].__doc__)
-        self.assertIn('of the coroutine', ct.__dict__['__qualname__'].__doc__)
         self.assertEqual(ct.__name__, 'coroutine')
 
         async def f(): pass
@@ -932,10 +934,9 @@ class CoroutineTest(unittest.TestCase):
         try:
             run_async(foo())
         except TypeError as exc:
-            self.assertRegex(
+            self.assertRegexpMatches(
                 exc.args[0], "object int can't be used in 'await' expression")
-            self.assertTrue(exc.__context__ is not None)
-            self.assertTrue(isinstance(exc.__context__, ZeroDivisionError))
+            # NB: Removed 2.7-incompatible tests for __context__
         else:
             self.fail('invalid asynchronous context manager did not fail')
 
@@ -994,10 +995,8 @@ class CoroutineTest(unittest.TestCase):
         try:
             run_async(foo())
         except ZeroDivisionError as exc:
-            self.assertTrue(exc.__context__ is not None)
-            self.assertTrue(isinstance(exc.__context__, ZeroDivisionError))
-            self.assertTrue(isinstance(exc.__context__.__context__,
-                                       RuntimeError))
+            # NB: Removed 2.7-incompatible tests for __context__
+            pass
         else:
             self.fail('exception from __aexit__ did not propagate')
 
@@ -1016,7 +1015,8 @@ class CoroutineTest(unittest.TestCase):
         try:
             run_async(foo())
         except NotImplementedError as exc:
-            self.assertTrue(exc.__context__ is None)
+            # NB: Removed 2.7-incompatible tests for __context__
+            pass
         else:
             self.fail('exception from __aenter__ did not propagate')
 
@@ -1100,7 +1100,7 @@ class CoroutineTest(unittest.TestCase):
 
         yielded, _ = run_async(test2())
         # Make sure that __aiter__ was called only once
-        self.assertEqual(aiter_calls, 2)
+        self.assertEqual(self.aiter_calls, 2)
         self.assertEqual(yielded, [100, 200])
         self.assertEqual(buffer, [i for i in range(1, 21)] + ['end'])
 
@@ -1117,7 +1117,7 @@ class CoroutineTest(unittest.TestCase):
 
         yielded, _ = run_async(test3())
         # Make sure that __aiter__ was called only once
-        self.assertEqual(aiter_calls, 3)
+        self.assertEqual(self.aiter_calls, 3)
         self.assertEqual(yielded, [i * 100 for i in range(1, 11)])
         self.assertEqual(buffer, [i for i in range(1, 21)] +
                                  ['what?', 'end'])
@@ -1138,7 +1138,7 @@ class CoroutineTest(unittest.TestCase):
         self.assertEqual(sys.getrefcount(tup), refs_before)
 
     def test_for_3(self):
-        class I:
+        class I(object):
             def __aiter__(self):
                 return self
 

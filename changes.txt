@@ -6,6 +6,24 @@ Haven't done yet:
  Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
  Tools/parser/unparse.py              |   32 +-
 
+Haven't done yet (tests):
+ Lib/test/test_ast.py                 |   12 +
+ Lib/test/test_asyncio/test_pep492.py |  208 ++
+ Lib/test/test_asyncio/test_tasks.py  |   35 +-
+ Lib/test/test_collections.py         |  151 +
+ Lib/test/test_coroutines.py          | 1479 ++++++++++
+ Lib/test/test_dis.py                 |   46 +-
+ Lib/test/test_exceptions.py          |    2 +
+ Lib/test/test_generators.py          |   37 +-
+ Lib/test/test_grammar.py             |   87 +-
+ Lib/test/test_minidom.py             |   15 +
+ Lib/test/test_parser.py              |   16 +
+ Lib/test/test_pickle.py              |    4 +-
+ Lib/test/test_symbol.py              |   45 +
+ Lib/test/test_sys.py                 |    4 +-
+ Lib/test/test_tokenize.py            |  281 ++
+ Lib/test/test_types.py               |  319 ++-
+
 Already did:
  Grammar/Grammar                      |   11 +-
  Include/Python-ast.h                 |   59 +-
@@ -28,6 +46,16 @@ Already did:
  Lib/tokenize.py                      |   72 +-
  Lib/types.py                         |  102 +-
  Lib/test/test_inspect.py             |  298 +-
+ Lib/test/badsyntax_async1.py         |    2 +
+ Lib/test/badsyntax_async2.py         |    2 +
+ Lib/test/badsyntax_async3.py         |    2 +
+ Lib/test/badsyntax_async4.py         |    2 +
+ Lib/test/badsyntax_async5.py         |    2 +
+ Lib/test/badsyntax_async6.py         |    2 +
+ Lib/test/badsyntax_async7.py         |    2 +
+ Lib/test/badsyntax_async8.py         |    2 +
+ Lib/test/exception_hierarchy.txt     |    1 +
+ Lib/test/inspect_fodder.py           |    3 +
  Modules/_testcapimodule.c            |   97 +
  Modules/parsermodule.c               |  115 +-
  Objects/exceptions.c                 |    9 +
@@ -47,34 +75,6 @@ Already did:
  Python/pystate.c                     |    5 +
  Python/symtable.c                    |   51 +-
  Python/sysmodule.c                   |   46 +
-
-Haven't done yet (tests):
- Lib/test/badsyntax_async1.py         |    2 +
- Lib/test/badsyntax_async2.py         |    2 +
- Lib/test/badsyntax_async3.py         |    2 +
- Lib/test/badsyntax_async4.py         |    2 +
- Lib/test/badsyntax_async5.py         |    2 +
- Lib/test/badsyntax_async6.py         |    2 +
- Lib/test/badsyntax_async7.py         |    2 +
- Lib/test/badsyntax_async8.py         |    2 +
- Lib/test/exception_hierarchy.txt     |    1 +
- Lib/test/inspect_fodder.py           |    3 +
- Lib/test/test_ast.py                 |   12 +
- Lib/test/test_asyncio/test_pep492.py |  208 ++
- Lib/test/test_asyncio/test_tasks.py  |   35 +-
- Lib/test/test_collections.py         |  151 +
- Lib/test/test_coroutines.py          | 1479 ++++++++++
- Lib/test/test_dis.py                 |   46 +-
- Lib/test/test_exceptions.py          |    2 +
- Lib/test/test_generators.py          |   37 +-
- Lib/test/test_grammar.py             |   87 +-
- Lib/test/test_minidom.py             |   15 +
- Lib/test/test_parser.py              |   16 +
- Lib/test/test_pickle.py              |    4 +-
- Lib/test/test_symbol.py              |   45 +
- Lib/test/test_sys.py                 |    4 +-
- Lib/test/test_tokenize.py            |  281 ++
- Lib/test/test_types.py               |  319 ++-
 
 Not doing:
  Doc/c-api/concrete.rst               |    1 +
