@@ -457,7 +457,6 @@ PyGen_FetchStopIterationValue(PyObject **pvalue) {
         value = Py_None;
         Py_INCREF(value);
     }
-    Py_INCREF(value);
     *pvalue = value;
     return 0;
 }

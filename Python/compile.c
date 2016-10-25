@@ -799,7 +799,7 @@ opcode_stack_effect(int opcode, int oparg)
             return 0;
         case SETUP_WITH:
             return 4;
-        case WITH_CLEANUP_START:
+        case WITH_CLEANUP_START:  /* TODO/RSI */
             return 1;
         case WITH_CLEANUP_FINISH:
             return -1; /* XXX Sometimes more */
