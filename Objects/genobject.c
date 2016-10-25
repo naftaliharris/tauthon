@@ -115,6 +115,15 @@ gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
         }
         Py_CLEAR(result);
     }
+    else if (!result) {
+        /* We only implement PEP 479 for coroutines, (not generators) */
+        if ((((PyCodeObject *)gen->gi_code)->co_flags & CO_COROUTINE)
+            && PyErr_ExceptionMatches(PyExc_StopIteration))
+        {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "coroutine raised StopIteration");
+        }
+    }
 
     if (!result || f->f_stacktop == NULL) {
         /* generator can't be rerun, so release the frame */
