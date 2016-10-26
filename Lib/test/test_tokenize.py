@@ -510,6 +510,283 @@ def k(x):
     DEDENT     ''            (4, 0) (4, 0)
     """)
 
+    def test_async(self):
+        # Async/await extension:
+        self.check_tokenize("async = 1", """\
+    NAME       'async'       (1, 0) (1, 5)
+    OP         '='           (1, 6) (1, 7)
+    NUMBER     '1'           (1, 8) (1, 9)
+    """)
+
+        self.check_tokenize("a = (async = 1)", """\
+    NAME       'a'           (1, 0) (1, 1)
+    OP         '='           (1, 2) (1, 3)
+    OP         '('           (1, 4) (1, 5)
+    NAME       'async'       (1, 5) (1, 10)
+    OP         '='           (1, 11) (1, 12)
+    NUMBER     '1'           (1, 13) (1, 14)
+    OP         ')'           (1, 14) (1, 15)
+    """)
+
+        self.check_tokenize("async()", """\
+    NAME       'async'       (1, 0) (1, 5)
+    OP         '('           (1, 5) (1, 6)
+    OP         ')'           (1, 6) (1, 7)
+    """)
+
+        self.check_tokenize("class async(Bar):pass", """\
+    NAME       'class'       (1, 0) (1, 5)
+    NAME       'async'       (1, 6) (1, 11)
+    OP         '('           (1, 11) (1, 12)
+    NAME       'Bar'         (1, 12) (1, 15)
+    OP         ')'           (1, 15) (1, 16)
+    OP         ':'           (1, 16) (1, 17)
+    NAME       'pass'        (1, 17) (1, 21)
+    """)
+
+        self.check_tokenize("class async:pass", """\
+    NAME       'class'       (1, 0) (1, 5)
+    NAME       'async'       (1, 6) (1, 11)
+    OP         ':'           (1, 11) (1, 12)
+    NAME       'pass'        (1, 12) (1, 16)
+    """)
+
+        self.check_tokenize("await = 1", """\
+    NAME       'await'       (1, 0) (1, 5)
+    OP         '='           (1, 6) (1, 7)
+    NUMBER     '1'           (1, 8) (1, 9)
+    """)
+
+        self.check_tokenize("foo.async", """\
+    NAME       'foo'         (1, 0) (1, 3)
+    OP         '.'           (1, 3) (1, 4)
+    NAME       'async'       (1, 4) (1, 9)
+    """)
+
+        self.check_tokenize("async for a in b: pass", """\
+    NAME       'async'       (1, 0) (1, 5)
+    NAME       'for'         (1, 6) (1, 9)
+    NAME       'a'           (1, 10) (1, 11)
+    NAME       'in'          (1, 12) (1, 14)
+    NAME       'b'           (1, 15) (1, 16)
+    OP         ':'           (1, 16) (1, 17)
+    NAME       'pass'        (1, 18) (1, 22)
+    """)
+
+        self.check_tokenize("async with a as b: pass", """\
+    NAME       'async'       (1, 0) (1, 5)
+    NAME       'with'        (1, 6) (1, 10)
+    NAME       'a'           (1, 11) (1, 12)
+    NAME       'as'          (1, 13) (1, 15)
+    NAME       'b'           (1, 16) (1, 17)
+    OP         ':'           (1, 17) (1, 18)
+    NAME       'pass'        (1, 19) (1, 23)
+    """)
+
+        self.check_tokenize("async.foo", """\
+    NAME       'async'       (1, 0) (1, 5)
+    OP         '.'           (1, 5) (1, 6)
+    NAME       'foo'         (1, 6) (1, 9)
+    """)
+
+        self.check_tokenize("async", """\
+    NAME       'async'       (1, 0) (1, 5)
+    """)
+
+        self.check_tokenize("async\n#comment\nawait", """\
+    NAME       'async'       (1, 0) (1, 5)
+    NEWLINE    '\\n'          (1, 5) (1, 6)
+    COMMENT    '#comment'    (2, 0) (2, 8)
+    NL         '\\n'          (2, 8) (2, 9)
+    NAME       'await'       (3, 0) (3, 5)
+    """)
+
+        # Keep the python2 ellipsis behavior
+        self.check_tokenize("async\n...\nawait", """\
+    NAME       'async'       (1, 0) (1, 5)
+    NEWLINE    '\\n'          (1, 5) (1, 6)
+    OP         '.'           (2, 0) (2, 1)
+    OP         '.'           (2, 1) (2, 2)
+    OP         '.'           (2, 2) (2, 3)
+    NEWLINE    '\\n'          (2, 3) (2, 4)
+    NAME       'await'       (3, 0) (3, 5)
+    """)
+
+        self.check_tokenize("async\nawait", """\
+    NAME       'async'       (1, 0) (1, 5)
+    NEWLINE    '\\n'          (1, 5) (1, 6)
+    NAME       'await'       (2, 0) (2, 5)
+    """)
+
+        self.check_tokenize("foo.async + 1", """\
+    NAME       'foo'         (1, 0) (1, 3)
+    OP         '.'           (1, 3) (1, 4)
+    NAME       'async'       (1, 4) (1, 9)
+    OP         '+'           (1, 10) (1, 11)
+    NUMBER     '1'           (1, 12) (1, 13)
+    """)
+
+        self.check_tokenize("async def foo(): pass", """\
+    ASYNC      'async'       (1, 0) (1, 5)
+    NAME       'def'         (1, 6) (1, 9)
+    NAME       'foo'         (1, 10) (1, 13)
+    OP         '('           (1, 13) (1, 14)
+    OP         ')'           (1, 14) (1, 15)
+    OP         ':'           (1, 15) (1, 16)
+    NAME       'pass'        (1, 17) (1, 21)
+    """)
+
+        self.check_tokenize('''\
+async def foo():
+  def foo(await):
+    await = 1
+  if 1:
+    await
+async += 1
+''', """\
+    ASYNC      'async'       (1, 0) (1, 5)
+    NAME       'def'         (1, 6) (1, 9)
+    NAME       'foo'         (1, 10) (1, 13)
+    OP         '('           (1, 13) (1, 14)
+    OP         ')'           (1, 14) (1, 15)
+    OP         ':'           (1, 15) (1, 16)
+    NEWLINE    '\\n'          (1, 16) (1, 17)
+    INDENT     '  '          (2, 0) (2, 2)
+    NAME       'def'         (2, 2) (2, 5)
+    NAME       'foo'         (2, 6) (2, 9)
+    OP         '('           (2, 9) (2, 10)
+    AWAIT      'await'       (2, 10) (2, 15)
+    OP         ')'           (2, 15) (2, 16)
+    OP         ':'           (2, 16) (2, 17)
+    NEWLINE    '\\n'          (2, 17) (2, 18)
+    INDENT     '    '        (3, 0) (3, 4)
+    AWAIT      'await'       (3, 4) (3, 9)
+    OP         '='           (3, 10) (3, 11)
+    NUMBER     '1'           (3, 12) (3, 13)
+    NEWLINE    '\\n'          (3, 13) (3, 14)
+    DEDENT     ''            (4, 2) (4, 2)
+    NAME       'if'          (4, 2) (4, 4)
+    NUMBER     '1'           (4, 5) (4, 6)
+    OP         ':'           (4, 6) (4, 7)
+    NEWLINE    '\\n'          (4, 7) (4, 8)
+    INDENT     '    '        (5, 0) (5, 4)
+    AWAIT      'await'       (5, 4) (5, 9)
+    NEWLINE    '\\n'          (5, 9) (5, 10)
+    DEDENT     ''            (6, 0) (6, 0)
+    DEDENT     ''            (6, 0) (6, 0)
+    NAME       'async'       (6, 0) (6, 5)
+    OP         '+='          (6, 6) (6, 8)
+    NUMBER     '1'           (6, 9) (6, 10)
+    NEWLINE    '\\n'          (6, 10) (6, 11)
+    """)
+
+        self.check_tokenize('''\
+async def foo():
+  async for i in 1: pass''', """\
+    ASYNC      'async'       (1, 0) (1, 5)
+    NAME       'def'         (1, 6) (1, 9)
+    NAME       'foo'         (1, 10) (1, 13)
+    OP         '('           (1, 13) (1, 14)
+    OP         ')'           (1, 14) (1, 15)
+    OP         ':'           (1, 15) (1, 16)
+    NEWLINE    '\\n'          (1, 16) (1, 17)
+    INDENT     '  '          (2, 0) (2, 2)
+    ASYNC      'async'       (2, 2) (2, 7)
+    NAME       'for'         (2, 8) (2, 11)
+    NAME       'i'           (2, 12) (2, 13)
+    NAME       'in'          (2, 14) (2, 16)
+    NUMBER     '1'           (2, 17) (2, 18)
+    OP         ':'           (2, 18) (2, 19)
+    NAME       'pass'        (2, 20) (2, 24)
+    DEDENT     ''            (3, 0) (3, 0)
+    """)
+
+        self.check_tokenize('''async def foo(async): await''', """\
+    ASYNC      'async'       (1, 0) (1, 5)
+    NAME       'def'         (1, 6) (1, 9)
+    NAME       'foo'         (1, 10) (1, 13)
+    OP         '('           (1, 13) (1, 14)
+    ASYNC      'async'       (1, 14) (1, 19)
+    OP         ')'           (1, 19) (1, 20)
+    OP         ':'           (1, 20) (1, 21)
+    AWAIT      'await'       (1, 22) (1, 27)
+    """)
+
+        self.check_tokenize('''\
+def f():
+
+  def baz(): pass
+  async def bar(): pass
+
+  await = 2''', """\
+    NAME       'def'         (1, 0) (1, 3)
+    NAME       'f'           (1, 4) (1, 5)
+    OP         '('           (1, 5) (1, 6)
+    OP         ')'           (1, 6) (1, 7)
+    OP         ':'           (1, 7) (1, 8)
+    NEWLINE    '\\n'          (1, 8) (1, 9)
+    NL         '\\n'          (2, 0) (2, 1)
+    INDENT     '  '          (3, 0) (3, 2)
+    NAME       'def'         (3, 2) (3, 5)
+    NAME       'baz'         (3, 6) (3, 9)
+    OP         '('           (3, 9) (3, 10)
+    OP         ')'           (3, 10) (3, 11)
+    OP         ':'           (3, 11) (3, 12)
+    NAME       'pass'        (3, 13) (3, 17)
+    NEWLINE    '\\n'          (3, 17) (3, 18)
+    ASYNC      'async'       (4, 2) (4, 7)
+    NAME       'def'         (4, 8) (4, 11)
+    NAME       'bar'         (4, 12) (4, 15)
+    OP         '('           (4, 15) (4, 16)
+    OP         ')'           (4, 16) (4, 17)
+    OP         ':'           (4, 17) (4, 18)
+    NAME       'pass'        (4, 19) (4, 23)
+    NEWLINE    '\\n'          (4, 23) (4, 24)
+    NL         '\\n'          (5, 0) (5, 1)
+    NAME       'await'       (6, 2) (6, 7)
+    OP         '='           (6, 8) (6, 9)
+    NUMBER     '2'           (6, 10) (6, 11)
+    DEDENT     ''            (7, 0) (7, 0)
+    """)
+
+        self.check_tokenize('''\
+async def f():
+
+  def baz(): pass
+  async def bar(): pass
+
+  await = 2''', """\
+    ASYNC      'async'       (1, 0) (1, 5)
+    NAME       'def'         (1, 6) (1, 9)
+    NAME       'f'           (1, 10) (1, 11)
+    OP         '('           (1, 11) (1, 12)
+    OP         ')'           (1, 12) (1, 13)
+    OP         ':'           (1, 13) (1, 14)
+    NEWLINE    '\\n'          (1, 14) (1, 15)
+    NL         '\\n'          (2, 0) (2, 1)
+    INDENT     '  '          (3, 0) (3, 2)
+    NAME       'def'         (3, 2) (3, 5)
+    NAME       'baz'         (3, 6) (3, 9)
+    OP         '('           (3, 9) (3, 10)
+    OP         ')'           (3, 10) (3, 11)
+    OP         ':'           (3, 11) (3, 12)
+    NAME       'pass'        (3, 13) (3, 17)
+    NEWLINE    '\\n'          (3, 17) (3, 18)
+    ASYNC      'async'       (4, 2) (4, 7)
+    NAME       'def'         (4, 8) (4, 11)
+    NAME       'bar'         (4, 12) (4, 15)
+    OP         '('           (4, 15) (4, 16)
+    OP         ')'           (4, 16) (4, 17)
+    OP         ':'           (4, 17) (4, 18)
+    NAME       'pass'        (4, 19) (4, 23)
+    NEWLINE    '\\n'          (4, 23) (4, 24)
+    NL         '\\n'          (5, 0) (5, 1)
+    AWAIT      'await'       (6, 2) (6, 7)
+    OP         '='           (6, 8) (6, 9)
+    NUMBER     '2'           (6, 10) (6, 11)
+    DEDENT     ''            (7, 0) (7, 0)
+    """)
+
     def test_pathological_trailing_whitespace(self):
         # Pathological whitespace (http://bugs.python.org/issue16152)
         self.check_tokenize("@          ", """\
@@ -552,6 +829,17 @@ class TestMisc(TestCase):
         # Output from calculations with Decimal should be identical across all
         # platforms.
         self.assertEqual(eval(decistmt(s)), Decimal('-3.217160342717258261933904529E-7'))
+
+    def test_oneline_defs(self):
+        buf = []
+        for i in range(10):
+            buf.append('def i{i}(): return {i}'.format(i=i))
+        buf.append('OK')
+        buf = '\n'.join(buf)
+
+        # Test that 500 consequent, one-line defs is OK
+        toks = list(generate_tokens(StringIO(buf.encode('utf-8')).readline))
+        self.assertEqual(toks[-2][1], 'OK') # [-1] is always ENDMARKER
 
 
 class UntokenizeTest(TestCase):

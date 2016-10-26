@@ -9,6 +9,8 @@ from random import randrange, shuffle
 import keyword
 import re
 import sys
+import types
+from collections import Awaitable, Coroutine, AsyncIterator, AsyncIterable
 from collections import Hashable, Iterable, Iterator, Generator
 from collections import Sized, Container, Callable
 from collections import Set, MutableSet
@@ -330,6 +332,121 @@ class ABCTestCase(unittest.TestCase):
 
 class TestOneTrickPonyABCs(ABCTestCase):
 
+    def test_Awaitable(self):
+        def gen():
+            yield
+
+        @types.coroutine
+        def coro():
+            yield
+
+        async def new_coro():
+            pass
+
+        class Bar:
+            def __await__(self):
+                yield
+
+        class MinimalCoro(Coroutine):
+            def send(self, value):
+                return value
+            def throw(self, typ, val=None, tb=None):
+                super().throw(typ, val, tb)
+            def __await__(self):
+                yield
+
+        non_samples = [None, int(), gen(), object()]
+        for x in non_samples:
+            self.assertNotIsInstance(x, Awaitable)
+            self.assertFalse(issubclass(type(x), Awaitable), repr(type(x)))
+
+        samples = [Bar(), MinimalCoro()]
+        for x in samples:
+            self.assertIsInstance(x, Awaitable)
+            self.assertTrue(issubclass(type(x), Awaitable))
+
+        c = coro()
+        # Iterable coroutines (generators with CO_ITERABLE_COROUTINE
+        # flag don't have '__await__' method, hence can't be instances
+        # of Awaitable. Use inspect.isawaitable to detect them.
+        self.assertNotIsInstance(c, Awaitable)
+
+        c = new_coro()
+        self.assertIsInstance(c, Awaitable)
+        c.close() # awoid RuntimeWarning that coro() was not awaited
+
+        class CoroLike: pass
+        Coroutine.register(CoroLike)
+        self.assertTrue(isinstance(CoroLike(), Awaitable))
+        self.assertTrue(issubclass(CoroLike, Awaitable))
+        CoroLike = None
+        test_support.gc_collect() # Kill CoroLike to clean-up ABCMeta cache
+
+    def test_Coroutine(self):
+        def gen():
+            yield
+
+        @types.coroutine
+        def coro():
+            yield
+
+        async def new_coro():
+            pass
+
+        class Bar:
+            def __await__(self):
+                yield
+
+        class MinimalCoro(Coroutine):
+            def send(self, value):
+                return value
+            def throw(self, typ, val=None, tb=None):
+                super().throw(typ, val, tb)
+            def __await__(self):
+                yield
+
+        non_samples = [None, int(), gen(), object(), Bar()]
+        for x in non_samples:
+            self.assertNotIsInstance(x, Coroutine)
+            self.assertFalse(issubclass(type(x), Coroutine), repr(type(x)))
+
+        samples = [MinimalCoro()]
+        for x in samples:
+            self.assertIsInstance(x, Awaitable)
+            self.assertTrue(issubclass(type(x), Awaitable))
+
+        c = coro()
+        # Iterable coroutines (generators with CO_ITERABLE_COROUTINE
+        # flag don't have '__await__' method, hence can't be instances
+        # of Coroutine. Use inspect.isawaitable to detect them.
+        self.assertNotIsInstance(c, Coroutine)
+
+        c = new_coro()
+        self.assertIsInstance(c, Coroutine)
+        c.close() # awoid RuntimeWarning that coro() was not awaited
+
+        class CoroLike:
+            def send(self, value):
+                pass
+            def throw(self, typ, val=None, tb=None):
+                pass
+            def close(self):
+                pass
+            def __await__(self):
+                pass
+        self.assertTrue(isinstance(CoroLike(), Coroutine))
+        self.assertTrue(issubclass(CoroLike, Coroutine))
+
+        class CoroLike:
+            def send(self, value):
+                pass
+            def close(self):
+                pass
+            def __await__(self):
+                pass
+        self.assertFalse(isinstance(CoroLike(), Coroutine))
+        self.assertFalse(issubclass(CoroLike, Coroutine))
+
     def test_Hashable(self):
         # Check some non-hashables
         non_samples = [list(), set(), dict()]
@@ -356,6 +473,40 @@ class TestOneTrickPonyABCs(ABCTestCase):
         self.assertFalse(issubclass(int, H))
         self.validate_abstract_methods(Hashable, '__hash__')
         self.validate_isinstance(Hashable, '__hash__')
+
+    def test_AsyncIterable(self):
+        class AI:
+            async def __aiter__(self):
+                return self
+        self.assertTrue(isinstance(AI(), AsyncIterable))
+        self.assertTrue(issubclass(AI, AsyncIterable))
+        # Check some non-iterables
+        non_samples = [None, object, []]
+        for x in non_samples:
+            self.assertNotIsInstance(x, AsyncIterable)
+            self.assertFalse(issubclass(type(x), AsyncIterable), repr(type(x)))
+        self.validate_abstract_methods(AsyncIterable, '__aiter__')
+        self.validate_isinstance(AsyncIterable, '__aiter__')
+
+    def test_AsyncIterator(self):
+        class AI:
+            async def __aiter__(self):
+                return self
+            async def __anext__(self):
+                raise StopAsyncIteration
+        self.assertTrue(isinstance(AI(), AsyncIterator))
+        self.assertTrue(issubclass(AI, AsyncIterator))
+        non_samples = [None, object, []]
+        # Check some non-iterables
+        for x in non_samples:
+            self.assertNotIsInstance(x, AsyncIterator)
+            self.assertFalse(issubclass(type(x), AsyncIterator), repr(type(x)))
+        # Similarly to regular iterators (see issue 10565)
+        class AnextOnly:
+            async def __anext__(self):
+                raise StopAsyncIteration
+        self.assertNotIsInstance(AnextOnly(), AsyncIterator)
+        self.validate_abstract_methods(AsyncIterator, '__anext__', '__aiter__')
 
     def test_Iterable(self):
         # Check some non-iterables

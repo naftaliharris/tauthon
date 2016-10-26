@@ -129,7 +129,7 @@ class _GeneratorWrapper(object):
     cr_frame = gi_frame
     cr_running = gi_running
     cr_await = gi_yieldfrom
-    def __next__(self):
+    def next(self):
         return next(self.__wrapped)
     def __iter__(self):
         if self.__isgen:
