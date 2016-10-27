@@ -160,7 +160,7 @@ def coroutine(func):
                 co.co_code,
                 co.co_consts, co.co_names, co.co_varnames, co.co_filename,
                 co.co_name, co.co_firstlineno, co.co_lnotab, co.co_freevars,
-                co.co_cellvars)  # , co.co_kwonlyargcount) TODO/RSI
+                co.co_cellvars, co.co_kwonlyargcount)
             return func
 
     # The following code is primarily to support functions that
