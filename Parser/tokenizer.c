@@ -178,7 +178,8 @@ error_ret(struct tok_state *tok) /* XXX */
     tok->decoding_erred = 1;
     if (tok->fp != NULL && tok->buf != NULL) /* see PyTokenizer_Free */
         PyMem_FREE(tok->buf);
-    tok->buf = NULL;
+    tok->buf = tok->cur = tok->end = tok->inp = tok->start = NULL;
+    tok->done = E_DECODE;
     return NULL;                /* as if it were EOF */
 }
 
@@ -930,7 +931,6 @@ tok_nextc(register struct tok_state *tok)
                 if (tok->buf != NULL)
                     PyMem_FREE(tok->buf);
                 tok->buf = newtok;
-                tok->line_start = tok->buf;
                 tok->cur = tok->buf;
                 tok->line_start = tok->buf;
                 tok->inp = strchr(tok->buf, '\0');
@@ -953,7 +953,8 @@ tok_nextc(register struct tok_state *tok)
                 }
                 if (decoding_fgets(tok->buf, (int)(tok->end - tok->buf),
                           tok) == NULL) {
-                    tok->done = E_EOF;
+                    if (!tok->decoding_erred)
+                        tok->done = E_EOF;
                     done = 1;
                 }
                 else {
@@ -987,6 +988,8 @@ tok_nextc(register struct tok_state *tok)
                     return EOF;
                 }
                 tok->buf = newbuf;
+                tok->cur = tok->buf + cur;
+                tok->line_start = tok->cur;
                 tok->inp = tok->buf + curvalid;
                 tok->end = tok->buf + newsize;
                 tok->start = curstart < 0 ? NULL :
@@ -1219,6 +1222,28 @@ indenterror(struct tok_state *tok)
         tok->altwarning = 0;
     }
     return 0;
+}
+
+static int
+tok_decimal_tail(struct tok_state *tok)
+{
+    int c;
+
+    while (1) {
+        do {
+            c = tok_nextc(tok);
+        } while (isdigit(c));
+        if (c != '_') {
+            break;
+        }
+        c = tok_nextc(tok);
+        if (!isdigit(c)) {
+            tok->done = E_TOKEN;
+            tok_backup(tok, c);
+            return 0;
+        }
+    }
+    return c;
 }
 
 /* Get next token, after space stripping etc. */
@@ -1497,64 +1522,90 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         if (c == '0') {
             /* Hex, octal or binary -- maybe. */
             c = tok_nextc(tok);
-            if (c == '.')
+            if (c == '.') {
+                c = tok_nextc(tok);
                 goto fraction;
+            }
 #ifndef WITHOUT_COMPLEX
             if (c == 'j' || c == 'J')
                 goto imaginary;
 #endif
             if (c == 'x' || c == 'X') {
-
                 /* Hex */
                 c = tok_nextc(tok);
-                if (!isxdigit(c)) {
-                    tok->done = E_TOKEN;
-                    tok_backup(tok, c);
-                    return ERRORTOKEN;
-                }
                 do {
-                    c = tok_nextc(tok);
-                } while (isxdigit(c));
+                    if (c == '_') {
+                        c = tok_nextc(tok);
+                    }
+                    if (!isxdigit(c)) {
+                        tok->done = E_TOKEN;
+                        tok_backup(tok, c);
+                        return ERRORTOKEN;
+                    }
+                    do {
+                        c = tok_nextc(tok);
+                    } while (isxdigit(c));
+                } while (c == '_');
             }
             else if (c == 'o' || c == 'O') {
                 /* Octal */
                 c = tok_nextc(tok);
-                if (c < '0' || c >= '8') {
-                    tok->done = E_TOKEN;
-                    tok_backup(tok, c);
-                    return ERRORTOKEN;
-                }
                 do {
-                    c = tok_nextc(tok);
-                } while ('0' <= c && c < '8');
+                    if (c == '_') {
+                        c = tok_nextc(tok);
+                    }
+                    if (c < '0' || c >= '8') {
+                        tok->done = E_TOKEN;
+                        tok_backup(tok, c);
+                        return ERRORTOKEN;
+                    }
+                    do {
+                        c = tok_nextc(tok);
+                    } while ('0' <= c && c < '8');
+                } while (c == '_');
             }
             else if (c == 'b' || c == 'B') {
                 /* Binary */
                 c = tok_nextc(tok);
-                if (c != '0' && c != '1') {
-                    tok->done = E_TOKEN;
-                    tok_backup(tok, c);
-                    return ERRORTOKEN;
-                }
                 do {
-                    c = tok_nextc(tok);
-                } while (c == '0' || c == '1');
+                    if (c == '_') {
+                        c = tok_nextc(tok);
+                    }
+                    if (c != '0' && c != '1') {
+                        tok->done = E_TOKEN;
+                        tok_backup(tok, c);
+                        return ERRORTOKEN;
+                    }
+                    do {
+                        c = tok_nextc(tok);
+                    } while (c == '0' || c == '1');
+                } while (c == '_');
             }
             else {
                 int found_decimal = 0;
                 /* Octal; c is first char of it */
                 /* There's no 'isoctdigit' macro, sigh */
-                while ('0' <= c && c < '8') {
+                while (1) {
+                    if (c == '_') {
+                        c = tok_nextc(tok);
+                        if (!isdigit(c)) {
+                            tok->done = E_TOKEN;
+                            tok_backup(tok, c);
+                            return ERRORTOKEN;
+                        }
+                    }
+                    if (!isdigit(c)) {
+                        break;
+                    }
+                    else if (c == '8' || c == '9') {
+                        found_decimal = 1;
+                    }
                     c = tok_nextc(tok);
                 }
-                if (isdigit(c)) {
-                    found_decimal = 1;
-                    do {
-                        c = tok_nextc(tok);
-                    } while (isdigit(c));
-                }
-                if (c == '.')
+                if (c == '.') {
+                    c = tok_nextc(tok);
                     goto fraction;
+                }
                 else if (c == 'e' || c == 'E')
                     goto exponent;
 #ifndef WITHOUT_COMPLEX
@@ -1572,19 +1623,24 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         }
         else {
             /* Decimal */
-            do {
-                c = tok_nextc(tok);
-            } while (isdigit(c));
+            c = tok_decimal_tail(tok);
+            if (c == 0) {
+                return ERRORTOKEN;
+            }
             if (c == 'l' || c == 'L')
                 c = tok_nextc(tok);
             else {
                 /* Accept floating point numbers. */
                 if (c == '.') {
+                    c = tok_nextc(tok);
         fraction:
                     /* Fraction */
-                    do {
-                        c = tok_nextc(tok);
-                    } while (isdigit(c));
+                    if (isdigit(c)) {
+                        c = tok_decimal_tail(tok);
+                        if (c == 0) {
+                            return ERRORTOKEN;
+                        }
+                    }
                 }
                 if (c == 'e' || c == 'E') {
                     int e;
@@ -1606,9 +1662,10 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                         *p_end = tok->cur;
                         return NUMBER;
                     }
-                    do {
-                        c = tok_nextc(tok);
-                    } while (isdigit(c));
+                    c = tok_decimal_tail(tok);
+                    if (c == 0) {
+                        return ERRORTOKEN;
+                    }
                 }
 #ifndef WITHOUT_COMPLEX
                 if (c == 'j' || c == 'J')

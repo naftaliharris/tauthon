@@ -101,12 +101,12 @@ zlib_error(z_stream zst, int err, char *msg)
 PyDoc_STRVAR(compressobj__doc__,
 "compressobj([level]) -- Return a compressor object.\n"
 "\n"
-"Optional arg level is the compression level, in 0-9.");
+"Optional arg level is the compression level, in 0-9 or -1.");
 
 PyDoc_STRVAR(decompressobj__doc__,
 "decompressobj([wbits]) -- Return a decompressor object.\n"
 "\n"
-"Optional arg wbits is the window buffer size.");
+"Optional arg wbits indicates the window buffer size and container format.");
 
 static compobject *
 newcompobject(PyTypeObject *type)
@@ -208,8 +208,8 @@ PyZlib_compress(PyObject *self, PyObject *args)
 PyDoc_STRVAR(decompress__doc__,
 "decompress(string[, wbits[, bufsize]]) -- Return decompressed string.\n"
 "\n"
-"Optional arg wbits is the window buffer size.  Optional arg bufsize is\n"
-"the initial output buffer size.");
+"Optional arg wbits indicates the window buffer size and container format.\n"
+"Optional arg bufsize is the initial output buffer size.");
 
 static PyObject *
 PyZlib_decompress(PyObject *self, PyObject *args)
@@ -491,8 +491,7 @@ save_unconsumed_input(compobject *self, int err)
                       PyString_AS_STRING(self->unused_data), old_size);
             Py_MEMCPY(PyString_AS_STRING(new_data) + old_size,
                       self->zst.next_in, self->zst.avail_in);
-            Py_DECREF(self->unused_data);
-            self->unused_data = new_data;
+            Py_SETREF(self->unused_data, new_data);
             self->zst.avail_in = 0;
         }
     }
@@ -504,8 +503,7 @@ save_unconsumed_input(compobject *self, int err)
                 (char *)self->zst.next_in, self->zst.avail_in);
         if (new_data == NULL)
             return -1;
-        Py_DECREF(self->unconsumed_tail);
-        self->unconsumed_tail = new_data;
+        Py_SETREF(self->unconsumed_tail, new_data);
     }
     return 0;
 }
@@ -733,11 +731,9 @@ PyZlib_copy(compobject *self)
     }
 
     Py_INCREF(self->unused_data);
+    Py_XSETREF(retval->unused_data, self->unused_data);
     Py_INCREF(self->unconsumed_tail);
-    Py_XDECREF(retval->unused_data);
-    Py_XDECREF(retval->unconsumed_tail);
-    retval->unused_data = self->unused_data;
-    retval->unconsumed_tail = self->unconsumed_tail;
+    Py_XSETREF(retval->unconsumed_tail, self->unconsumed_tail);
 
     /* Mark it as being initialized */
     retval->is_initialised = 1;
@@ -784,11 +780,9 @@ PyZlib_uncopy(compobject *self)
     }
 
     Py_INCREF(self->unused_data);
+    Py_XSETREF(retval->unused_data, self->unused_data);
     Py_INCREF(self->unconsumed_tail);
-    Py_XDECREF(retval->unused_data);
-    Py_XDECREF(retval->unconsumed_tail);
-    retval->unused_data = self->unused_data;
-    retval->unconsumed_tail = self->unconsumed_tail;
+    Py_XSETREF(retval->unconsumed_tail, self->unconsumed_tail);
 
     /* Mark it as being initialized */
     retval->is_initialised = 1;
@@ -1045,7 +1039,7 @@ PyDoc_STRVAR(zlib_module_documentation,
 "decompress(string,[wbits],[bufsize]) -- Decompresses a compressed string.\n"
 "decompressobj([wbits]) -- Return a decompressor object.\n"
 "\n"
-"'wbits' is window buffer size.\n"
+"'wbits' is window buffer size and container format.\n"
 "Compressor objects support compress() and flush() methods; decompressor\n"
 "objects support decompress() and flush().");
 

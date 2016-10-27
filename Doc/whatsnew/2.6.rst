@@ -151,10 +151,10 @@ The infrastructure committee of the Python Software Foundation
 therefore posted a call for issue trackers, asking volunteers to set
 up different products and import some of the bugs and patches from
 SourceForge.  Four different trackers were examined: `Jira
-<http://www.atlassian.com/software/jira/>`__,
-`Launchpad <http://www.launchpad.net>`__,
+<https://www.atlassian.com/software/jira/>`__,
+`Launchpad <https://launchpad.net/>`__,
 `Roundup <http://roundup.sourceforge.net/>`__, and
-`Trac <http://trac.edgewall.org/>`__.
+`Trac <https://trac.edgewall.org/>`__.
 The committee eventually settled on Jira
 and Roundup as the two candidates.  Jira is a commercial product that
 offers no-cost hosted instances to free-software projects; Roundup
@@ -215,7 +215,7 @@ the time required to finish the job.
 During the 2.6 development cycle, Georg Brandl put a lot of effort
 into building a new toolchain for processing the documentation.  The
 resulting package is called Sphinx, and is available from
-http://sphinx.pocoo.org/.
+http://sphinx-doc.org/.
 
 Sphinx concentrates on HTML output, producing attractively styled and
 modern HTML; printed output is still supported through conversion to
@@ -1427,7 +1427,7 @@ one, :func:`math.trunc`, that's been backported to Python 2.6.
    :pep:`3141` - A Type Hierarchy for Numbers
       PEP written by Jeffrey Yasskin.
 
-   `Scheme's numerical tower <http://www.gnu.org/software/guile/manual/html_node/Numerical-Tower.html#Numerical-Tower>`__, from the Guile manual.
+   `Scheme's numerical tower <https://www.gnu.org/software/guile/manual/html_node/Numerical-Tower.html#Numerical-Tower>`__, from the Guile manual.
 
    `Scheme's number datatypes <http://schemers.org/Documents/Standards/R5RS/HTML/r5rs-Z-H-9.html#%_sec_6.2>`__ from the R5RS Scheme specification.
 
@@ -1792,7 +1792,7 @@ changes, or look through the Subversion logs for all the details.
 * The :mod:`bsddb` module also has a new maintainer, Jesús Cea Avion, and the package
   is now available as a standalone package.  The web page for the package is
   `www.jcea.es/programacion/pybsddb.htm
-  <http://www.jcea.es/programacion/pybsddb.htm>`__.
+  <https://www.jcea.es/programacion/pybsddb.htm>`__.
   The plan is to remove the package from the standard library
   in Python 3.0, because its pace of releases is much more frequent than
   Python's.
@@ -1922,7 +1922,7 @@ changes, or look through the Subversion logs for all the details.
   the left to six places.  (Contributed by Skip Montanaro; :issue:`1158`.)
 
 * The :mod:`decimal` module was updated to version 1.66 of
-  `the General Decimal Specification <http://www2.hursley.ibm.com/decimal/decarith.html>`__.  New features
+  `the General Decimal Specification <http://speleotrove.com/decimal/decarith.html>`__.  New features
   include some methods for some basic mathematical functions such as
   :meth:`exp` and :meth:`log10`::
 
@@ -2885,7 +2885,7 @@ Improved SSL Support
 
 Bill Janssen made extensive improvements to Python 2.6's support for
 the Secure Sockets Layer by adding a new module, :mod:`ssl`, that's
-built atop the `OpenSSL <http://www.openssl.org/>`__ library.
+built atop the `OpenSSL <https://www.openssl.org/>`__ library.
 This new module provides more control over the protocol negotiated,
 the X.509 certificates used, and has better support for writing SSL
 servers (as opposed to clients) in Python.  The existing SSL support
@@ -3150,7 +3150,7 @@ Port-Specific Changes: Mac OS X
   :func:`macostools.touched` function to be removed because it depended on the
   :mod:`macfs` module.  (:issue:`1490190`)
 
-* Many other Mac OS modules have been deprecated and will removed in
+* Many other Mac OS modules have been deprecated and will be removed in
   Python 3.0:
   :mod:`_builtinSuites`,
   :mod:`aepack`,

@@ -196,16 +196,15 @@ counts, but the output will exclude results with counts of zero or less.
 
 .. seealso::
 
-    * `Counter class <http://code.activestate.com/recipes/576611/>`_
+    * `Counter class <https://code.activestate.com/recipes/576611/>`_
       adapted for Python 2.5 and an early `Bag recipe
-      <http://code.activestate.com/recipes/259174/>`_ for Python 2.4.
+      <https://code.activestate.com/recipes/259174/>`_ for Python 2.4.
 
-    * `Bag class <http://www.gnu.org/software/smalltalk/manual-base/html_node/Bag.html>`_
       in Smalltalk.
 
-    * Wikipedia entry for `Multisets <http://en.wikipedia.org/wiki/Multiset>`_.
+    * Wikipedia entry for `Multisets <https://en.wikipedia.org/wiki/Multiset>`_.
 
-    * `C++ multisets <http://www.demo2s.com/Tutorial/Cpp/0380__set-multiset/Catalog0380__set-multiset.htm>`_
+    * `C++ multisets <http://www.java2s.com/Tutorial/Cpp/0380__set-multiset/Catalog0380__set-multiset.htm>`_
       tutorial with examples.
 
     * For mathematical operations on multisets and their use cases, see
@@ -786,7 +785,7 @@ and more efficient to use a simple class declaration:
 
 .. seealso::
 
-   `Named tuple recipe <http://code.activestate.com/recipes/500261/>`_
+   `Named tuple recipe <https://code.activestate.com/recipes/500261/>`_
    adapted for Python 2.4.
 
 
@@ -829,17 +828,17 @@ semantics pass-in keyword arguments using a regular unordered dictionary.
 
 .. seealso::
 
-   `Equivalent OrderedDict recipe <http://code.activestate.com/recipes/576693/>`_
+   `Equivalent OrderedDict recipe <https://code.activestate.com/recipes/576693/>`_
    that runs on Python 2.4 or later.
 
 :class:`OrderedDict` Examples and Recipes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Since an ordered dictionary remembers its insertion order, it can be used
-in conjuction with sorting to make a sorted dictionary::
+in conjunction with sorting to make a sorted dictionary::
 
     >>> # regular unsorted dictionary
-    >>> d = {'banana': 3, 'apple':4, 'pear': 1, 'orange': 2}
+    >>> d = {'banana': 3, 'apple': 4, 'pear': 1, 'orange': 2}
 
     >>> # dictionary sorted by key
     >>> OrderedDict(sorted(d.items(), key=lambda t: t[0]))
@@ -1003,10 +1002,13 @@ The ABC supplies the remaining methods such as :meth:`__and__` and
              for value in iterable:
                  if value not in lst:
                      lst.append(value)
+
          def __iter__(self):
              return iter(self.elements)
+
          def __contains__(self, value):
              return value in self.elements
+
          def __len__(self):
              return len(self.elements)
 
@@ -1035,13 +1037,13 @@ Notes on using :class:`Set` and :class:`MutableSet` as a mixin:
 (3)
    The :class:`Set` mixin provides a :meth:`_hash` method to compute a hash value
    for the set; however, :meth:`__hash__` is not defined because not all sets
-   are hashable or immutable.  To add set hashabilty using mixins,
+   are hashable or immutable.  To add set hashability using mixins,
    inherit from both :meth:`Set` and :meth:`Hashable`, then define
    ``__hash__ = Set._hash``.
 
 .. seealso::
 
-   * `OrderedSet recipe <http://code.activestate.com/recipes/576694/>`_ for an
+   * `OrderedSet recipe <https://code.activestate.com/recipes/576694/>`_ for an
      example built on :class:`MutableSet`.
 
    * For more about ABCs, see the :mod:`abc` module and :pep:`3119`.

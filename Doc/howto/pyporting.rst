@@ -243,8 +243,8 @@ bothered to add the ``b`` mode when opening a binary file (e.g., ``rb`` for
 binary reading).  Under Python 3, binary files and text files are clearly
 distinct and mutually incompatible; see the :mod:`io` module for details.
 Therefore, you **must** make a decision of whether a file will be used for
-binary access (allowing to read and/or write binary data) or text access
-(allowing to read and/or write text data). You should also use :func:`io.open`
+binary access (allowing binary data to be read and/or written) or text access
+(allowing text data to be read and/or written). You should also use :func:`io.open`
 for opening files instead of the built-in :func:`open` function as the :mod:`io`
 module is consistent from Python 2 to 3 while the built-in :func:`open` function
 is not (in Python 3 it's actually :func:`io.open`).
@@ -346,7 +346,7 @@ your tests under multiple Python interpreters is tox_. You can then integrate
 tox with your continuous integration system so that you never accidentally break
 Python 2 or 3 support.
 
-You may also want to use use the ``-bb`` flag with the Python 3 interpreter to
+You may also want to use the ``-bb`` flag with the Python 3 interpreter to
 trigger an exception when you are comparing bytes to strings. Usually it's
 simply ``False``, but if you made a mistake in your separation of text/binary
 data handling you may be accidentally comparing text and binary data. This flag
@@ -379,10 +379,10 @@ supported by Python 2. You should also update the classifiers in your
 .. _cheat sheet: http://python-future.org/compatible_idioms.html
 .. _coverage.py: https://pypi.python.org/pypi/coverage
 .. _Futurize: http://python-future.org/automatic_conversion.html
-.. _Modernize: http://python-modernize.readthedocs.org/en/latest/
+.. _Modernize: https://python-modernize.readthedocs.org/en/latest/
 .. _Porting to Python 3: http://python3porting.com/
 .. _Pylint: https://pypi.python.org/pypi/pylint
-.. _Python 3 Q & A: http://ncoghlan-devs-python-notes.readthedocs.org/en/latest/python3/questions_and_answers.html
+.. _Python 3 Q & A: https://ncoghlan-devs-python-notes.readthedocs.org/en/latest/python3/questions_and_answers.html
 
 .. _python-future: http://python-future.org/
 .. _python-porting: https://mail.python.org/mailman/listinfo/python-porting

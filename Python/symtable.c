@@ -735,7 +735,7 @@ analyze_child_block(PySTEntryObject *entry, PyObject *bound, PyObject *free,
 
     /* Copy the bound and global dictionaries.
 
-       These dictionary are used by all blocks enclosed by the
+       These dictionaries are used by all blocks enclosed by the
        current block.  The analyze_block() call modifies these
        dictionaries.
 
@@ -994,6 +994,17 @@ error:
     } \
 }
 
+#define VISIT_KWONLYDEFAULTS(ST, KW_DEFAULTS) { \
+    int i = 0; \
+    asdl_seq *seq = (KW_DEFAULTS); /* avoid variable capture */ \
+    for (i = 0; i < asdl_seq_LEN(seq); i++) { \
+        expr_ty elt = (expr_ty)asdl_seq_GET(seq, i); \
+        if (!elt) continue; /* can be NULL */ \
+        if (!symtable_visit_expr((ST), elt)) \
+            return 0; \
+    } \
+}
+
 static int
 symtable_visit_stmt(struct symtable *st, stmt_ty s)
 {
@@ -1003,6 +1014,8 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             return 0;
         if (s->v.FunctionDef.args->defaults)
             VISIT_SEQ(st, expr, s->v.FunctionDef.args->defaults);
+        if (s->v.FunctionDef.args->kw_defaults)
+            VISIT_KWONLYDEFAULTS(st, s->v.FunctionDef.args->kw_defaults);
         if (s->v.FunctionDef.decorator_list)
             VISIT_SEQ(st, expr, s->v.FunctionDef.decorator_list);
         if (!symtable_enter_block(st, s->v.FunctionDef.name,
@@ -1212,6 +1225,8 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
             return 0;
         if (e->v.Lambda.args->defaults)
             VISIT_SEQ(st, expr, e->v.Lambda.args->defaults);
+        if (e->v.Lambda.args->kw_defaults)
+            VISIT_KWONLYDEFAULTS(st, e->v.Lambda.args->kw_defaults);
         if (!symtable_enter_block(st, lambda,
                                   FunctionBlock, (void *)e, e->lineno))
             return 0;
@@ -1379,6 +1394,8 @@ symtable_visit_arguments(struct symtable *st, arguments_ty a)
        XXX should ast be different?
     */
     if (a->args && !symtable_visit_params(st, a->args, 1))
+        return 0;
+    if (a->kwonlyargs && !symtable_visit_params(st, a->kwonlyargs, 1))
         return 0;
     if (a->vararg) {
         if (!symtable_add_def(st, a->vararg, DEF_PARAM))

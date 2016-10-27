@@ -394,8 +394,10 @@ static PyObject* ast2obj_arguments(void*);
 static char *arguments_fields[]={
         "args",
         "vararg",
+        "kwonlyargs",
         "kwarg",
         "defaults",
+        "kw_defaults",
 };
 static PyTypeObject *keyword_type;
 static PyObject* ast2obj_keyword(void*);
@@ -1004,7 +1006,7 @@ static int init_types(void)
         ExceptHandler_type = make_type("ExceptHandler", excepthandler_type,
                                        ExceptHandler_fields, 3);
         if (!ExceptHandler_type) return 0;
-        arguments_type = make_type("arguments", &AST_type, arguments_fields, 4);
+        arguments_type = make_type("arguments", &AST_type, arguments_fields, 6);
         if (!arguments_type) return 0;
         keyword_type = make_type("keyword", &AST_type, keyword_fields, 2);
         if (!keyword_type) return 0;
@@ -2231,8 +2233,8 @@ ExceptHandler(expr_ty type, expr_ty name, asdl_seq * body, int lineno, int
 }
 
 arguments_ty
-arguments(asdl_seq * args, identifier vararg, identifier kwarg, asdl_seq *
-          defaults, PyArena *arena)
+arguments(asdl_seq * args, identifier vararg, asdl_seq * kwonlyargs, identifier
+          kwarg, asdl_seq * defaults, asdl_seq * kw_defaults, PyArena *arena)
 {
         arguments_ty p;
         p = (arguments_ty)PyArena_Malloc(arena, sizeof(*p));
@@ -2240,8 +2242,10 @@ arguments(asdl_seq * args, identifier vararg, identifier kwarg, asdl_seq *
                 return NULL;
         p->args = args;
         p->vararg = vararg;
+        p->kwonlyargs = kwonlyargs;
         p->kwarg = kwarg;
         p->defaults = defaults;
+        p->kw_defaults = kw_defaults;
         return p;
 }
 
@@ -3491,6 +3495,11 @@ ast2obj_arguments(void* _o)
         if (PyObject_SetAttrString(result, "vararg", value) == -1)
                 goto failed;
         Py_DECREF(value);
+        value = ast2obj_list(o->kwonlyargs, ast2obj_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "kwonlyargs", value) == -1)
+                goto failed;
+        Py_DECREF(value);
         value = ast2obj_identifier(o->kwarg);
         if (!value) goto failed;
         if (PyObject_SetAttrString(result, "kwarg", value) == -1)
@@ -3499,6 +3508,11 @@ ast2obj_arguments(void* _o)
         value = ast2obj_list(o->defaults, ast2obj_expr);
         if (!value) goto failed;
         if (PyObject_SetAttrString(result, "defaults", value) == -1)
+                goto failed;
+        Py_DECREF(value);
+        value = ast2obj_list(o->kw_defaults, ast2obj_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "kw_defaults", value) == -1)
                 goto failed;
         Py_DECREF(value);
         return result;
@@ -6992,8 +7006,10 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         PyObject* tmp = NULL;
         asdl_seq* args;
         identifier vararg;
+        asdl_seq* kwonlyargs;
         identifier kwarg;
         asdl_seq* defaults;
+        asdl_seq* kw_defaults;
 
         if (PyObject_HasAttrString(obj, "args")) {
                 int res;
@@ -7031,6 +7047,31 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         } else {
                 vararg = NULL;
         }
+        if (PyObject_HasAttrString(obj, "kwonlyargs")) {
+                int res;
+                Py_ssize_t len;
+                Py_ssize_t i;
+                tmp = PyObject_GetAttrString(obj, "kwonlyargs");
+                if (tmp == NULL) goto failed;
+                if (!PyList_Check(tmp)) {
+                        PyErr_Format(PyExc_TypeError, "arguments field \"kwonlyargs\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                        goto failed;
+                }
+                len = PyList_GET_SIZE(tmp);
+                kwonlyargs = asdl_seq_new(len, arena);
+                if (kwonlyargs == NULL) goto failed;
+                for (i = 0; i < len; i++) {
+                        expr_ty value;
+                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                        if (res != 0) goto failed;
+                        asdl_seq_SET(kwonlyargs, i, value);
+                }
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                PyErr_SetString(PyExc_TypeError, "required field \"kwonlyargs\" missing from arguments");
+                return 1;
+        }
         if (PyObject_HasAttrString(obj, "kwarg")) {
                 int res;
                 tmp = PyObject_GetAttrString(obj, "kwarg");
@@ -7067,7 +7108,33 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 PyErr_SetString(PyExc_TypeError, "required field \"defaults\" missing from arguments");
                 return 1;
         }
-        *out = arguments(args, vararg, kwarg, defaults, arena);
+        if (PyObject_HasAttrString(obj, "kw_defaults")) {
+                int res;
+                Py_ssize_t len;
+                Py_ssize_t i;
+                tmp = PyObject_GetAttrString(obj, "kw_defaults");
+                if (tmp == NULL) goto failed;
+                if (!PyList_Check(tmp)) {
+                        PyErr_Format(PyExc_TypeError, "arguments field \"kw_defaults\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                        goto failed;
+                }
+                len = PyList_GET_SIZE(tmp);
+                kw_defaults = asdl_seq_new(len, arena);
+                if (kw_defaults == NULL) goto failed;
+                for (i = 0; i < len; i++) {
+                        expr_ty value;
+                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                        if (res != 0) goto failed;
+                        asdl_seq_SET(kw_defaults, i, value);
+                }
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                PyErr_SetString(PyExc_TypeError, "required field \"kw_defaults\" missing from arguments");
+                return 1;
+        }
+        *out = arguments(args, vararg, kwonlyargs, kwarg, defaults,
+                         kw_defaults, arena);
         return 0;
 failed:
         Py_XDECREF(tmp);

@@ -259,7 +259,7 @@ def remove_old_versions(db):
     # either both per-machine or per-user.
     migrate_features = 1
     # See "Upgrade Table". We remove releases with the same major and
-    # minor version. For an snapshot, we remove all earlier snapshots. For
+    # minor version. For a snapshot, we remove all earlier snapshots. For
     # a release, we remove all snapshots, and all earlier releases.
     if snapshot:
         add_data(db, "Upgrade",
@@ -1436,6 +1436,7 @@ merge(msiname, "SharedCRT", "TARGETDIR", modules)
 if certname:
     os.system('signtool sign /n "%s" '
       '/t http://timestamp.verisign.com/scripts/timestamp.dll '
+      '/fd SHA256 '
       '/d "Python %s" '
       '%s' % (certname, full_current_version, msiname))
 

@@ -28,7 +28,7 @@ funcdef: 'def' NAME parameters ':' suite
 
 parameters: '(' [varargslist] ')'
 varargslist: ((fpdef ['=' test] ',')*
-              ('*' NAME [',' '**' NAME] | '**' NAME) |
+              ('*' [NAME] (',' NAME ['=' test])*  [',' '**' NAME] | '**' NAME) |
               fpdef ['=' test] (',' fpdef ['=' test])* [','])
 fpdef: NAME | '(' fplist ')'
 fplist: fpdef (',' fpdef)* [',']

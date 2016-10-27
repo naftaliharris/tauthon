@@ -261,6 +261,7 @@ class ConfigDialog(Toplevel):
         self.buttonDeleteCustomTheme=Button(
                 frameTheme, text='Delete Custom Theme',
                 command=self.DeleteCustomTheme)
+        self.new_custom_theme = Label(frameTheme, bd=2)
 
         ##widget packing
         #body
@@ -284,6 +285,7 @@ class ConfigDialog(Toplevel):
         self.optMenuThemeBuiltin.pack(side=TOP, fill=X, padx=5, pady=5)
         self.optMenuThemeCustom.pack(side=TOP, fill=X, anchor=W, padx=5, pady=5)
         self.buttonDeleteCustomTheme.pack(side=TOP, fill=X, padx=5, pady=5)
+        self.new_custom_theme.pack(side=TOP, fill=X, pady=5)
         return frame
 
     def CreatePageKeys(self):
@@ -498,6 +500,16 @@ class ConfigDialog(Toplevel):
         self.autoSave.trace_variable('w', self.VarChanged_autoSave)
         self.encoding.trace_variable('w', self.VarChanged_encoding)
 
+    def remove_var_callbacks(self):
+        for var in (
+                self.fontSize, self.fontName, self.fontBold,
+                self.spaceNum, self.colour, self.builtinTheme,
+                self.customTheme, self.themeIsBuiltin, self.highlightTarget,
+                self.keyBinding, self.builtinKeys, self.customKeys,
+                self.keysAreBuiltin, self.winWidth, self.winHeight,
+                self.startupEdit, self.autoSave, self.encoding,):
+            var.trace_vdelete('w', var.trace_vinfo()[0][1])
+
     def VarChanged_font(self, *params):
         '''When one font attribute changes, save them all, as they are
         not independent from each other. In particular, when we are
@@ -520,20 +532,15 @@ class ConfigDialog(Toplevel):
     def VarChanged_builtinTheme(self, *params):
         value = self.builtinTheme.get()
         if value == 'IDLE Dark':
-            tkMessageBox.showwarning(
-                title="The 'IDLE Dark' Text Color Theme",
-                message="IDLE Dark is new in October, 2015.  Trying to "
-                        "run earlier versions of IDLE with it selected "
-                        "will disable colorizing, or worse.\n\n"
-                        "If you might ever run an earlier release of IDLE, "
-                        "then before exiting this version, "
-                        "either switch to another theme or "
-                        "hit the 'Save as New Custom Theme' button.  "
-                        "The latter requires a new name, such as "
-                        "'Custom Dark', but the custom theme will work "
-                        "with any IDLE release, and can be modified.",
-                parent=self)
-        self.AddChangedItem('main', 'Theme', 'name', value)
+            if idleConf.GetOption('main', 'Theme', 'name') != 'IDLE New':
+                self.AddChangedItem('main', 'Theme', 'name', 'IDLE Classic')
+            self.AddChangedItem('main', 'Theme', 'name2', value)
+            self.new_custom_theme.config(text='New theme, see Help',
+                                         fg='#500000')
+        else:
+            self.AddChangedItem('main', 'Theme', 'name', value)
+            self.AddChangedItem('main', 'Theme', 'name2', '')
+            self.new_custom_theme.config(text='', fg='black')
         self.PaintThemeSample()
 
     def VarChanged_customTheme(self, *params):
@@ -760,6 +767,7 @@ class ConfigDialog(Toplevel):
         if not tkMessageBox.askyesno(
                 'Delete Key Set',  delmsg % keySetName, parent=self):
             return
+        self.DeactivateCurrentConfig()
         #remove key set from config
         idleConf.userCfg['keys'].remove_section(keySetName)
         if keySetName in self.changedItems['keys']:
@@ -778,7 +786,8 @@ class ConfigDialog(Toplevel):
         self.keysAreBuiltin.set(idleConf.defaultCfg['main'].Get('Keys', 'default'))
         self.builtinKeys.set(idleConf.defaultCfg['main'].Get('Keys', 'name'))
         #user can't back out of these changes, they must be applied now
-        self.Apply()
+        self.SaveAllChangedConfigs()
+        self.ActivateConfigChanges()
         self.SetKeysType()
 
     def DeleteCustomTheme(self):
@@ -787,6 +796,7 @@ class ConfigDialog(Toplevel):
         if not tkMessageBox.askyesno(
                 'Delete Theme',  delmsg % themeName, parent=self):
             return
+        self.DeactivateCurrentConfig()
         #remove theme from config
         idleConf.userCfg['highlight'].remove_section(themeName)
         if themeName in self.changedItems['highlight']:
@@ -805,7 +815,8 @@ class ConfigDialog(Toplevel):
         self.themeIsBuiltin.set(idleConf.defaultCfg['main'].Get('Theme', 'default'))
         self.builtinTheme.set(idleConf.defaultCfg['main'].Get('Theme', 'name'))
         #user can't back out of these changes, they must be applied now
-        self.Apply()
+        self.SaveAllChangedConfigs()
+        self.ActivateConfigChanges()
         self.SetThemeType()
 
     def GetColour(self):
@@ -1216,7 +1227,7 @@ class ConfigDialog(Toplevel):
 
         All values are treated as text, and it is up to the user to supply
         reasonable values. The only exception to this are the 'enable*' options,
-        which are boolean, and can be toggled with an True/False button.
+        which are boolean, and can be toggled with a True/False button.
         """
         parent = self.parent
         frame = self.tabPages.pages['Extensions'].frame
@@ -1367,14 +1378,14 @@ help_common = '''\
 When you click either the Apply or Ok buttons, settings in this
 dialog that are different from IDLE's default are saved in
 a .idlerc directory in your home directory. Except as noted,
-hese changes apply to all versions of IDLE installed on this
+these changes apply to all versions of IDLE installed on this
 machine. Some do not take affect until IDLE is restarted.
 [Cancel] only cancels changes made since the last save.
 '''
 help_pages = {
     'Highlighting':'''
 Highlighting:
-The IDLE Dark color theme is new in Octover 2015.  It can only
+The IDLE Dark color theme is new in October 2015.  It can only
 be used with older IDLE releases if it is saved as a custom
 theme, with a different name.
 '''

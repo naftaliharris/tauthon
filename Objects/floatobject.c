@@ -149,9 +149,37 @@ PyFloat_FromDouble(double fval)
     /* Inline PyObject_New */
     op = free_list;
     free_list = (PyFloatObject *)Py_TYPE(op);
-    PyObject_INIT(op, &PyFloat_Type);
+    (void)PyObject_INIT(op, &PyFloat_Type);
     op->ob_fval = fval;
     return (PyObject *) op;
+}
+
+static PyObject *
+float_from_string_inner(const char *s, Py_ssize_t len, void *obj)
+{
+    double x;
+    const char *end;
+    const char *last = s + len;
+    char buffer[256]; /* for errors */
+
+    while (Py_ISSPACE(*s))
+        s++;
+    /* We don't care about overflow or underflow.  If the platform
+     * supports them, infinities and signed zeroes (on underflow) are
+     * fine. */
+    x = PyOS_string_to_double(s, (char **)&end, NULL);
+    if (x == -1.0 && PyErr_Occurred())
+        return NULL;
+    while (Py_ISSPACE(*end))
+        end++;
+    if (end == last)
+        return PyFloat_FromDouble(x);
+    else {
+        PyOS_snprintf(buffer, sizeof(buffer),
+                      "invalid literal for float(): %.200s", s);
+        PyErr_SetString(PyExc_ValueError, buffer);
+        return NULL;
+    }
 }
 
 /**************************************************************************
@@ -173,13 +201,12 @@ still supported but now *officially* useless:  if pend is not NULL,
 PyObject *
 PyFloat_FromString(PyObject *v, char **pend)
 {
-    const char *s, *last, *end;
-    double x;
-    char buffer[256]; /* for errors */
+    const char *s;
 #ifdef Py_USING_UNICODE
     char *s_buffer = NULL;
 #endif
     Py_ssize_t len;
+    PyObject *str = NULL;
     PyObject *result = NULL;
 
     if (pend)
@@ -202,37 +229,28 @@ PyFloat_FromString(PyObject *v, char **pend)
         len = strlen(s);
     }
 #endif
-    else if (PyObject_AsCharBuffer(v, &s, &len)) {
+    else if (!PyObject_AsCharBuffer(v, &s, &len)) {
+        /* Copy to NUL-terminated buffer. */
+        str = PyString_FromStringAndSize(s, len);
+        if (str == NULL)
+            return NULL;
+        s = PyString_AS_STRING(str);
+    }
+    else {
         PyErr_SetString(PyExc_TypeError,
             "float() argument must be a string or a number");
         return NULL;
     }
-    last = s + len;
 
-    while (Py_ISSPACE(*s))
-        s++;
-    /* We don't care about overflow or underflow.  If the platform
-     * supports them, infinities and signed zeroes (on underflow) are
-     * fine. */
-    x = PyOS_string_to_double(s, (char **)&end, NULL);
-    if (x == -1.0 && PyErr_Occurred())
-        goto error;
-    while (Py_ISSPACE(*end))
-        end++;
-    if (end == last)
-        result = PyFloat_FromDouble(x);
-    else {
-        PyOS_snprintf(buffer, sizeof(buffer),
-                      "invalid literal for float(): %.200s", s);
-        PyErr_SetString(PyExc_ValueError, buffer);
-        result = NULL;
-    }
+    result = _Py_string_to_number_with_underscores(s, len, "float", v, v,
+                                                   float_from_string_inner);
 
   error:
 #ifdef Py_USING_UNICODE
     if (s_buffer)
         PyMem_FREE(s_buffer);
 #endif
+    Py_XDECREF(str);
     return result;
 }
 
@@ -398,7 +416,7 @@ float_str(PyFloatObject *v)
  * may lose info from fractional bits.  Converting the integer to a double
  * also has two failure modes:  (1) a long int may trigger overflow (too
  * large to fit in the dynamic range of a C double); (2) even a C long may have
- * more bits than fit in a C double (e.g., on a a 64-bit box long may have
+ * more bits than fit in a C double (e.g., on a 64-bit box long may have
  * 63 bits of precision, but a C double probably has only 53), and then
  * we can falsely claim equality when low-order integer bits are lost by
  * coercion to double.  So this part is painful too.
@@ -1830,7 +1848,7 @@ float_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     tmp = float_new(&PyFloat_Type, args, kwds);
     if (tmp == NULL)
         return NULL;
-    assert(PyFloat_CheckExact(tmp));
+    assert(PyFloat_Check(tmp));
     newobj = type->tp_alloc(type, 0);
     if (newobj == NULL) {
         Py_DECREF(tmp);

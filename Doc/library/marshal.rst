@@ -17,7 +17,6 @@ rarely does). [#]_
 .. index::
    module: pickle
    module: shelve
-   object: code
 
 This is not a general "persistence" module.  For general persistence and
 transfer of Python objects through RPC calls, see the modules :mod:`pickle` and
@@ -34,6 +33,8 @@ supports a substantially wider range of objects than marshal.
    The :mod:`marshal` module is not intended to be secure against erroneous or
    maliciously constructed data.  Never unmarshal data received from an
    untrusted or unauthenticated source.
+
+.. index:: object; code, code object
 
 Not all Python object types are supported; in general, only objects whose value
 is independent from a particular invocation of Python can be written and read by
@@ -66,7 +67,7 @@ The module defines these functions:
 .. function:: dump(value, file[, version])
 
    Write the value on the open file.  The value must be a supported type.  The
-   file must be a open file object such as ``sys.stdout`` or returned by
+   file must be an open file object such as ``sys.stdout`` or returned by
    :func:`open` or :func:`os.popen`.  It may not be a wrapper such as
    TemporaryFile on Windows. It must be opened in binary mode (``'wb'``
    or ``'w+b'``).

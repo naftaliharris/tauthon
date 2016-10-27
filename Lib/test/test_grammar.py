@@ -9,6 +9,84 @@ import sys
 # testing import *
 from sys import *
 
+# These are shared with test_tokenize and other test modules.
+#
+# Note: since several test cases filter out floats by looking for "e" and ".",
+# don't add hexadecimal literals that contain "e" or "E".
+VALID_UNDERSCORE_LITERALS = [
+    '0_0_0',
+    '4_2',
+    '1_0000_0000',
+    '0b1001_0100',
+    '0xffff_ffff',
+    '0o5_7_7',
+    '1_00_00.5',
+    '1_00_00.5e5',
+    '1_00_00e5_1',
+    '1e1_0',
+    '.1_4',
+    '.1_4e1',
+    '0b_0',
+    '0x_f',
+    '0o_5',
+    '1_00_00j',
+    '1_00_00.5j',
+    '1_00_00e5_1j',
+    '.1_4j',
+    '(1_2.5+3_3j)',
+    '(.5_6j)',
+]
+INVALID_UNDERSCORE_LITERALS = [
+    # Trailing underscores:
+    '0_',
+    '42_',
+    '1.4j_',
+    '0x_',
+    '0b1_',
+    '0xf_',
+    '0o5_',
+    '0 if 1_Else 1',
+    # Underscores in the base selector:
+    '0_b0',
+    '0_xf',
+    '0_o5',
+    # Multiple consecutive underscores:
+    '4_______2',
+    '0.1__4',
+    '0.1__4j',
+    '0b1001__0100',
+    '0xffff__ffff',
+    '0x___',
+    '0o5__77',
+    '1e1__0',
+    '1e1__0j',
+    # Underscore right before a dot:
+    '1_.4',
+    '1_.4j',
+    # Underscore right after a dot:
+    '1._4',
+    '1._4j',
+    '._5',
+    '._5j',
+    # Underscore right after a sign:
+    '1.0e+_1',
+    '1.0e+_1j',
+    # Underscore right before j:
+    '1.4_j',
+    '1.4e5_j',
+    # Underscore right before e:
+    '1_e1',
+    '1.4_e1',
+    '1.4_e1j',
+    # Underscore right after e:
+    '1e_1',
+    '1.4e_1',
+    '1.4e_1j',
+    # Complex cases with parens:
+    '(1+1.5_j_)',
+    '(1+1.5_j)',
+]
+
 
 class TokenTests(unittest.TestCase):
 
@@ -82,6 +160,14 @@ class TokenTests(unittest.TestCase):
         self.assertEqual(1 if 0else 0, 0)
         self.assertRaises(SyntaxError, eval, "0 if 1Else 0")
 
+    def test_underscore_literals(self):
+        for lit in VALID_UNDERSCORE_LITERALS:
+            self.assertEqual(eval(lit), eval(lit.replace('_', '')))
+        for lit in INVALID_UNDERSCORE_LITERALS:
+            self.assertRaises(SyntaxError, eval, lit)
+        # Sanity check: no literal begins with an underscore
+        self.assertRaises(NameError, eval, "_0")
+
     def testStringLiterals(self):
         x = ''; y = ""; self.assertTrue(len(x) == 0 and x == y)
         x = '\''; y = "'"; self.assertTrue(len(x) == 1 and x == y and ord(x) == 39)
@@ -141,7 +227,8 @@ class GrammarTests(unittest.TestCase):
     def testFuncdef(self):
         ### 'def' NAME parameters ':' suite
         ### parameters: '(' [varargslist] ')'
-        ### varargslist: (fpdef ['=' test] ',')* ('*' NAME [',' ('**'|'*' '*') NAME]
+        ### varargslist: (fpdef ['=' test] ',')* 
+        ###           ('*' (NAME|',' fpdef ['=' test]) [',' ('**'|'*' '*') NAME]
         ###            | ('**'|'*' '*') NAME)
         ###            | fpdef ['=' test] (',' fpdef ['=' test])* [',']
         ### fpdef: NAME | '(' fplist ')'
@@ -287,6 +374,17 @@ class GrammarTests(unittest.TestCase):
         d31v(1)
         d32v((1,))
 
+        #keyword only argument tests
+        def pos0key1(*, key): return key
+        pos0key1(key=100)
+        def pos2key2(p1, p2, *, k1, k2=100): return p1,p2,k1,k2
+        pos2key2(1, 2, k1=100)
+        pos2key2(1, 2, k1=100, k2=200)
+        pos2key2(1, 2, k2=100, k1=200)
+        def pos2key2dict(p1, p2, *, k1=100, k2, **kwarg): return p1,p2,k1,k2,kwarg
+        pos2key2dict(1,2,k2=100,tokwarg1=100,tokwarg2=200)
+        pos2key2dict(1,2,tokwarg1=100,tokwarg2=200, k2=100)
+
         # keyword arguments after *arglist
         def f(*args, **kwargs):
             return args, kwargs
@@ -313,6 +411,9 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual(l5(1, 2, 3), 6)
         check_syntax_error(self, "lambda x: x = 2")
         check_syntax_error(self, "lambda (None,): None")
+        l6 = lambda x, y, *, k=20: x+y+k
+        self.assertEqual(l6(1,2), 1+2+20)
+        self.assertEqual(l6(1,2,k=10), 1+2+10)
 
     ### stmt: simple_stmt | compound_stmt
     # Tested below

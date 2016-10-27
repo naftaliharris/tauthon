@@ -24,8 +24,8 @@ up irregularities and dark corners of the language design.
 This article doesn't attempt to provide a complete specification of the new
 features, but instead provides a convenient overview.  For full details, you
 should refer to the documentation for Python 2.2, such as the `Python Library
-Reference <https://www.python.org/doc/2.2/lib/lib.html>`_ and the `Python
-Reference Manual <https://www.python.org/doc/2.2/ref/ref.html>`_.  If you want to
+Reference <https://docs.python.org/2.2/lib/lib.html>`_ and the `Python
+Reference Manual <https://docs.python.org/2.2/ref/ref.html>`_.  If you want to
 understand the complete implementation and design rationale for a change, refer
 to the PEP for a particular new feature.
 
@@ -157,7 +157,7 @@ attributes and methods were supported by an object. There were some informal
 conventions, such as defining :attr:`__members__` and :attr:`__methods__`
 attributes that were lists of names, but often the author of an extension type
 or a class wouldn't bother to define them.  You could fall back on inspecting
-the :attr:`__dict__` of an object, but when class inheritance or an arbitrary
+the :attr:`~object.__dict__` of an object, but when class inheritance or an arbitrary
 :meth:`__getattr__` hook were in use this could still be inaccurate.
 
 The one big idea underlying the new class model is that an API for describing
@@ -169,7 +169,7 @@ possible, as well as more exotic constructs.
 Attribute descriptors are objects that live inside class objects, and have a few
 attributes of their own:
 
-* :attr:`__name__` is the attribute's name.
+* :attr:`~definition.__name__` is the attribute's name.
 
 * :attr:`__doc__` is the attribute's docstring.
 
@@ -329,7 +329,7 @@ However, Python 2.2's support for :dfn:`properties` will often be a simpler way
 to trap attribute references.  Writing a :meth:`__getattr__` method is
 complicated because to avoid recursion you can't use regular attribute accesses
 inside them, and instead have to mess around with the contents of
-:attr:`__dict__`. :meth:`__getattr__` methods also end up being called by Python
+:attr:`~object.__dict__`. :meth:`__getattr__` methods also end up being called by Python
 when it checks for other methods such as :meth:`__repr__` or :meth:`__coerce__`,
 and so have to be written with this in mind. Finally, calling a function on
 every attribute access results in a sizable performance loss.
@@ -357,15 +357,15 @@ write::
 That is certainly clearer and easier to write than a pair of
 :meth:`__getattr__`/:meth:`__setattr__` methods that check for the :attr:`size`
 attribute and handle it specially while retrieving all other attributes from the
-instance's :attr:`__dict__`.  Accesses to :attr:`size` are also the only ones
+instance's :attr:`~object.__dict__`.  Accesses to :attr:`size` are also the only ones
 which have to perform the work of calling a function, so references to other
 attributes run at their usual speed.
 
 Finally, it's possible to constrain the list of attributes that can be
-referenced on an object using the new :attr:`__slots__` class attribute. Python
+referenced on an object using the new :attr:`~object.__slots__` class attribute. Python
 objects are usually very dynamic; at any time it's possible to define a new
 attribute on an instance by just doing ``obj.new_attr=1``.   A new-style class
-can define a class attribute named :attr:`__slots__` to limit the legal
+can define a class attribute named :attr:`~object.__slots__` to limit the legal
 attributes  to a particular set of names.  An example will make this clear::
 
    >>> class C(object):
@@ -383,7 +383,7 @@ attributes  to a particular set of names.  An example will make this clear::
    AttributeError: 'C' object has no attribute 'newattr'
 
 Note how you get an :exc:`AttributeError` on the attempt to assign to an
-attribute not listed in :attr:`__slots__`.
+attribute not listed in :attr:`~object.__slots__`.
 
 
 .. _sect-rellinks:
@@ -395,7 +395,7 @@ This section has just been a quick overview of the new features, giving enough
 of an explanation to start you programming, but many details have been
 simplified or ignored.  Where should you go to get a more complete picture?
 
-https://www.python.org/2.2/descrintro.html is a lengthy tutorial introduction to
+https://docs.python.org/dev/howto/descriptor.html is a lengthy tutorial introduction to
 the descriptor features, written by Guido van Rossum. If my description has
 whetted your appetite, go read this tutorial next, because it goes into much
 more detail about the new features while still remaining quite easy to read.
@@ -632,10 +632,10 @@ queen threatens another) and the Knight's Tour (a route that takes a knight to
 every square of an $NxN$ chessboard without visiting any square twice).
 
 The idea of generators comes from other programming languages, especially Icon
-(http://www.cs.arizona.edu/icon/), where the idea of generators is central.  In
+(https://www.cs.arizona.edu/icon/), where the idea of generators is central.  In
 Icon, every expression and function call behaves like a generator.  One example
 from "An Overview of the Icon Programming Language" at
-http://www.cs.arizona.edu/icon/docs/ipd266.htm gives an idea of what this looks
+https://www.cs.arizona.edu/icon/docs/ipd266.htm gives an idea of what this looks
 like::
 
    sentence := "Store it in the neighboring harbor"
@@ -720,7 +720,7 @@ possible types of the operands.
 
 (The controversy is over whether this is *really* a design flaw, and whether
 it's worth breaking existing code to fix this.  It's caused endless discussions
-on python-dev, and in July 2001 erupted into an storm of acidly sarcastic
+on python-dev, and in July 2001 erupted into a storm of acidly sarcastic
 postings on :newsgroup:`comp.lang.python`. I won't argue for either side here
 and will stick to describing what's  implemented in 2.2.  Read :pep:`238` for a
 summary of arguments and counter-arguments.)
@@ -758,8 +758,8 @@ Here are the changes 2.2 introduces:
   operators.
 
 * Python 2.2 supports some command-line arguments for testing whether code will
-  works with the changed division semantics.  Running python with :option:`-Q
-  warn` will cause a warning to be issued whenever division is applied to two
+  work with the changed division semantics.  Running python with :option:`-Q
+  warn <-Q>` will cause a warning to be issued whenever division is applied to two
   integers.  You can use this to find code that's affected by the change and fix
   it.  By default, Python 2.2 will simply perform classic division without a
   warning; the warning will be turned on by default in Python 2.3.

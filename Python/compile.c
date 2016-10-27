@@ -111,6 +111,7 @@ struct compiler_unit {
     PyObject *u_private;        /* for private name mangling */
 
     int u_argcount;        /* number of arguments for block */
+    int u_kwonlyargcount; /* number of keyword only arguments for block */
     /* Pointer to the most recently allocated block.  By following b_list
        members, you can reach all early allocated blocks. */
     basicblock *u_blocks;
@@ -340,7 +341,7 @@ list2dict(PyObject *list)
             return NULL;
         }
         k = PyList_GET_ITEM(list, i);
-        k = PyTuple_Pack(2, k, k->ob_type);
+        k = _PyCode_ConstantKey(k);
         if (k == NULL || PyDict_SetItem(dict, k, v) < 0) {
             Py_XDECREF(k);
             Py_DECREF(v);
@@ -401,7 +402,7 @@ dictbytype(PyObject *src, int scope_type, int flag, int offset)
                 return NULL;
             }
             i++;
-            tuple = PyTuple_Pack(2, k, k->ob_type);
+            tuple = _PyCode_ConstantKey(k);
             if (!tuple || PyDict_SetItem(dest, tuple, item) < 0) {
                 Py_DECREF(sorted_keys);
                 Py_DECREF(item);
@@ -476,6 +477,7 @@ compiler_enter_scope(struct compiler *c, identifier name, void *key,
     }
     memset(u, 0, sizeof(struct compiler_unit));
     u->u_argcount = 0;
+    u->u_kwonlyargcount = 0;
     u->u_ste = PySymtable_Lookup(c->c_st, key);
     if (!u->u_ste) {
         compiler_unit_free(u);
@@ -898,9 +900,9 @@ opcode_stack_effect(int opcode, int oparg)
             return -NARGS(oparg)-1;
         case CALL_FUNCTION_VAR_KW:
             return -NARGS(oparg)-2;
-#undef NARGS
         case MAKE_FUNCTION:
-            return -oparg;
+            return -NARGS(oparg);
+#undef NARGS
         case BUILD_SLICE:
             if (oparg == 3)
                 return -2;
@@ -963,49 +965,8 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
 {
     PyObject *t, *v;
     Py_ssize_t arg;
-    double d;
 
-    /* necessary to make sure types aren't coerced (e.g., int and long) */
-    /* _and_ to distinguish 0.0 from -0.0 e.g. on IEEE platforms */
-    if (PyFloat_Check(o)) {
-        d = PyFloat_AS_DOUBLE(o);
-        /* all we need is to make the tuple different in either the 0.0
-         * or -0.0 case from all others, just to avoid the "coercion".
-         */
-        if (d == 0.0 && copysign(1.0, d) < 0.0)
-            t = PyTuple_Pack(3, o, o->ob_type, Py_None);
-        else
-            t = PyTuple_Pack(2, o, o->ob_type);
-    }
-#ifndef WITHOUT_COMPLEX
-    else if (PyComplex_Check(o)) {
-        Py_complex z;
-        int real_negzero, imag_negzero;
-        /* For the complex case we must make complex(x, 0.)
-           different from complex(x, -0.) and complex(0., y)
-           different from complex(-0., y), for any x and y.
-           All four complex zeros must be distinguished.*/
-        z = PyComplex_AsCComplex(o);
-        real_negzero = z.real == 0.0 && copysign(1.0, z.real) < 0.0;
-        imag_negzero = z.imag == 0.0 && copysign(1.0, z.imag) < 0.0;
-        if (real_negzero && imag_negzero) {
-            t = PyTuple_Pack(5, o, o->ob_type,
-                             Py_None, Py_None, Py_None);
-        }
-        else if (imag_negzero) {
-            t = PyTuple_Pack(4, o, o->ob_type, Py_None, Py_None);
-        }
-        else if (real_negzero) {
-            t = PyTuple_Pack(3, o, o->ob_type, Py_None);
-        }
-        else {
-            t = PyTuple_Pack(2, o, o->ob_type);
-        }
-    }
-#endif /* WITHOUT_COMPLEX */
-    else {
-        t = PyTuple_Pack(2, o, o->ob_type);
-    }
+    t = _PyCode_ConstantKey(o);
     if (t == NULL)
         return -1;
 
@@ -1306,7 +1267,7 @@ static int
 compiler_lookup_arg(PyObject *dict, PyObject *name)
 {
     PyObject *k, *v;
-    k = PyTuple_Pack(2, name, name->ob_type);
+    k = _PyCode_ConstantKey(name);
     if (k == NULL)
         return -1;
     v = PyDict_GetItem(dict, k);
@@ -1400,6 +1361,25 @@ compiler_arguments(struct compiler *c, arguments_ty args)
 }
 
 static int
+compiler_visit_kwonlydefaults(struct compiler *c, asdl_seq *kwonlyargs,
+                              asdl_seq *kw_defaults)
+{
+    int i, default_count = 0;
+    for (i = 0; i < asdl_seq_LEN(kwonlyargs); i++) {
+        expr_ty arg = asdl_seq_GET(kwonlyargs, i);
+        expr_ty default_ = asdl_seq_GET(kw_defaults, i);
+        if (default_) {
+            ADDOP_O(c, LOAD_CONST, arg->v.Name.id, consts);
+            if (!compiler_visit_expr(c, default_)) {
+                return -1;
+            }
+            default_count++;
+        }
+    }
+    return default_count;
+}
+
+static int
 compiler_function(struct compiler *c, stmt_ty s, int is_async)
 {
     PyCodeObject *co;
@@ -1409,7 +1389,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
     asdl_seq* decos;
     asdl_seq *body;
     stmt_ty st;
-    int i, n, docstring;
+    int i, n, docstring, kw_default_count = 0, arglength;
 
     if (is_async) {
         assert(s->kind == AsyncFunctionDef_kind);
@@ -1429,6 +1409,13 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->kwonlyargs) {
+        int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
+                                                args->kw_defaults);
+        if (res < 0)
+            return 0;
+        kw_default_count = res;
+    }
     if (args->defaults)
         VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, (void *)s,
@@ -1448,6 +1435,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
     compiler_arguments(c, args);
 
     c->u->u_argcount = asdl_seq_LEN(args->args);
+    c->u->u_kwonlyargcount = asdl_seq_LEN(args->kwonlyargs);
     n = asdl_seq_LEN(body);
     /* if there was a docstring, we need to skip the first statement */
     for (i = docstring; i < n; i++) {
@@ -1461,7 +1449,9 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
 
     if (is_async)
         co->co_flags |= CO_COROUTINE;
-    compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+    arglength = asdl_seq_LEN(args->defaults);
+    arglength |= kw_default_count << 8;
+    compiler_make_closure(c, co, arglength);
     Py_DECREF(co);
 
     for (i = 0; i < asdl_seq_LEN(decos); i++) {
@@ -1492,9 +1482,8 @@ compiler_class(struct compiler *c, stmt_ty s)
     if (!compiler_enter_scope(c, s->v.ClassDef.name, (void *)s,
                               s->lineno))
         return 0;
-    Py_XDECREF(c->u->u_private);
-    c->u->u_private = s->v.ClassDef.name;
-    Py_INCREF(c->u->u_private);
+    Py_INCREF(s->v.ClassDef.name);
+    Py_XSETREF(c->u->u_private, s->v.ClassDef.name);
     str = PyString_InternFromString("__name__");
     if (!str || !compiler_nameop(c, str, Load)) {
         Py_XDECREF(str);
@@ -1564,6 +1553,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
 {
     PyCodeObject *co;
     static identifier name;
+    int kw_default_count = 0, arglength;
     arguments_ty args = e->v.Lambda.args;
     assert(e->kind == Lambda_kind);
 
@@ -1573,6 +1563,12 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->kwonlyargs) {
+        int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
+                                                args->kw_defaults);
+        if (res < 0) return 0;
+        kw_default_count = res;
+    }
     if (args->defaults)
         VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, (void *)e, e->lineno))
@@ -1587,6 +1583,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
         return 0;
 
     c->u->u_argcount = asdl_seq_LEN(args->args);
+    c->u->u_kwonlyargcount = asdl_seq_LEN(args->kwonlyargs);
     VISIT_IN_SCOPE(c, expr, e->v.Lambda.body);
     if (c->u->u_ste->ste_generator) {
         ADDOP_IN_SCOPE(c, POP_TOP);
@@ -1599,7 +1596,9 @@ compiler_lambda(struct compiler *c, expr_ty e)
     if (co == NULL)
         return 0;
 
-    compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+    arglength = asdl_seq_LEN(args->defaults);
+    arglength |= kw_default_count << 8;
+    compiler_make_closure(c, co, arglength);
     Py_DECREF(co);
 
     return 1;
@@ -2054,7 +2053,7 @@ compiler_import_as(struct compiler *c, identifier name, identifier asname)
             attr = PyString_FromStringAndSize(src,
                                 dot ? dot - src : strlen(src));
             if (!attr)
-                return -1;
+                return 0;
             ADDOP_O(c, LOAD_ATTR, attr, names);
             Py_DECREF(attr);
             src = dot + 1;
@@ -4062,7 +4061,7 @@ dict_keys_inorder(PyObject *dict, int offset)
         i = PyInt_AS_LONG(v);
         /* The keys of the dictionary are tuples. (see compiler_add_o)
            The object we want is always first, though. */
-        k = PyTuple_GET_ITEM(k, 0);
+        k = PyTuple_GET_ITEM(k, 1);
         Py_INCREF(k);
         assert((i - offset) < size);
         assert((i - offset) >= 0);
@@ -4160,7 +4159,8 @@ makecode(struct compiler *c, struct assembler *a)
     Py_DECREF(consts);
     consts = tmp;
 
-    co = PyCode_New(c->u->u_argcount, nlocals, stackdepth(c), flags,
+    co = PyCode_New28(c->u->u_argcount, c->u->u_kwonlyargcount,
+                    nlocals, stackdepth(c), flags,
                     bytecode, consts, names, varnames,
                     freevars, cellvars,
                     filename, c->u->u_name,

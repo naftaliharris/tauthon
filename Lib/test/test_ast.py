@@ -260,12 +260,13 @@ class AST_Tests(unittest.TestCase):
 
     def test_arguments(self):
         x = ast.arguments()
-        self.assertEqual(x._fields, ('args', 'vararg', 'kwarg', 'defaults'))
+        self.assertEqual(x._fields, ('args', 'vararg', 'kwonlyargs', 'kwarg',
+                                     'defaults', 'kw_defaults'))
 
         with self.assertRaises(AttributeError):
             x.vararg
 
-        x = ast.arguments(1, 2, 3, 4)
+        x = ast.arguments(1, 2, 3, 4, 5, 6)
         self.assertEqual(x.vararg, 2)
 
     def test_field_attr_writable(self):
@@ -526,15 +527,15 @@ def main():
 #### EVERYTHING BELOW IS GENERATED #####
 exec_results = [
 ('Module', [('Expr', (1, 0), ('Name', (1, 0), 'None', ('Load',)))]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, None, []), [('Pass', (1, 9))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',))], None, None, []), [('Pass', (1, 10))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',))], None, None, [('Num', (1, 8), 0)]), [('Pass', (1, 12))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], 'args', None, []), [('Pass', (1, 14))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, 'kwargs', []), [('Pass', (1, 17))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',)), ('Name', (1, 9), 'b', ('Param',)), ('Name', (1, 14), 'c', ('Param',)), ('Name', (1, 22), 'd', ('Param',)), ('Name', (1, 28), 'e', ('Param',))], 'args', 'kwargs', [('Num', (1, 11), 1), ('Name', (1, 16), 'None', ('Load',)), ('List', (1, 24), [], ('Load',)), ('Dict', (1, 30), [], [])]), [('Pass', (1, 52))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, [], None, [], []), [('Pass', (1, 9))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',))], None, [], None, [], []), [('Pass', (1, 10))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',))], None, [], None, [('Num', (1, 8), 0)], []), [('Pass', (1, 12))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], 'args', [], None, [], []), [('Pass', (1, 14))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, [], 'kwargs', [], []), [('Pass', (1, 17))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [('Name', (1, 6), 'a', ('Param',)), ('Name', (1, 9), 'b', ('Param',)), ('Name', (1, 14), 'c', ('Param',)), ('Name', (1, 22), 'd', ('Param',)), ('Name', (1, 28), 'e', ('Param',))], 'args', [], 'kwargs', [('Num', (1, 11), 1), ('Name', (1, 16), 'None', ('Load',)), ('List', (1, 24), [], ('Load',)), ('Dict', (1, 30), [], [])], []), [('Pass', (1, 52))], [])]),
 ('Module', [('ClassDef', (1, 0), 'C', [], [('Pass', (1, 8))], [])]),
 ('Module', [('ClassDef', (1, 0), 'C', [('Name', (1, 8), 'object', ('Load',))], [('Pass', (1, 17))], [])]),
-('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, None, []), [('Return', (1, 8), ('Num', (1, 15), 1))], [])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, [], None, [], []), [('Return', (1, 8), ('Num', (1, 15), 1))], [])]),
 ('Module', [('Delete', (1, 0), [('Name', (1, 4), 'v', ('Del',))])]),
 ('Module', [('Assign', (1, 0), [('Name', (1, 0), 'v', ('Store',))], ('Num', (1, 4), 1))]),
 ('Module', [('AugAssign', (1, 0), ('Name', (1, 0), 'v', ('Store',)), ('Add',), ('Num', (1, 5), 1))]),
@@ -572,7 +573,7 @@ eval_results = [
 ('Expression', ('BoolOp', (1, 0), ('And',), [('Name', (1, 0), 'a', ('Load',)), ('Name', (1, 6), 'b', ('Load',))])),
 ('Expression', ('BinOp', (1, 0), ('Name', (1, 0), 'a', ('Load',)), ('Add',), ('Name', (1, 4), 'b', ('Load',)))),
 ('Expression', ('UnaryOp', (1, 0), ('Not',), ('Name', (1, 4), 'v', ('Load',)))),
-('Expression', ('Lambda', (1, 0), ('arguments', [], None, None, []), ('Name', (1, 7), 'None', ('Load',)))),
+('Expression', ('Lambda', (1, 0), ('arguments', [], None, [], None, [], []), ('Name', (1, 7), 'None', ('Load',)))),
 ('Expression', ('Dict', (1, 0), [('Num', (1, 2), 1)], [('Num', (1, 4), 2)])),
 ('Expression', ('Dict', (1, 0), [], [])),
 ('Expression', ('Set', (1, 0), [('Name', (1, 1), 'None', ('Load',))])),

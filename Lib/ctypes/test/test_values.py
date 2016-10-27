@@ -22,8 +22,7 @@ class ValuesTestCase(unittest.TestCase):
         ctdll = CDLL(_ctypes_test.__file__)
         self.assertRaises(ValueError, c_int.in_dll, ctdll, "Undefined_Symbol")
 
-@unittest.skipUnless(sys.platform == 'win32', 'Windows-specific test')
-class Win_ValuesTestCase(unittest.TestCase):
+class PythonValuesTestCase(unittest.TestCase):
     """This test only works when python itself is a dll/shared library"""
 
     def test_optimizeflag(self):
@@ -68,9 +67,9 @@ class Win_ValuesTestCase(unittest.TestCase):
                 break
             items.append((entry.name, entry.size))
 
-        expected = [("__hello__", 104),
-                    ("__phello__", -104),
-                    ("__phello__.spam", 104)]
+        expected = [("__hello__", 118),
+                    ("__phello__", -118),
+                    ("__phello__.spam", 118)]
         self.assertEqual(items, expected)
 
         from ctypes import _pointer_type_cache

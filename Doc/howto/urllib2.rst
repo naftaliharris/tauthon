@@ -1,3 +1,5 @@
+.. _urllib-howto:
+
 ************************************************
   HOWTO Fetch Internet Resources Using urllib2
 ************************************************
@@ -6,7 +8,7 @@
 
 .. note::
 
-    There is an French translation of an earlier revision of this
+    There is a French translation of an earlier revision of this
     HOWTO, available at `urllib2 - Le Manuel manquant
     <http://www.voidspace.org.uk/python/articles/urllib2_francais.shtml>`_.
 
@@ -55,7 +57,7 @@ The simplest way to use urllib2 is as follows::
     html = response.read()
 
 Many uses of urllib2 will be that simple (note that instead of an 'http:' URL we
-could have used an URL starting with 'ftp:', 'file:', etc.).  However, it's the
+could have used a URL starting with 'ftp:', 'file:', etc.).  However, it's the
 purpose of this tutorial to explain the more complicated cases, concentrating on
 HTTP.
 
@@ -112,7 +114,7 @@ argument. The encoding is done using a function from the ``urllib`` library
 
 Note that other encodings are sometimes required (e.g. for file upload from HTML
 forms - see `HTML Specification, Form Submission
-<http://www.w3.org/TR/REC-html40/interact/forms.html#h-17.13>`_ for more
+<https://www.w3.org/TR/REC-html40/interact/forms.html#h-17.13>`_ for more
 details).
 
 If you do not pass the ``data`` argument, urllib2 uses a **GET** request. One
@@ -165,10 +167,10 @@ Explorer [#]_. ::
 
     url = 'http://www.someserver.com/cgi-bin/register.cgi'
     user_agent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64)'
-    values = {'name' : 'Michael Foord',
-              'location' : 'Northampton',
-              'language' : 'Python' }
-    headers = { 'User-Agent' : user_agent }
+    values = {'name': 'Michael Foord',
+              'location': 'Northampton',
+              'language': 'Python' }
+    headers = {'User-Agent': user_agent}
 
     data = urllib.urlencode(values)
     req = urllib2.Request(url, data, headers)
@@ -388,7 +390,7 @@ fetched, particularly the headers sent by the server. It is currently an
 ``httplib.HTTPMessage`` instance.
 
 Typical headers include 'Content-length', 'Content-type', and so on. See the
-`Quick Reference to HTTP Headers <http://www.cs.tut.fi/~jkorpela/http.html>`_
+`Quick Reference to HTTP Headers <https://www.cs.tut.fi/~jkorpela/http.html>`_
 for a useful listing of HTTP headers with brief explanations of their meaning
 and use.
 
@@ -499,7 +501,7 @@ component and the hostname and optionally the port number)
 e.g. "http://example.com/" *or* an "authority" (i.e. the hostname,
 optionally including the port number) e.g. "example.com" or "example.com:8080"
 (the latter example includes a port number).  The authority, if present, must
-NOT contain the "userinfo" component - for example "joe@password:example.com" is
+NOT contain the "userinfo" component - for example "joe:password@example.com" is
 not correct.
 
 
@@ -573,5 +575,5 @@ This document was reviewed and revised by John Lee.
        scripts with a localhost server, I have to prevent urllib2 from using
        the proxy.
 .. [#] urllib2 opener for SSL proxy (CONNECT method): `ASPN Cookbook Recipe
-       <http://code.activestate.com/recipes/456195/>`_.
+       <https://code.activestate.com/recipes/456195/>`_.
 

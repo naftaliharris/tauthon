@@ -279,7 +279,7 @@ The :mod:`urlparse` module defines the following functions:
    :rfc:`3986` - Uniform Resource Identifiers
       This is the current standard (STD66). Any changes to urlparse module
       should conform to this. Certain deviations could be observed, which are
-      mostly due backward compatiblity purposes and for certain de-facto
+      mostly for backward compatibility purposes and for certain de-facto
       parsing requirements as commonly observed in major browsers.
 
    :rfc:`2732` - Format for Literal IPv6 Addresses in URL's.
@@ -290,7 +290,7 @@ The :mod:`urlparse` module defines the following functions:
       Names (URNs) and Uniform Resource Locators (URLs).
 
    :rfc:`2368` - The mailto URL scheme.
-      Parsing requirements for mailto url schemes.
+      Parsing requirements for mailto URL schemes.
 
    :rfc:`1808` - Relative Uniform Resource Locators
       This Request For Comments includes the rules for joining an absolute and a
@@ -337,22 +337,12 @@ described in those functions, as well as provide an additional method:
 The following classes provide the implementations of the parse results:
 
 
-.. class:: BaseResult
-
-   Base class for the concrete result classes.  This provides most of the attribute
-   definitions.  It does not provide a :meth:`geturl` method.  It is derived from
-   :class:`tuple`, but does not override the :meth:`__init__` or :meth:`__new__`
-   methods.
-
-
 .. class:: ParseResult(scheme, netloc, path, params, query, fragment)
 
-   Concrete class for :func:`urlparse` results.  The :meth:`__new__` method is
-   overridden to support checking that the right number of arguments are passed.
+   Concrete class for :func:`urlparse` results.
 
 
 .. class:: SplitResult(scheme, netloc, path, query, fragment)
 
-   Concrete class for :func:`urlsplit` results.  The :meth:`__new__` method is
-   overridden to support checking that the right number of arguments are passed.
+   Concrete class for :func:`urlsplit` results.
 

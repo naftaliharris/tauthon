@@ -544,11 +544,12 @@ class From(Node):
         return "From(%s, %s, %s)" % (repr(self.modname), repr(self.names), repr(self.level))
 
 class Function(Node):
-    def __init__(self, decorators, name, argnames, defaults, flags, doc, code, lineno=None):
+    def __init__(self, decorators, name, argnames, defaults, kwonlyargs, flags, doc, code, lineno=None):
         self.decorators = decorators
         self.name = name
         self.argnames = argnames
         self.defaults = defaults
+        self.kwonlyargs = kwonlyargs
         self.flags = flags
         self.doc = doc
         self.code = code
@@ -566,6 +567,7 @@ class Function(Node):
         children.append(self.name)
         children.append(self.argnames)
         children.extend(flatten(self.defaults))
+        children.append(self.kwonlyargs)
         children.append(self.flags)
         children.append(self.doc)
         children.append(self.code)
@@ -580,7 +582,7 @@ class Function(Node):
         return tuple(nodelist)
 
     def __repr__(self):
-        return "Function(%s, %s, %s, %s, %s, %s, %s)" % (repr(self.decorators), repr(self.name), repr(self.argnames), repr(self.defaults), repr(self.flags), repr(self.doc), repr(self.code))
+        return "Function(%s, %s, %s, %s, %s, %s, %s, %s)" % (repr(self.decorators), repr(self.name), repr(self.argnames), repr(self.defaults), repr(self.kwonlyargs), repr(self.flags), repr(self.doc), repr(self.code))
 
 class GenExpr(Node):
     def __init__(self, code, lineno=None):
@@ -588,6 +590,7 @@ class GenExpr(Node):
         self.lineno = lineno
         self.argnames = ['.0']
         self.varargs = self.kwargs = None
+        self.kwonlyargs = ()
 
 
     def getChildren(self):
@@ -770,9 +773,10 @@ class Keyword(Node):
         return "Keyword(%s, %s)" % (repr(self.name), repr(self.expr))
 
 class Lambda(Node):
-    def __init__(self, argnames, defaults, flags, code, lineno=None):
+    def __init__(self, argnames, defaults, kwonlyargs, flags, code, lineno=None):
         self.argnames = argnames
         self.defaults = defaults
+        self.kwonlyargs = kwonlyargs
         self.flags = flags
         self.code = code
         self.lineno = lineno
@@ -787,6 +791,7 @@ class Lambda(Node):
         children = []
         children.append(self.argnames)
         children.extend(flatten(self.defaults))
+        children.append(self.kwonlyargs)
         children.append(self.flags)
         children.append(self.code)
         return tuple(children)
@@ -798,7 +803,7 @@ class Lambda(Node):
         return tuple(nodelist)
 
     def __repr__(self):
-        return "Lambda(%s, %s, %s, %s)" % (repr(self.argnames), repr(self.defaults), repr(self.flags), repr(self.code))
+        return "Lambda(%s, %s, %s, %s, %s)" % (repr(self.argnames), repr(self.defaults), repr(self.kwonlyargs), repr(self.flags), repr(self.code))
 
 class LeftShift(Node):
     def __init__(self, leftright, lineno=None):

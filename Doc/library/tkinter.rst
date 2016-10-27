@@ -26,22 +26,22 @@ is maintained at ActiveState.)
    `TKDocs <http://www.tkdocs.com/>`_
       Extensive tutorial plus friendlier widget pages for some of the widgets.
 
-   `Tkinter reference: a GUI for Python <http://infohost.nmt.edu/tcc/help/pubs/tkinter/web/index.html>`_
+   `Tkinter reference: a GUI for Python <https://infohost.nmt.edu/tcc/help/pubs/tkinter/web/index.html>`_
       On-line reference material.
 
    `Tkinter docs from effbot <http://effbot.org/tkinterbook/>`_
       Online reference for tkinter supported by effbot.org.
 
-   `Tcl/Tk manual <http://www.tcl.tk/man/tcl8.5/>`_
+   `Tcl/Tk manual <https://www.tcl.tk/man/tcl8.5/>`_
       Official manual for the latest tcl/tk version.
 
-   `Programming Python <http://www.rmi.net/~lutz/about-pp4e.html>`_
+   `Programming Python <http://learning-python.com/books/about-pp4e.html>`_
       Book by Mark Lutz, has excellent coverage of Tkinter.
 
    `Modern Tkinter for Busy Python Developers <http://www.amazon.com/Modern-Tkinter-Python-Developers-ebook/dp/B0071QDNLO/>`_
       Book by Mark Rozerman about building attractive and modern graphical user interfaces with Python and Tkinter.
 
-   `Python and Tkinter Programming <http://www.manning.com/grayson/>`_
+   `Python and Tkinter Programming <https://www.manning.com/books/python-and-tkinter-programming>`_
       The book by John Grayson (ISBN 1-884777-81-3).
 
 

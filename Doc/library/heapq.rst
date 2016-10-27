@@ -133,7 +133,7 @@ the iterable into an actual heap.
 Basic Examples
 --------------
 
-A `heapsort <http://en.wikipedia.org/wiki/Heapsort>`_ can be implemented by
+A `heapsort <https://en.wikipedia.org/wiki/Heapsort>`_ can be implemented by
 pushing all values onto a heap and then popping off the smallest values one at a
 time::
 
@@ -164,7 +164,7 @@ Heap elements can be tuples.  This is useful for assigning comparison values
 Priority Queue Implementation Notes
 -----------------------------------
 
-A `priority queue <http://en.wikipedia.org/wiki/Priority_queue>`_ is common use
+A `priority queue <https://en.wikipedia.org/wiki/Priority_queue>`_ is common use
 for a heap, and it presents several implementation challenges:
 
 * Sort stability:  how do you get two tasks with equal priorities to be returned
@@ -244,7 +244,7 @@ for a tournament.  The numbers below are *k*, not ``a[k]``::
 
    15 16   17 18   19 20   21 22   23 24   25 26   27 28   29 30
 
-In the tree above, each cell *k* is topping ``2*k+1`` and ``2*k+2``. In an usual
+In the tree above, each cell *k* is topping ``2*k+1`` and ``2*k+2``. In a usual
 binary tournament we see in sports, each cell is the winner over the two cells
 it tops, and we can trace the winner down the tree to see all opponents s/he
 had.  However, in many computer applications of such tournaments, we do not need

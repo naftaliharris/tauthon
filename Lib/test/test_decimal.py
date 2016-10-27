@@ -457,11 +457,36 @@ class DecimalExplicitConstructionTest(unittest.TestCase):
         self.assertEqual(str(Decimal('1.3E4 \n')), '1.3E+4')
         self.assertEqual(str(Decimal('  -7.89')), '-7.89')
 
+        # underscores
+        self.assertEqual(str(Decimal('1_3.3e4_0')), '1.33E+41')
+        self.assertEqual(str(Decimal('1_0_0_0')), '1000')
+
         #unicode strings should be permitted
         self.assertEqual(str(Decimal(u'0E-017')), '0E-17')
         self.assertEqual(str(Decimal(u'45')), '45')
         self.assertEqual(str(Decimal(u'-Inf')), '-Infinity')
         self.assertEqual(str(Decimal(u'NaN123')), 'NaN123')
+
+        with localcontext() as c:
+            c.traps[InvalidOperation] = True
+            # Invalid string
+            self.assertRaises(InvalidOperation, Decimal, "xyz")
+            # Two arguments max
+            self.assertRaises(TypeError, Decimal, "1234", "x", "y")
+
+            # space within the numeric part
+            self.assertRaises(InvalidOperation, Decimal, "1\u00a02\u00a03")
+            self.assertRaises(InvalidOperation, Decimal, "\u00a01\u00a02\u00a0")
+
+            # unicode whitespace
+            self.assertRaises(InvalidOperation, Decimal, "\u00a0")
+            self.assertRaises(InvalidOperation, Decimal, "\u00a0\u00a0")
+
+            # embedded NUL
+            self.assertRaises(InvalidOperation, Decimal, "12\u00003")
+
+            # underscores don't prevent errors
+            self.assertRaises(InvalidOperation, Decimal, "1_2_\u00003")
 
     def test_explicit_from_tuples(self):
 

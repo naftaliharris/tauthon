@@ -346,8 +346,8 @@ Glossary
       All of Python's immutable built-in objects are hashable, while no mutable
       containers (such as lists or dictionaries) are.  Objects which are
       instances of user-defined classes are hashable by default; they all
-      compare unequal (except with themselves), and their hash value is their
-      :func:`id`.
+      compare unequal (except with themselves), and their hash value is derived
+      from their :func:`id`.
 
    IDLE
       An Integrated Development Environment for Python.  IDLE is a basic editor
@@ -519,7 +519,8 @@ Glossary
    method resolution order
       Method Resolution Order is the order in which base classes are searched
       for a member during lookup. See `The Python 2.3 Method Resolution Order
-      <https://www.python.org/download/releases/2.3/mro/>`_.
+      <https://www.python.org/download/releases/2.3/mro/>`_ for details of the
+      algorithm used by the Python interpreter since the 2.3 release.
 
    module
       An object that serves as an organizational unit of Python code.  Modules

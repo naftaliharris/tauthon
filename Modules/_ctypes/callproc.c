@@ -1,5 +1,6 @@
 /*****************************************************************
-  This file should be kept compatible with Python 2.3, see PEP 291.
+  This file contains remnant Python 2.3 compatibility code that is no longer
+  strictly required.
  *****************************************************************/
 
 
@@ -91,8 +92,10 @@
 #define CTYPES_CAPSULE_ERROROBJ "_ctypes/callproc.c error object"
 CTYPES_CAPSULE_INSTANTIATE_DESTRUCTOR(CTYPES_CAPSULE_ERROROBJ)
 
-#define CTYPES_CAPSULE_WCHAR_T "_ctypes/callproc.c wchar_t buffer from unicode"
+#if defined(CTYPES_UNICODE) && !defined(HAVE_USABLE_WCHAR_T)
+#  define CTYPES_CAPSULE_WCHAR_T "_ctypes/callproc.c wchar_t buffer from unicode"
 CTYPES_CAPSULE_INSTANTIATE_DESTRUCTOR(CTYPES_CAPSULE_WCHAR_T)
+#endif
 
 /*
   ctypes maintains thread-local storage that has space for two error numbers:
@@ -161,8 +164,10 @@ _ctypes_get_errobj(int **pspace)
             return NULL;
         memset(space, 0, sizeof(int) * 2);
         errobj = CAPSULE_NEW(space, CTYPES_CAPSULE_ERROROBJ);
-        if (errobj == NULL)
+        if (errobj == NULL) {
+            PyMem_Free(space);
             return NULL;
+        }
         if (-1 == PyDict_SetItem(dict, error_object_name,
                                  errobj)) {
             Py_DECREF(errobj);
@@ -1276,7 +1281,7 @@ static PyObject *load_library(PyObject *self, PyObject *args)
     PyObject *nameobj;
     PyObject *ignored;
     HMODULE hMod;
-    if (!PyArg_ParseTuple(args, "O|O:LoadLibrary", &nameobj, &ignored))
+    if (!PyArg_ParseTuple(args, "S|O:LoadLibrary", &nameobj, &ignored))
         return NULL;
 #ifdef _UNICODE
     name = alloca((PyString_Size(nameobj) + 1) * sizeof(WCHAR));
@@ -1814,6 +1819,10 @@ POINTER(PyObject *self, PyObject *cls)
         if (result == NULL)
             return result;
         key = PyLong_FromVoidPtr(result);
+        if (key == NULL) {
+            Py_DECREF(result);
+            return NULL;
+        }
     } else if (PyType_Check(cls)) {
         typ = (PyTypeObject *)cls;
         buf = PyMem_Malloc(strlen(typ->tp_name) + 3 + 1);

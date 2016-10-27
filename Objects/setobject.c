@@ -2,9 +2,6 @@
 /* set object implementation
    Written and maintained by Raymond D. Hettinger <python@rcn.com>
    Derived from Lib/sets.py and Objects/dictobject.c.
-
-   Copyright (c) 2003-2007 Python Software Foundation.
-   All rights reserved.
 */
 
 #include "Python.h"
@@ -787,7 +784,7 @@ frozenset_hash(PyObject *self)
     hash *= PySet_GET_SIZE(self) + 1;
     while (set_next(so, &pos, &entry)) {
         /* Work to increase the bit dispersion for closely spaced hash
-           values.  The is important because some use cases have many
+           values.  This is important because some use cases have many
            combinations of a small number of elements with nearby
            hashes so that many distinct combinations collapse to only
            a handful of distinct hash values. */
@@ -874,8 +871,8 @@ static PyObject *setiter_iternext(setiterobject *si)
     return key;
 
 fail:
-    Py_DECREF(so);
     si->si_set = NULL;
+    Py_DECREF(so);
     return NULL;
 }
 
@@ -1985,7 +1982,7 @@ set_sizeof(PySetObject *so)
 {
     Py_ssize_t res;
 
-    res = sizeof(PySetObject);
+    res = _PyObject_SIZE(Py_TYPE(so));
     if (so->table != so->smalltable)
         res = res + (so->mask + 1) * sizeof(setentry);
     return PyInt_FromSsize_t(res);

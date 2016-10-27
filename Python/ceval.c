@@ -666,12 +666,12 @@ volatile int _Py_Ticker = 0; /* so that we hit a "tick" first thing */
 PyObject *
 PyEval_EvalCode(PyCodeObject *co, PyObject *globals, PyObject *locals)
 {
-    return PyEval_EvalCodeEx(co,
+    return PyEval_EvalCodeEx28(co,
                       globals, locals,
                       (PyObject **)NULL, 0,
                       (PyObject **)NULL, 0,
                       (PyObject **)NULL, 0,
-                      NULL);
+                      NULL, NULL);
 }
 
 
@@ -3304,22 +3304,40 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         TARGET(MAKE_FUNCTION)
         {
+            int posdefaults = oparg & 0xff;
+            int kwdefaults = (oparg>>8) & 0xff;
+
             v = POP(); /* code object */
             x = PyFunction_New(v, f->f_globals);
             Py_DECREF(v);
             /* XXX Maybe this should be a separate opcode? */
-            if (x != NULL && oparg > 0) {
-                v = PyTuple_New(oparg);
+            if (x != NULL && posdefaults > 0) {
+                v = PyTuple_New(posdefaults);
                 if (v == NULL) {
                     Py_DECREF(x);
                     x = NULL;
                     break;
                 }
-                while (--oparg >= 0) {
+                while (--posdefaults >= 0) {
                     w = POP();
-                    PyTuple_SET_ITEM(v, oparg, w);
+                    PyTuple_SET_ITEM(v, posdefaults, w);
                 }
                 err = PyFunction_SetDefaults(x, v);
+                Py_DECREF(v);
+            }
+            if (x != NULL && kwdefaults > 0 && !err) {
+                v = PyDict_New();
+                if (v == NULL) {
+                    Py_DECREF(x);
+                    x = NULL;
+                    break;
+                }
+                while (--kwdefaults >= 0) {
+                    w = POP(); /* default value */
+                    u = POP(); /* kw only arg name */
+                    PyDict_SetItem(v, u, w);
+                }
+                err = PyFunction_SetKwDefaults(x, v);
                 Py_DECREF(v);
             }
             PUSH(x);
@@ -3606,9 +3624,9 @@ exit_eval_frame:
    the test in the if statements in Misc/gdbinit (pystack and pystackv). */
 
 PyObject *
-PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
+PyEval_EvalCodeEx28(PyCodeObject *co, PyObject *globals, PyObject *locals,
            PyObject **args, int argcount, PyObject **kws, int kwcount,
-           PyObject **defs, int defcount, PyObject *closure)
+           PyObject **defs, int defcount, PyObject *kwdefs, PyObject *closure)
 {
     register PyFrameObject *f;
     register PyObject *retval = NULL;
@@ -3632,6 +3650,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
     freevars = f->f_localsplus + co->co_nlocals;
 
     if (co->co_argcount > 0 ||
+        co->co_kwonlyargcount > 0 ||
         co->co_flags & (CO_VARARGS | CO_VARKEYWORDS)) {
         int i;
         int n = argcount;
@@ -3640,7 +3659,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             kwdict = PyDict_New();
             if (kwdict == NULL)
                 goto fail;
-            i = co->co_argcount;
+            i = co->co_argcount + co->co_kwonlyargcount;
             if (co->co_flags & CO_VARARGS)
                 i++;
             SETLOCAL(i, kwdict);
@@ -3649,10 +3668,11 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             if (!(co->co_flags & CO_VARARGS)) {
                 PyErr_Format(PyExc_TypeError,
                     "%.200s() takes %s %d "
-                    "argument%s (%d given)",
+                    "%sargument%s (%d given)",
                     PyString_AsString(co->co_name),
                     defcount ? "at most" : "exactly",
                     co->co_argcount,
+                    co->co_kwonlyargcount > 0 ? "positional " : "",
                     co->co_argcount == 1 ? "" : "s",
                     argcount + kwcount);
                 goto fail;
@@ -3668,7 +3688,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             u = PyTuple_New(argcount - n);
             if (u == NULL)
                 goto fail;
-            SETLOCAL(co->co_argcount, u);
+            SETLOCAL(co->co_argcount + co->co_kwonlyargcount, u);
             for (i = n; i < argcount; i++) {
                 x = args[i];
                 Py_INCREF(x);
@@ -3693,13 +3713,13 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             /* Speed hack: do raw pointer compares. As names are
                normally interned this should almost always hit. */
             co_varnames = ((PyTupleObject *)(co->co_varnames))->ob_item;
-            for (j = 0; j < co->co_argcount; j++) {
+            for (j = 0; j < co->co_argcount + co->co_kwonlyargcount; j++) {
                 PyObject *nm = co_varnames[j];
                 if (nm == keyword)
                     goto kw_found;
             }
             /* Slow fallback, just in case */
-            for (j = 0; j < co->co_argcount; j++) {
+            for (j = 0; j < co->co_argcount + co->co_kwonlyargcount; j++) {
                 PyObject *nm = co_varnames[j];
                 int cmp = PyObject_RichCompareBool(
                     keyword, nm, Py_EQ);
@@ -3739,6 +3759,30 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
             Py_INCREF(value);
             SETLOCAL(j, value);
         }
+        if (co->co_kwonlyargcount > 0) {
+            for (i = co->co_argcount;
+                 i < co->co_argcount + co->co_kwonlyargcount;
+                 i++) {
+                    PyObject *name, *def;
+                    if (GETLOCAL(i) != NULL)
+                        continue;
+                    name = PyTuple_GET_ITEM(co->co_varnames, i);
+                    def = NULL;
+                    if (kwdefs != NULL)
+                        def = PyDict_GetItem(kwdefs, name);
+                    if (def != NULL) {
+                        Py_INCREF(def);
+                        SETLOCAL(i, def);
+                        continue;
+                    }
+                    PyErr_Format(PyExc_TypeError,
+                                 "%.200s() needs "
+                                 "keyword only argument %s",
+                                 PyString_AsString(co->co_name),
+                                 PyString_AsString(name));
+                    goto fail;
+            }
+        }
         if (argcount < co->co_argcount) {
             int m = co->co_argcount - defcount;
             for (i = argcount; i < m; i++) {
@@ -3749,12 +3793,13 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
                             given++;
                     PyErr_Format(PyExc_TypeError,
                         "%.200s() takes %s %d "
-                        "argument%s (%d given)",
+                        "%sargument%s (%d given)",
                         PyString_AsString(co->co_name),
                         ((co->co_flags & CO_VARARGS) ||
                          defcount) ? "at least"
                                    : "exactly",
-                        m, m == 1 ? "" : "s", given);
+                        m, co->co_kwonlyargcount > 0 ? "positional " : "",
+                        m == 1 ? "" : "s", given);
                     goto fail;
                 }
             }
@@ -3785,7 +3830,7 @@ PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
         char *cellname, *argname;
         PyObject *c;
 
-        nargs = co->co_argcount;
+        nargs = co->co_argcount + co->co_kwonlyargcount;
         if (co->co_flags & CO_VARARGS)
             nargs++;
         if (co->co_flags & CO_VARKEYWORDS)
@@ -3901,6 +3946,15 @@ fail: /* Jump here from prelude on failure */
     return retval;
 }
 
+PyObject *
+PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
+           PyObject **args, int argcount, PyObject **kws, int kwcount,
+           PyObject **defs, int defcount, PyObject *closure)
+{
+    return PyEval_EvalCodeEx28(co, globals, locals,
+                               args, argcount, kws, kwcount,
+                               defs, defcount, NULL, closure);
+}
 
 static PyObject *
 special_lookup(PyObject *o, char *meth, PyObject **cache)
@@ -4684,8 +4738,7 @@ call_function(PyObject ***pp_stack, int oparg
             Py_INCREF(self);
             func = PyMethod_GET_FUNCTION(func);
             Py_INCREF(func);
-            Py_DECREF(*pfunc);
-            *pfunc = self;
+            Py_SETREF(*pfunc, self);
             na++;
             n++;
         } else
@@ -4726,12 +4779,14 @@ fast_function(PyObject *func, PyObject ***pp_stack, int n, int na, int nk)
     PyCodeObject *co = (PyCodeObject *)PyFunction_GET_CODE(func);
     PyObject *globals = PyFunction_GET_GLOBALS(func);
     PyObject *argdefs = PyFunction_GET_DEFAULTS(func);
+    PyObject *kwdefs = PyFunction_GET_KW_DEFAULTS(func);
     PyObject **d = NULL;
     int nd = 0;
 
     PCALL(PCALL_FUNCTION);
     PCALL(PCALL_FAST_FUNCTION);
-    if (argdefs == NULL && co->co_argcount == n && nk==0 &&
+    if (argdefs == NULL && co->co_argcount == n &&
+        co->co_kwonlyargcount == 0 && nk==0 &&
         co->co_flags == (CO_OPTIMIZED | CO_NEWLOCALS | CO_NOFREE)) {
         PyFrameObject *f;
         PyObject *retval = NULL;
@@ -4767,10 +4822,10 @@ fast_function(PyObject *func, PyObject ***pp_stack, int n, int na, int nk)
         d = &PyTuple_GET_ITEM(argdefs, 0);
         nd = Py_SIZE(argdefs);
     }
-    return PyEval_EvalCodeEx(co, globals,
-                             (PyObject *)NULL, (*pp_stack)-n, na,
-                             (*pp_stack)-2*nk, nk, d, nd,
-                             PyFunction_GET_CLOSURE(func));
+    return PyEval_EvalCodeEx28(co, globals,
+                               (PyObject *)NULL, (*pp_stack)-n, na,
+                               (*pp_stack)-2*nk, nk, d, nd, kwdefs,
+                               PyFunction_GET_CLOSURE(func));
 }
 
 static PyObject *
@@ -4940,10 +4995,12 @@ ext_do_call(PyObject *func, PyObject ***pp_stack, int flags, int na, int nk)
             PyObject *t = NULL;
             t = PySequence_Tuple(stararg);
             if (t == NULL) {
-                if (PyErr_ExceptionMatches(PyExc_TypeError)) {
+                if (PyErr_ExceptionMatches(PyExc_TypeError) &&
+                        /* Don't mask TypeError raised from a generator */
+                        !PyGen_Check(stararg)) {
                     PyErr_Format(PyExc_TypeError,
                                  "%.200s%.200s argument after * "
-                                 "must be a sequence, not %200s",
+                                 "must be an iterable, not %200s",
                                  PyEval_GetFuncName(func),
                                  PyEval_GetFuncDesc(func),
                                  stararg->ob_type->tp_name);

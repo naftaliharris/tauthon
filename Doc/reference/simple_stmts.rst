@@ -87,7 +87,7 @@ attributes or items of mutable objects:
    target_list: `target` ("," `target`)* [","]
    target: `identifier`
          : | "(" `target_list` ")"
-         : | "[" `target_list` "]"
+         : | "[" [`target_list`] "]"
          : | `attributeref`
          : | `subscription`
          : | `slicing`
@@ -306,12 +306,12 @@ program:
 The simple form, ``assert expression``, is equivalent to ::
 
    if __debug__:
-      if not expression: raise AssertionError
+       if not expression: raise AssertionError
 
 The extended form, ``assert expression1, expression2``, is equivalent to ::
 
    if __debug__:
-      if not expression1: raise AssertionError(expression2)
+       if not expression1: raise AssertionError(expression2)
 
 .. index::
    single: __debug__
@@ -538,10 +538,10 @@ section.
 
 .. seealso::
 
-   :pep:`0255` - Simple Generators
+   :pep:`255` - Simple Generators
       The proposal for adding generators and the :keyword:`yield` statement to Python.
 
-   :pep:`0342` - Coroutines via Enhanced Generators
+   :pep:`342` - Coroutines via Enhanced Generators
       The proposal that, among other generator enhancements, proposed allowing
       :keyword:`yield` to appear inside a :keyword:`try` ... :keyword:`finally` block.
 

@@ -219,7 +219,7 @@ comparison.  I won't cover the C API here, but will refer you to PEP 207, or to
 
 .. seealso::
 
-   :pep:`207` - Rich Comparisions
+   :pep:`207` - Rich Comparisons
       Written by Guido van Rossum, heavily based on earlier work by David Ascher, and
       implemented by Guido van Rossum.
 
@@ -442,8 +442,8 @@ Python syntax::
    f.grammar = "A ::= B (C D)*"
 
 The dictionary containing attributes can be accessed as the function's
-:attr:`__dict__`. Unlike the :attr:`__dict__` attribute of class instances, in
-functions you can actually assign a new dictionary to :attr:`__dict__`, though
+:attr:`~object.__dict__`. Unlike the :attr:`~object.__dict__` attribute of class instances, in
+functions you can actually assign a new dictionary to :attr:`~object.__dict__`, though
 the new value is restricted to a regular Python dictionary; you *can't* be
 tricky and set it to a :class:`UserDict` instance, or any other random object
 that behaves like a mapping.
@@ -562,7 +562,7 @@ You can start creating packages containing :file:`PKG-INFO` even if you're not
 using Python 2.1, since a new release of the Distutils will be made for users of
 earlier Python versions.  Version 1.0.2 of the Distutils includes the changes
 described in PEP 241, as well as various bugfixes and enhancements.  It will be
-available from  the Distutils SIG at https://www.python.org/sigs/distutils-sig/.
+available from the Distutils SIG at https://www.python.org/community/sigs/current/distutils-sig/.
 
 
 .. seealso::
@@ -731,7 +731,7 @@ of the more notable changes are:
          ...
 
   For a fuller discussion of the line I/O changes, see the python-dev summary for
-  January 1-15, 2001 at https://www.python.org/dev/summary/2001-01-1/.
+  January 1-15, 2001 at https://mail.python.org/pipermail/python-dev/2001-January/.
 
 * A new method, :meth:`popitem`, was added to dictionaries to enable
   destructively iterating through the contents of a dictionary; this can be faster

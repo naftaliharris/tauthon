@@ -3,6 +3,8 @@ import sys
 import unittest
 from test import test_support
 from test.test_support import run_unittest, have_unicode
+from test.test_grammar import (VALID_UNDERSCORE_LITERALS,
+                               INVALID_UNDERSCORE_LITERALS)
 import math
 
 L = [
@@ -44,6 +46,9 @@ if have_unicode:
         (unicode('  \t\t  '), ValueError),
         (unichr(0x200), ValueError),
 ]
+
+class IntSubclass(int):
+    pass
 
 class IntLongCommonTests(object):
 
@@ -340,20 +345,40 @@ class IntTestCases(IntLongCommonTests, unittest.TestCase):
         # Test possible valid non-numeric types for x, including subclasses
         # of the allowed built-in types.
         class CustomStr(str): pass
-        values = ['100', CustomStr('100')]
+        class CustomByteArray(bytearray): pass
+        factories = [str, bytearray, CustomStr, CustomByteArray, buffer]
 
         if have_unicode:
             class CustomUnicode(unicode): pass
-            values += [unicode('100'), CustomUnicode(unicode('100'))]
+            factories += [unicode, CustomUnicode]
 
-        for x in values:
+        for f in factories:
+            with test_support.check_py3k_warnings(quiet=True):
+                x = f('100')
             msg = 'x has value %s and type %s' % (x, type(x).__name__)
             try:
                 self.assertEqual(int(x), 100, msg=msg)
-                self.assertEqual(int(x, 2), 4, msg=msg)
+                if isinstance(x, basestring):
+                    self.assertEqual(int(x, 2), 4, msg=msg)
             except TypeError, err:
                 raise AssertionError('For %s got TypeError: %s' %
                                      (type(x).__name__, err))
+            if not isinstance(x, basestring):
+                errmsg = "can't convert non-string"
+                with self.assertRaisesRegexp(TypeError, errmsg, msg=msg):
+                    int(x, 2)
+            errmsg = 'invalid literal'
+            with self.assertRaisesRegexp(ValueError, errmsg, msg=msg), \
+                 test_support.check_py3k_warnings(quiet=True):
+                int(f('A' * 0x10))
+
+    def test_int_buffer(self):
+        with test_support.check_py3k_warnings():
+            self.assertEqual(int(buffer('123', 1, 2)), 23)
+            self.assertEqual(int(buffer('123\x00', 1, 2)), 23)
+            self.assertEqual(int(buffer('123 ', 1, 2)), 23)
+            self.assertEqual(int(buffer('123A', 1, 2)), 23)
+            self.assertEqual(int(buffer('1234', 1, 2)), 23)
 
     def test_error_on_string_float_for_x(self):
         self.assertRaises(ValueError, int, '1.2')
@@ -367,6 +392,25 @@ class IntTestCases(IntLongCommonTests, unittest.TestCase):
 
     def test_error_on_string_base(self):
         self.assertRaises(TypeError, int, 100, base='foo')
+
+    def test_underscores(self):
+        for lit in VALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertEqual(int(lit, 0), eval(lit))
+            self.assertEqual(int(lit, 0), int(lit.replace('_', ''), 0))
+        for lit in INVALID_UNDERSCORE_LITERALS:
+            if any(ch in lit for ch in '.eEjJ'):
+                continue
+            self.assertRaises(ValueError, int, lit, 0)
+        # Additional test cases with bases != 0, only for the constructor:
+        self.assertEqual(int("1_00", 3), 9)
+        self.assertEqual(int("0_100"), 100)  # not valid as a literal!
+        self.assertEqual(int(b"1_00"), 100)  # byte underscore
+        self.assertRaises(ValueError, int, "_100")
+        self.assertRaises(ValueError, int, "+_100")
+        self.assertRaises(ValueError, int, "1__00")
+        self.assertRaises(ValueError, int, "100_")
 
     @test_support.cpython_only
     def test_small_ints(self):
@@ -459,6 +503,18 @@ class IntTestCases(IntLongCommonTests, unittest.TestCase):
                 else:
                     self.fail("Failed to raise TypeError with %s" %
                               ((base, trunc_result_base),))
+
+                class TruncReturnsIntSubclass(base):
+                    def __trunc__(self):
+                        return True
+                good_int = TruncReturnsIntSubclass()
+                n = int(good_int)
+                self.assertEqual(n, 1)
+                self.assertIs(type(n), bool)
+                n = IntSubclass(good_int)
+                self.assertEqual(n, 1)
+                self.assertIs(type(n), IntSubclass)
+
 
 def test_main():
     run_unittest(IntTestCases)

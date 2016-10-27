@@ -1607,9 +1607,8 @@ DB_associate(DBObject* self, PyObject* args, PyObject* kwargs)
     }
 
     /* Save a reference to the callback in the secondary DB. */
-    Py_XDECREF(secondaryDB->associateCallback);
     Py_XINCREF(callback);
-    secondaryDB->associateCallback = callback;
+    Py_XSETREF(secondaryDB->associateCallback, callback);
     secondaryDB->primaryDBType = _DB_get_type(self);
 
     /* PyEval_InitThreads is called here due to a quirk in python 1.5
@@ -2498,9 +2497,8 @@ static PyObject*
 DB_set_private(DBObject* self, PyObject* private_obj)
 {
     /* We can set the private field even if db is closed */
-    Py_DECREF(self->private_obj);
     Py_INCREF(private_obj);
-    self->private_obj = private_obj;
+    Py_SETREF(self->private_obj, private_obj);
     RETURN_NONE();
 }
 
@@ -3688,7 +3686,7 @@ _DB_has_key(DBObject* self, PyObject* keyobj, PyObject* txnobj)
     /*
     ** DB_BUFFER_SMALL is only used if we use "get".
     ** We can drop it when we only use "exists",
-    ** when we drop suport for Berkeley DB < 4.6.
+    ** when we drop support for Berkeley DB < 4.6.
     */
     if (err == DB_BUFFER_SMALL || err == 0) {
         Py_INCREF(Py_True);
@@ -6998,9 +6996,8 @@ static PyObject*
 DBEnv_set_private(DBEnvObject* self, PyObject* private_obj)
 {
     /* We can set the private field even if dbenv is closed */
-    Py_DECREF(self->private_obj);
     Py_INCREF(private_obj);
-    self->private_obj = private_obj;
+    Py_SETREF(self->private_obj, private_obj);
     RETURN_NONE();
 }
 
@@ -7253,9 +7250,8 @@ DBEnv_set_event_notify(DBEnvObject* self, PyObject* notifyFunc)
             return NULL;
     }
 
-    Py_XDECREF(self->event_notifyCallback);
     Py_INCREF(notifyFunc);
-    self->event_notifyCallback = notifyFunc;
+    Py_XSETREF(self->event_notifyCallback, notifyFunc);
 
     /* This is to workaround a problem with un-initialized threads (see
        comment in DB_associate) */
@@ -7413,9 +7409,8 @@ DBEnv_rep_set_transport(DBEnvObject* self, PyObject* args)
     MYDB_END_ALLOW_THREADS;
     RETURN_IF_ERR();
 
-    Py_DECREF(self->rep_transport);
     Py_INCREF(rep_transport);
-    self->rep_transport = rep_transport;
+    Py_SETREF(self->rep_transport, rep_transport);
     RETURN_NONE();
 }
 

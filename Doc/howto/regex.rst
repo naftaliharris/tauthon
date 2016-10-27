@@ -172,7 +172,7 @@ that limit.
 Repetitions such as ``*`` are :dfn:`greedy`; when repeating a RE, the matching
 engine will try to repeat it as many times as possible. If later portions of the
 pattern don't match, the matching engine will then back up and try again with
-few repetitions.
+fewer repetitions.
 
 A step-by-step example will make this more obvious.  Let's consider the
 expression ``a[bcd]*b``.  This matches the letter ``'a'``, zero or more letters
@@ -1015,17 +1015,18 @@ confusing.
 
 A negative lookahead cuts through all this confusion:
 
-``.*[.](?!bat$).*$``  The negative lookahead means: if the expression ``bat``
+``.*[.](?!bat$)[^.]*$``  The negative lookahead means: if the expression ``bat``
 doesn't match at this point, try the rest of the pattern; if ``bat$`` does
 match, the whole pattern will fail.  The trailing ``$`` is required to ensure
 that something like ``sample.batch``, where the extension only starts with
-``bat``, will be allowed.
+``bat``, will be allowed.  The ``[^.]*`` makes sure that the pattern works
+when there are multiple dots in the filename.
 
 Excluding another filename extension is now easy; simply add it as an
 alternative inside the assertion.  The following pattern excludes filenames that
 end in either ``bat`` or ``exe``:
 
-``.*[.](?!bat$|exe$).*$``
+``.*[.](?!bat$|exe$)[^.]*$``
 
 
 Modifying Strings
@@ -1126,19 +1127,19 @@ which can be either a string or a function, and the string to be processed.
 Here's a simple example of using the :meth:`sub` method.  It replaces colour
 names with the word ``colour``::
 
-   >>> p = re.compile( '(blue|white|red)')
-   >>> p.sub( 'colour', 'blue socks and red shoes')
+   >>> p = re.compile('(blue|white|red)')
+   >>> p.sub('colour', 'blue socks and red shoes')
    'colour socks and colour shoes'
-   >>> p.sub( 'colour', 'blue socks and red shoes', count=1)
+   >>> p.sub('colour', 'blue socks and red shoes', count=1)
    'colour socks and red shoes'
 
 The :meth:`subn` method does the same work, but returns a 2-tuple containing the
 new string value and the number of replacements  that were performed::
 
-   >>> p = re.compile( '(blue|white|red)')
-   >>> p.subn( 'colour', 'blue socks and red shoes')
+   >>> p = re.compile('(blue|white|red)')
+   >>> p.subn('colour', 'blue socks and red shoes')
    ('colour socks and colour shoes', 2)
-   >>> p.subn( 'colour', 'no colours at all')
+   >>> p.subn('colour', 'no colours at all')
    ('no colours at all', 0)
 
 Empty matches are replaced only when they're not adjacent to a previous match.

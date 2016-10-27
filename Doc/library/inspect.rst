@@ -272,7 +272,8 @@ Note:
 
 .. function:: ismethod(object)
 
-   Return true if the object is a bound method written in Python.
+   Return true if the object is a bound or unbound method written in Python.
+
 
 
 .. function:: isfunction(object)
@@ -334,9 +335,11 @@ Note:
    are true.
 
    This is new as of Python 2.2, and, for example, is true of
-   ``int.__add__``. An object passing this test has a :attr:`__get__` attribute
-   but not a :attr:`__set__` attribute, but beyond that the set of attributes
-   varies.  :attr:`__name__` is usually sensible, and :attr:`__doc__` often is.
+   ``int.__add__``. An object passing this test
+   has a :meth:`~object.__get__` method but not a :meth:`~object.__set__`
+   method, but beyond that the set of attributes varies.  A
+   :attr:`~definition.__name__` attribute is usually
+   sensible, and :attr:`__doc__` often is.
 
    Methods implemented via descriptors that also pass one of the other tests
    return false from the :func:`ismethoddescriptor` test, simply because the
@@ -348,11 +351,11 @@ Note:
 
    Return true if the object is a data descriptor.
 
-   Data descriptors have both a :attr:`__get__` and a :attr:`__set__` attribute.
+   Data descriptors have both a :attr:`~object.__get__` and a :attr:`~object.__set__` method.
    Examples are properties (defined in Python), getsets, and members.  The
    latter two are defined in C and there are more specific tests available for
    those types, which is robust across Python implementations.  Typically, data
-   descriptors will also have :attr:`__name__` and :attr:`__doc__` attributes
+   descriptors will also have :attr:`~definition.__name__` and :attr:`__doc__` attributes
    (properties, getsets, and members have both of these attributes), but this is
    not guaranteed.
 
@@ -442,8 +445,12 @@ Retrieving source code
 .. function:: cleandoc(doc)
 
    Clean up indentation from docstrings that are indented to line up with blocks
-   of code.  Any whitespace that can be uniformly removed from the second line
-   onwards is removed.  Also, all tabs are expanded to spaces.
+   of code.
+
+   All leading whitespace is removed from the first line.  Any leading whitespace
+   that can be uniformly removed from the second line onwards is removed.  Empty
+   lines at the beginning and end are subsequently removed.  Also, all tabs are
+   expanded to spaces.
 
    .. versionadded:: 2.6
 

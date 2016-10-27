@@ -38,8 +38,10 @@ PyDoc_STRVAR(iobase_doc,
     "may raise a IOError when operations they do not support are called.\n"
     "\n"
     "The basic type used for binary data read from or written to a file is\n"
-    "bytes. bytearrays are accepted too, and in some cases (such as\n"
-    "readinto) needed. Text I/O classes work with str data.\n"
+    "the bytes type. Method arguments may also be bytearray or memoryview\n"
+    "of arrays of bytes. In some cases, such as readinto, a writable\n"
+    "object such as bytearray is required. Text I/O classes work with\n"
+    "unicode data.\n"
     "\n"
     "Note that calling any method (except additional calls to close(),\n"
     "which are ignored) on a closed stream should raise a ValueError.\n"
@@ -529,7 +531,10 @@ iobase_readline(PyObject *self, PyObject *args)
         }
 
         old_size = PyByteArray_GET_SIZE(buffer);
-        PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b));
+        if (PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b)) < 0) {
+            Py_DECREF(b);
+            goto fail;
+        }
         memcpy(PyByteArray_AS_STRING(buffer) + old_size,
                PyBytes_AS_STRING(b), PyBytes_GET_SIZE(b));
 

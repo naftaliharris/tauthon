@@ -314,12 +314,12 @@ This module provides the following functions.
 
 .. function:: gen_preprocess_options(macros, include_dirs)
 
-   Generate C pre-processor options (:option:`-D`, :option:`-U`, :option:`-I`) as
+   Generate C pre-processor options (:option:`-D`, :option:`!-U`, :option:`!-I`) as
    used by at least two types of compilers: the typical Unix compiler and Visual
    C++. *macros* is the usual thing, a list of 1- or 2-tuples, where ``(name,)``
-   means undefine (:option:`-U`) macro *name*, and ``(name, value)`` means define
+   means undefine (:option:`!-U`) macro *name*, and ``(name, value)`` means define
    (:option:`-D`) macro *name* to *value*.  *include_dirs* is just a list of
-   directory names to be added to the header file search path (:option:`-I`).
+   directory names to be added to the header file search path (:option:`!-I`).
    Returns a list of command-line options suitable for either Unix compilers or
    Visual C++.
 
@@ -794,7 +794,7 @@ This module provides the :class:`UnixCCompiler` class, a subclass of
 
 * library search directories specified with :option:`-Ldir`
 
-* compile handled by :program:`cc` (or similar) executable with :option:`-c`
+* compile handled by :program:`cc` (or similar) executable with :option:`!-c`
   option: compiles :file:`.c` to :file:`.o`
 
 * link static library handled by :program:`ar` command (possibly with
@@ -832,7 +832,7 @@ selection by :class:`MSVCCompiler`.
 .. module:: distutils.bcppcompiler
 
 
-This module provides :class:`BorlandCCompiler`, an subclass of the abstract
+This module provides :class:`BorlandCCompiler`, a subclass of the abstract
 :class:`CCompiler` class for the Borland C++ compiler.
 
 
@@ -1106,13 +1106,13 @@ other utility module.
    during the build of Python), not the OS version of the current system.
 
    For universal binary builds on Mac OS X the architecture value reflects
-   the univeral binary status instead of the architecture of the current
+   the universal binary status instead of the architecture of the current
    processor. For 32-bit universal binaries the architecture is ``fat``,
    for 64-bit universal binaries the architecture is ``fat64``, and
    for 4-way universal binaries the architecture is ``universal``. Starting
    from Python 2.7 and Python 3.2 the architecture ``fat3`` is used for
    a 3-way universal build (ppc, i386, x86_64) and ``intel`` is used for
-   a univeral build with the i386 and x86_64 architectures
+   a universal build with the i386 and x86_64 architectures
 
    Examples of returned values on Mac OS X:
 
@@ -1816,7 +1816,7 @@ Subclasses of :class:`Command` must define the following methods.
 
    Builds a `Windows Installer`_ (.msi) binary package.
 
-   .. _Windows Installer: http://msdn.microsoft.com/en-us/library/cc185688(VS.85).aspx
+   .. _Windows Installer: https://msdn.microsoft.com/en-us/library/cc185688(VS.85).aspx
 
    In most cases, the ``bdist_msi`` installer is a better choice than the
    ``bdist_wininst`` installer, because it provides better support for

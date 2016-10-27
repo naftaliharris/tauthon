@@ -965,7 +965,10 @@ _get_aia_uri(X509 *certificate, int nid) {
     AUTHORITY_INFO_ACCESS *info;
 
     info = X509_get_ext_d2i(certificate, NID_info_access, NULL, NULL);
-    if ((info == NULL) || (sk_ACCESS_DESCRIPTION_num(info) == 0)) {
+    if (info == NULL)
+        return Py_None;
+    if (sk_ACCESS_DESCRIPTION_num(info) == 0) {
+        AUTHORITY_INFO_ACCESS_free(info);
         return Py_None;
     }
 
@@ -1015,25 +1018,23 @@ _get_aia_uri(X509 *certificate, int nid) {
 static PyObject *
 _get_crl_dp(X509 *certificate) {
     STACK_OF(DIST_POINT) *dps;
-    int i, j, result;
-    PyObject *lst;
+    int i, j;
+    PyObject *lst, *res = NULL;
 
 #if OPENSSL_VERSION_NUMBER < 0x10001000L
-    dps = X509_get_ext_d2i(certificate, NID_crl_distribution_points,
-                           NULL, NULL);
+    dps = X509_get_ext_d2i(certificate, NID_crl_distribution_points, NULL, NULL);
 #else
     /* Calls x509v3_cache_extensions and sets up crldp */
     X509_check_ca(certificate);
     dps = certificate->crldp;
 #endif
 
-    if (dps == NULL) {
+    if (dps == NULL)
         return Py_None;
-    }
 
-    if ((lst = PyList_New(0)) == NULL) {
-        return NULL;
-    }
+    lst = PyList_New(0);
+    if (lst == NULL)
+        goto done;
 
     for (i=0; i < sk_DIST_POINT_num(dps); i++) {
         DIST_POINT *dp;
@@ -1046,6 +1047,7 @@ _get_crl_dp(X509 *certificate) {
             GENERAL_NAME *gn;
             ASN1_IA5STRING *uri;
             PyObject *ouri;
+            int err;
 
             gn = sk_GENERAL_NAME_value(gns, j);
             if (gn->type != GEN_URI) {
@@ -1054,28 +1056,25 @@ _get_crl_dp(X509 *certificate) {
             uri = gn->d.uniformResourceIdentifier;
             ouri = PyUnicode_FromStringAndSize((char *)uri->data,
                                                uri->length);
-            if (ouri == NULL) {
-                Py_DECREF(lst);
-                return NULL;
-            }
-            result = PyList_Append(lst, ouri);
+            if (ouri == NULL)
+                goto done;
+
+            err = PyList_Append(lst, ouri);
             Py_DECREF(ouri);
-            if (result < 0) {
-                Py_DECREF(lst);
-                return NULL;
-            }
+            if (err < 0)
+                goto done;
         }
     }
-    /* convert to tuple or None */
-    if (PyList_Size(lst) == 0) {
-        Py_DECREF(lst);
-        return Py_None;
-    } else {
-        PyObject *tup;
-        tup = PyList_AsTuple(lst);
-        Py_DECREF(lst);
-        return tup;
-    }
+
+    /* Convert to tuple. */
+    res = (PyList_GET_SIZE(lst) > 0) ? PyList_AsTuple(lst) : Py_None;
+
+  done:
+    Py_XDECREF(lst);
+#if OPENSSL_VERSION_NUMBER < 0x10001000L
+    sk_DIST_POINT_free(dps);
+#endif
+    return res;
 }
 
 static PyObject *
@@ -1468,8 +1467,7 @@ static int PySSL_set_context(PySSLSocket *self, PyObject *value,
         return -1;
 #else
         Py_INCREF(value);
-        Py_DECREF(self->ctx);
-        self->ctx = (PySSLContext *) value;
+        Py_SETREF(self->ctx, (PySSLContext *)value);
         SSL_set_SSL_CTX(self->ssl, self->ctx->ctx);
 #endif
     } else {
@@ -1697,6 +1695,10 @@ static PyObject *PySSL_SSLread(PySSLSocket *self, PyObject *args)
         goto error;
 
     if ((buf.buf == NULL) && (buf.obj == NULL)) {
+        if (len < 0) {
+            PyErr_SetString(PyExc_ValueError, "size should not be negative");
+            goto error;
+        }
         dest = PyBytes_FromStringAndSize(NULL, len);
         if (dest == NULL)
             goto error;
@@ -2050,6 +2052,8 @@ context_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     options = SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS;
     if (proto_version != PY_SSL_VERSION_SSL2)
         options |= SSL_OP_NO_SSLv2;
+    if (proto_version != PY_SSL_VERSION_SSL3)
+        options |= SSL_OP_NO_SSLv3;
     SSL_CTX_set_options(self->ctx, options);
 
 #ifndef OPENSSL_NO_ECDH
@@ -2609,7 +2613,9 @@ load_cert_chain(PySSLContext *self, PyObject *args, PyObject *kwds)
     }
     SSL_CTX_set_default_passwd_cb(self->ctx, orig_passwd_cb);
     SSL_CTX_set_default_passwd_cb_userdata(self->ctx, orig_passwd_userdata);
+    Py_XDECREF(keyfile_bytes);
     PyMem_Free(pw_info.password);
+    PyMem_Free(certfile_bytes);
     Py_RETURN_NONE;
 
 error:
@@ -3432,7 +3438,7 @@ PySSL_get_default_verify_paths(PyObject *self)
         if (!tmp) { Py_INCREF(Py_None); target = Py_None; } \
         else { target = PyBytes_FromString(tmp); } \
         if (!target) goto error; \
-    } 
+    }
 
     CONVERT(X509_get_default_cert_file_env(), ofile_env);
     CONVERT(X509_get_default_cert_file(), ofile);
@@ -3653,7 +3659,9 @@ PySSL_enum_certificates(PyObject *self, PyObject *args, PyObject *kwds)
     if (result == NULL) {
         return NULL;
     }
-    hStore = CertOpenSystemStore((HCRYPTPROV)NULL, store_name);
+    hStore = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, (HCRYPTPROV)NULL,
+                            CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_LOCAL_MACHINE,
+                            store_name);
     if (hStore == NULL) {
         Py_DECREF(result);
         return PyErr_SetFromWindowsErr(GetLastError());
@@ -3741,7 +3749,9 @@ PySSL_enum_crls(PyObject *self, PyObject *args, PyObject *kwds)
     if (result == NULL) {
         return NULL;
     }
-    hStore = CertOpenSystemStore((HCRYPTPROV)NULL, store_name);
+    hStore = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, (HCRYPTPROV)NULL,
+                            CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_LOCAL_MACHINE,
+                            store_name);
     if (hStore == NULL) {
         Py_DECREF(result);
         return PyErr_SetFromWindowsErr(GetLastError());

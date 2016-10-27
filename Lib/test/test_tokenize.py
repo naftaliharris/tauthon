@@ -4,6 +4,8 @@ from tokenize import (untokenize, generate_tokens, NUMBER, NAME, OP,
 from StringIO import StringIO
 import os
 from unittest import TestCase
+from test.test_grammar import (VALID_UNDERSCORE_LITERALS,
+                               INVALID_UNDERSCORE_LITERALS)
 
 
 class TokenizeTest(TestCase):
@@ -183,6 +185,21 @@ def k(x):
     OP         '='           (1, 2) (1, 3)
     NUMBER     '3.14e159'    (1, 4) (1, 12)
     """)
+
+    def test_underscore_literals(self):
+        def number_token(s):
+            f = StringIO(s.encode('utf-8'))
+            for toktype, token, start, end, line in generate_tokens(f.readline):
+                if toktype == NUMBER:
+                    return token
+            return 'invalid token'
+        for lit in VALID_UNDERSCORE_LITERALS:
+            if '(' in lit:
+                # this won't work with compound complex inputs
+                continue
+            self.assertEqual(number_token(lit), lit)
+        for lit in INVALID_UNDERSCORE_LITERALS:
+            self.assertNotEqual(number_token(lit), lit)
 
     def test_string(self):
         # String literals
