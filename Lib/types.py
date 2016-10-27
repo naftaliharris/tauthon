@@ -89,15 +89,7 @@ MemberDescriptorType = type(FunctionType.func_globals)
 del sys, _f, _g, _C, _x, _c,                      # Not for export
 
 
-try:
-    import functools as _functools
-    import collections as _collections_abc
-except:  # Not built yet when this module is imported during the build process
-    class Mock(object): pass
-    _functools = Mock()
-    _functools.wraps = lambda f: f
-    _collections_abc = Mock()
-    _collections_abc.Generator = _collections_abc.Coroutine = None
+import _abcoll as _collections_abc
 
 
 class _GeneratorWrapper(object):
@@ -139,6 +131,9 @@ class _GeneratorWrapper(object):
 
 def coroutine(func):
     """Convert regular generator function to a coroutine."""
+
+    # Not built yet when this module is imported during the build process
+    import functools as _functools
 
     if not callable(func):
         raise TypeError('types.coroutine() expects a callable')
