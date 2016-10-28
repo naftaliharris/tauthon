@@ -91,6 +91,15 @@ struct fblockinfo {
     basicblock *fb_block;
 };
 
+enum {
+    COMPILER_SCOPE_MODULE,
+    COMPILER_SCOPE_CLASS,
+    COMPILER_SCOPE_FUNCTION,
+    COMPILER_SCOPE_ASYNC_FUNCTION,
+    COMPILER_SCOPE_LAMBDA,
+    COMPILER_SCOPE_COMPREHENSION,
+};
+
 /* The following items change on entry and exit of code blocks.
    They must be saved and restored when returning to a block.
 */
@@ -98,6 +107,7 @@ struct compiler_unit {
     PySTEntryObject *u_ste;
 
     PyObject *u_name;
+    int u_scope_type;
     /* The following fields are dicts that map objects to
        the index of them in co_XXX.      The index is used as
        the argument for opcodes that refer to those collections.
@@ -147,7 +157,7 @@ struct compiler {
     PyArena *c_arena;            /* pointer to memory allocation arena */
 };
 
-static int compiler_enter_scope(struct compiler *, identifier, void *, int);
+static int compiler_enter_scope(struct compiler *, identifier, int, void *, int);
 static void compiler_free(struct compiler *);
 static basicblock *compiler_new_block(struct compiler *);
 static int compiler_next_instr(struct compiler *, basicblock *);
@@ -464,8 +474,8 @@ compiler_unit_free(struct compiler_unit *u)
 }
 
 static int
-compiler_enter_scope(struct compiler *c, identifier name, void *key,
-                     int lineno)
+compiler_enter_scope(struct compiler *c, identifier name,
+                     int scope_type, void *key, int lineno)
 {
     struct compiler_unit *u;
 
@@ -476,6 +486,7 @@ compiler_enter_scope(struct compiler *c, identifier name, void *key,
         return 0;
     }
     memset(u, 0, sizeof(struct compiler_unit));
+    u->u_scope_type = scope_type;
     u->u_argcount = 0;
     u->u_kwonlyargcount = 0;
     u->u_ste = PySymtable_Lookup(c->c_st, key);
@@ -1202,7 +1213,7 @@ compiler_mod(struct compiler *c, mod_ty mod)
             return NULL;
     }
     /* Use 0 for firstlineno initially, will fixup in assemble(). */
-    if (!compiler_enter_scope(c, module, mod, 0))
+    if (!compiler_enter_scope(c, module, COMPILER_SCOPE_MODULE, mod, 0))
         return NULL;
     switch (mod->kind) {
     case Module_kind:
@@ -1390,6 +1401,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
     asdl_seq *body;
     stmt_ty st;
     int i, n, docstring, kw_default_count = 0, arglength;
+    int scope_type;
 
     if (is_async) {
         assert(s->kind == AsyncFunctionDef_kind);
@@ -1398,6 +1410,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
         decos = s->v.AsyncFunctionDef.decorator_list;
         name = s->v.AsyncFunctionDef.name;
         body = s->v.AsyncFunctionDef.body;
+        scope_type = COMPILER_SCOPE_ASYNC_FUNCTION;
     } else {
         assert(s->kind == FunctionDef_kind);
 
@@ -1405,6 +1418,7 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
         decos = s->v.FunctionDef.decorator_list;
         name = s->v.FunctionDef.name;
         body = s->v.FunctionDef.body;
+        scope_type = COMPILER_SCOPE_FUNCTION;
     }
 
     if (!compiler_decorators(c, decos))
@@ -1418,7 +1432,8 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
     }
     if (args->defaults)
         VISIT_SEQ(c, expr, args->defaults);
-    if (!compiler_enter_scope(c, name, (void *)s,
+    if (!compiler_enter_scope(c, name,
+                              scope_type, (void *)s,
                               s->lineno))
         return 0;
 
@@ -1479,8 +1494,8 @@ compiler_class(struct compiler *c, stmt_ty s)
     if (n > 0)
         VISIT_SEQ(c, expr, s->v.ClassDef.bases);
     ADDOP_I(c, BUILD_TUPLE, n);
-    if (!compiler_enter_scope(c, s->v.ClassDef.name, (void *)s,
-                              s->lineno))
+    if (!compiler_enter_scope(c, s->v.ClassDef.name,
+                              COMPILER_SCOPE_CLASS, (void *)s, s->lineno))
         return 0;
     Py_INCREF(s->v.ClassDef.name);
     Py_XSETREF(c->u->u_private, s->v.ClassDef.name);
@@ -1571,7 +1586,8 @@ compiler_lambda(struct compiler *c, expr_ty e)
     }
     if (args->defaults)
         VISIT_SEQ(c, expr, args->defaults);
-    if (!compiler_enter_scope(c, name, (void *)e, e->lineno))
+    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_LAMBDA,
+                              (void *)e, e->lineno))
         return 0;
 
     /* unpack nested arguments */
@@ -2754,7 +2770,7 @@ compiler_listcomp_generator(struct compiler *c, asdl_seq *generators,
 
     comprehension_ty l;
     basicblock *start, *anchor, *skip, *if_cleanup;
-    int i, n;
+    int i, n, scope_type;
 
     start = compiler_new_block(c);
     skip = compiler_new_block(c);
@@ -2764,6 +2780,9 @@ compiler_listcomp_generator(struct compiler *c, asdl_seq *generators,
     if (start == NULL || skip == NULL || if_cleanup == NULL ||
         anchor == NULL)
         return 0;
+
+    scope_type = c->u->u_scope_type;
+    c->u->u_scope_type = COMPILER_SCOPE_COMPREHENSION;
 
     l = (comprehension_ty)asdl_seq_GET(generators, gen_index);
     VISIT(c, expr, l->iter);
@@ -2796,6 +2815,8 @@ compiler_listcomp_generator(struct compiler *c, asdl_seq *generators,
     compiler_use_next_block(c, if_cleanup);
     ADDOP_JABS(c, JUMP_ABSOLUTE, start);
     compiler_use_next_block(c, anchor);
+
+    c->u->u_scope_type = scope_type;
 
     return 1;
 }
@@ -2920,7 +2941,8 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type, identifier name,
     outermost_iter = ((comprehension_ty)
                       asdl_seq_GET(generators, 0))->iter;
 
-    if (!compiler_enter_scope(c, name, (void *)e, e->lineno))
+    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_COMPREHENSION,
+                              (void *)e, e->lineno))
         goto error;
 
     if (type != COMP_GENEXP) {
@@ -3282,10 +3304,8 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     case Yield_kind:
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'yield' outside function");
-        /* TODO/RSI: Figure out how to raise an error here.
         if (c->u->u_scope_type == COMPILER_SCOPE_ASYNC_FUNCTION)
             return compiler_error(c, "'yield' inside async function");
-        */
         if (e->v.Yield.value) {
             VISIT(c, expr, e->v.Yield.value);
         }
@@ -3297,10 +3317,8 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     case YieldFrom_kind:
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'yield' outside function");
-        /* TODO/RSI: Figure out how to raise an error here.
         if (c->u->u_scope_type == COMPILER_SCOPE_ASYNC_FUNCTION)
             return compiler_error(c, "'yield from' inside async function");
-        */
         VISIT(c, expr, e->v.YieldFrom.value);
         ADDOP(c, GET_YIELD_FROM_ITER);
         ADDOP_O(c, LOAD_CONST, Py_None, consts);
@@ -3310,14 +3328,12 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
         if (c->u->u_ste->ste_type != FunctionBlock)
             return compiler_error(c, "'await' outside function");
 
-        /* TODO/RSI: Figure out how to raise an error here.
         if (c->u->u_scope_type == COMPILER_SCOPE_COMPREHENSION)
             return compiler_error(
                 c, "'await' expressions in comprehensions are not supported");
 
         if (c->u->u_scope_type != COMPILER_SCOPE_ASYNC_FUNCTION)
             return compiler_error(c, "'await' outside async function");
-        */
 
         VISIT(c, expr, e->v.Await.value);
         ADDOP(c, GET_AWAITABLE);
