@@ -5,7 +5,7 @@ import selectors
 import signal
 import socket
 import sys
-from test import support
+from test import test_support as support
 from time import sleep
 import unittest
 import unittest.mock
