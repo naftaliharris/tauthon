@@ -1292,6 +1292,7 @@ class CoroutineTest(unittest.TestCase):
 
 class CoroAsyncIOCompatTest(unittest.TestCase):
 
+    @unittest.skip("no asyncio yet")   # RSI/TODO when you have asyncio
     def test_asyncio_1(self):
         import asyncio
 
@@ -1437,6 +1438,8 @@ class CAPITest(unittest.TestCase):
 
 
 def test_main():
+    #with support.check_py3k_warnings(
+    #        ("classic int division", DeprecationWarning)):
     support.run_unittest(AsyncBadSyntaxTest,
                          CoroutineTest,
                          CoroAsyncIOCompatTest,
