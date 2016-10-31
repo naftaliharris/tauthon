@@ -726,7 +726,7 @@ class StackDepthTracker:
         'SETUP_FINALLY': 3,
         'FOR_ITER': 1,
         'WITH_CLEANUP_START': 1,
-        'WITH_CLEANUP_FINISH': -2,
+        'WITH_CLEANUP_FINISH': -4,
         }
     # use pattern match
     patterns = [
