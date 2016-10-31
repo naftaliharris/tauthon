@@ -34,6 +34,8 @@ typedef struct _keyword *keyword_ty;
 
 typedef struct _alias *alias_ty;
 
+typedef struct _withitem *withitem_ty;
+
 
 enum _mod_kind {Module_kind=1, Interactive_kind=2, Expression_kind=3,
                  Suite_kind=4};
@@ -59,13 +61,14 @@ struct _mod {
         } v;
 };
 
-enum _stmt_kind {FunctionDef_kind=1, ClassDef_kind=2, Return_kind=3,
-                  Delete_kind=4, Assign_kind=5, AugAssign_kind=6, Print_kind=7,
-                  For_kind=8, While_kind=9, If_kind=10, With_kind=11,
-                  Raise_kind=12, TryExcept_kind=13, TryFinally_kind=14,
-                  Assert_kind=15, Import_kind=16, ImportFrom_kind=17,
-                  Exec_kind=18, Global_kind=19, Expr_kind=20, Pass_kind=21,
-                  Break_kind=22, Continue_kind=23};
+enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
+                  Return_kind=4, Delete_kind=5, Assign_kind=6,
+                  AugAssign_kind=7, Print_kind=8, For_kind=9, AsyncFor_kind=10,
+                  While_kind=11, If_kind=12, With_kind=13, AsyncWith_kind=14,
+                  Raise_kind=15, TryExcept_kind=16, TryFinally_kind=17,
+                  Assert_kind=18, Import_kind=19, ImportFrom_kind=20,
+                  Exec_kind=21, Global_kind=22, Expr_kind=23, Pass_kind=24,
+                  Break_kind=25, Continue_kind=26};
 struct _stmt {
         enum _stmt_kind kind;
         union {
@@ -75,6 +78,13 @@ struct _stmt {
                         asdl_seq *body;
                         asdl_seq *decorator_list;
                 } FunctionDef;
+                
+                struct {
+                        identifier name;
+                        arguments_ty args;
+                        asdl_seq *body;
+                        asdl_seq *decorator_list;
+                } AsyncFunctionDef;
                 
                 struct {
                         identifier name;
@@ -116,6 +126,13 @@ struct _stmt {
                 } For;
                 
                 struct {
+                        expr_ty target;
+                        expr_ty iter;
+                        asdl_seq *body;
+                        asdl_seq *orelse;
+                } AsyncFor;
+                
+                struct {
                         expr_ty test;
                         asdl_seq *body;
                         asdl_seq *orelse;
@@ -128,10 +145,14 @@ struct _stmt {
                 } If;
                 
                 struct {
-                        expr_ty context_expr;
-                        expr_ty optional_vars;
+                        asdl_seq *items;
                         asdl_seq *body;
                 } With;
+                
+                struct {
+                        asdl_seq *items;
+                        asdl_seq *body;
+                } AsyncWith;
                 
                 struct {
                         expr_ty type;
@@ -187,10 +208,10 @@ struct _stmt {
 enum _expr_kind {BoolOp_kind=1, BinOp_kind=2, UnaryOp_kind=3, Lambda_kind=4,
                   IfExp_kind=5, Dict_kind=6, Set_kind=7, ListComp_kind=8,
                   SetComp_kind=9, DictComp_kind=10, GeneratorExp_kind=11,
-                  Yield_kind=12, YieldFrom_kind=13, Compare_kind=14,
-                  Call_kind=15, Repr_kind=16, Num_kind=17, Str_kind=18,
-                  Attribute_kind=19, Subscript_kind=20, Name_kind=21,
-                  List_kind=22, Tuple_kind=23};
+                  Await_kind=12, Yield_kind=13, YieldFrom_kind=14,
+                  Compare_kind=15, Call_kind=16, Repr_kind=17, Num_kind=18,
+                  Str_kind=19, Attribute_kind=20, Subscript_kind=21,
+                  Name_kind=22, List_kind=23, Tuple_kind=24};
 struct _expr {
         enum _expr_kind kind;
         union {
@@ -250,6 +271,10 @@ struct _expr {
                         expr_ty elt;
                         asdl_seq *generators;
                 } GeneratorExp;
+                
+                struct {
+                        expr_ty value;
+                } Await;
                 
                 struct {
                         expr_ty value;
@@ -378,6 +403,11 @@ struct _alias {
         identifier asname;
 };
 
+struct _withitem {
+        expr_ty context_expr;
+        expr_ty optional_vars;
+};
+
 
 #define Module(a0, a1) _Py_Module(a0, a1)
 mod_ty _Py_Module(asdl_seq * body, PyArena *arena);
@@ -391,6 +421,10 @@ mod_ty _Py_Suite(asdl_seq * body, PyArena *arena);
 stmt_ty _Py_FunctionDef(identifier name, arguments_ty args, asdl_seq * body,
                         asdl_seq * decorator_list, int lineno, int col_offset,
                         PyArena *arena);
+#define AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6) _Py_AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6)
+stmt_ty _Py_AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq *
+                             body, asdl_seq * decorator_list, int lineno, int
+                             col_offset, PyArena *arena);
 #define ClassDef(a0, a1, a2, a3, a4, a5, a6) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * body,
                      asdl_seq * decorator_list, int lineno, int col_offset,
@@ -412,15 +446,21 @@ stmt_ty _Py_Print(expr_ty dest, asdl_seq * values, bool nl, int lineno, int
 #define For(a0, a1, a2, a3, a4, a5, a6) _Py_For(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_For(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq *
                 orelse, int lineno, int col_offset, PyArena *arena);
+#define AsyncFor(a0, a1, a2, a3, a4, a5, a6) _Py_AsyncFor(a0, a1, a2, a3, a4, a5, a6)
+stmt_ty _Py_AsyncFor(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq *
+                     orelse, int lineno, int col_offset, PyArena *arena);
 #define While(a0, a1, a2, a3, a4, a5) _Py_While(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_While(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
                   int col_offset, PyArena *arena);
 #define If(a0, a1, a2, a3, a4, a5) _Py_If(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_If(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
                int col_offset, PyArena *arena);
-#define With(a0, a1, a2, a3, a4, a5) _Py_With(a0, a1, a2, a3, a4, a5)
-stmt_ty _Py_With(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body,
-                 int lineno, int col_offset, PyArena *arena);
+#define With(a0, a1, a2, a3, a4) _Py_With(a0, a1, a2, a3, a4)
+stmt_ty _Py_With(asdl_seq * items, asdl_seq * body, int lineno, int col_offset,
+                 PyArena *arena);
+#define AsyncWith(a0, a1, a2, a3, a4) _Py_AsyncWith(a0, a1, a2, a3, a4)
+stmt_ty _Py_AsyncWith(asdl_seq * items, asdl_seq * body, int lineno, int
+                      col_offset, PyArena *arena);
 #define Raise(a0, a1, a2, a3, a4, a5) _Py_Raise(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_Raise(expr_ty type, expr_ty inst, expr_ty tback, int lineno, int
                   col_offset, PyArena *arena);
@@ -485,6 +525,8 @@ expr_ty _Py_DictComp(expr_ty key, expr_ty value, asdl_seq * generators, int
 #define GeneratorExp(a0, a1, a2, a3, a4) _Py_GeneratorExp(a0, a1, a2, a3, a4)
 expr_ty _Py_GeneratorExp(expr_ty elt, asdl_seq * generators, int lineno, int
                          col_offset, PyArena *arena);
+#define Await(a0, a1, a2, a3) _Py_Await(a0, a1, a2, a3)
+expr_ty _Py_Await(expr_ty value, int lineno, int col_offset, PyArena *arena);
 #define Yield(a0, a1, a2, a3) _Py_Yield(a0, a1, a2, a3)
 expr_ty _Py_Yield(expr_ty value, int lineno, int col_offset, PyArena *arena);
 #define YieldFrom(a0, a1, a2, a3) _Py_YieldFrom(a0, a1, a2, a3)
@@ -540,6 +582,9 @@ arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, asdl_seq *
 keyword_ty _Py_keyword(identifier arg, expr_ty value, PyArena *arena);
 #define alias(a0, a1, a2) _Py_alias(a0, a1, a2)
 alias_ty _Py_alias(identifier name, identifier asname, PyArena *arena);
+#define withitem(a0, a1, a2) _Py_withitem(a0, a1, a2)
+withitem_ty _Py_withitem(expr_ty context_expr, expr_ty optional_vars, PyArena
+                         *arena);
 
 PyObject* PyAST_mod2obj(mod_ty t);
 mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);

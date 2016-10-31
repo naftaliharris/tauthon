@@ -5,6 +5,7 @@ import unittest
 import inspect
 import linecache
 import datetime
+import warnings
 from UserList import UserList
 from UserDict import UserDict
 
@@ -49,14 +50,17 @@ class IsTestBase(unittest.TestCase):
     predicates = set([inspect.isbuiltin, inspect.isclass, inspect.iscode,
                       inspect.isframe, inspect.isfunction, inspect.ismethod,
                       inspect.ismodule, inspect.istraceback,
-                      inspect.isgenerator, inspect.isgeneratorfunction])
+                      inspect.isgenerator, inspect.isgeneratorfunction,
+                      inspect.iscoroutine, inspect.iscoroutinefunction])
+
 
     def istest(self, predicate, exp):
         obj = eval(exp)
         self.assertTrue(predicate(obj), '%s(%s)' % (predicate.__name__, exp))
 
         for other in self.predicates - set([predicate]):
-            if predicate == inspect.isgeneratorfunction and\
+            if (predicate == inspect.isgeneratorfunction or \
+               predicate == inspect.iscoroutinefunction) and \
                other == inspect.isfunction:
                 continue
             self.assertFalse(other(obj), 'not %s(%s)' % (other.__name__, exp))
@@ -65,15 +69,15 @@ def generator_function_example(self):
     for i in xrange(2):
         yield i
 
-class TestPredicates(IsTestBase):
-    def test_sixteen(self):
-        count = len(filter(lambda x:x.startswith('is'), dir(inspect)))
-        # This test is here for remember you to update Doc/library/inspect.rst
-        # which claims there are 16 such functions
-        expected = 16
-        err_msg = "There are %d (not %d) is* functions" % (count, expected)
-        self.assertEqual(count, expected, err_msg)
+async def coroutine_function_example(self):
+    return 'spam'
 
+@types.coroutine
+def gen_coroutine_function_example(self):
+    yield
+    return 'spam'
+
+class TestPredicates(IsTestBase):
 
     def test_excluding_predicates(self):
         self.istest(inspect.isbuiltin, 'sys.exit')
@@ -89,6 +93,12 @@ class TestPredicates(IsTestBase):
         self.istest(inspect.isdatadescriptor, '__builtin__.file.softspace')
         self.istest(inspect.isgenerator, '(x for x in xrange(2))')
         self.istest(inspect.isgeneratorfunction, 'generator_function_example')
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.istest(inspect.iscoroutine, 'coroutine_function_example(1)')
+            self.istest(inspect.iscoroutinefunction, 'coroutine_function_example')
+
         if hasattr(types, 'GetSetDescriptorType'):
             self.istest(inspect.isgetsetdescriptor,
                         'type(tb.tb_frame).f_locals')
@@ -98,6 +108,51 @@ class TestPredicates(IsTestBase):
             self.istest(inspect.ismemberdescriptor, 'datetime.timedelta.days')
         else:
             self.assertFalse(inspect.ismemberdescriptor(datetime.timedelta.days))
+
+    def test_iscoroutine(self):
+        gen_coro = gen_coroutine_function_example(1)
+        coro = coroutine_function_example(1)
+
+        self.assertFalse(
+            inspect.iscoroutinefunction(gen_coroutine_function_example))
+        self.assertFalse(inspect.iscoroutine(gen_coro))
+
+        self.assertTrue(
+            inspect.isgeneratorfunction(gen_coroutine_function_example))
+        self.assertTrue(inspect.isgenerator(gen_coro))
+
+        self.assertTrue(
+            inspect.iscoroutinefunction(coroutine_function_example))
+        self.assertTrue(inspect.iscoroutine(coro))
+
+        self.assertFalse(
+            inspect.isgeneratorfunction(coroutine_function_example))
+        self.assertFalse(inspect.isgenerator(coro))
+
+        coro.close(); gen_coro.close() # silence warnings
+
+    def test_isawaitable(self):
+        def gen(): yield
+        self.assertFalse(inspect.isawaitable(gen()))
+
+        coro = coroutine_function_example(1)
+        gen_coro = gen_coroutine_function_example(1)
+
+        self.assertTrue(inspect.isawaitable(coro))
+        self.assertTrue(inspect.isawaitable(gen_coro))
+
+        class Future:
+            def __await__():
+                pass
+        self.assertTrue(inspect.isawaitable(Future()))
+        self.assertFalse(inspect.isawaitable(Future))
+
+        class NotFuture: pass
+        not_fut = NotFuture()
+        not_fut.__await__ = lambda: None
+        self.assertFalse(inspect.isawaitable(not_fut))
+
+        coro.close(); gen_coro.close() # silence warnings
 
     def test_isroutine(self):
         self.assertTrue(inspect.isroutine(mod.spam))
@@ -200,9 +255,7 @@ class GetSourceBase(unittest.TestCase):
     # Subclasses must override.
     fodderFile = None
 
-    def __init__(self, *args, **kwargs):
-        unittest.TestCase.__init__(self, *args, **kwargs)
-
+    def setUp(self):
         with open(inspect.getsourcefile(self.fodderFile)) as fp:
             self.source = fp.read()
 
@@ -253,6 +306,7 @@ class TestRetrievingSourceCode(GetSourceBase):
     def test_getfunctions(self):
         functions = inspect.getmembers(mod, inspect.isfunction)
         self.assertEqual(functions, [('eggs', mod.eggs),
+                                     ('lobbest', mod.lobbest),
                                      ('spam', mod.spam)])
 
     @unittest.skipIf(sys.flags.optimize >= 2,
@@ -289,6 +343,7 @@ class TestRetrievingSourceCode(GetSourceBase):
     def test_getsource(self):
         self.assertSourceEqual(git.abuse, 29, 39)
         self.assertSourceEqual(mod.StupidGit, 21, 46)
+        self.assertSourceEqual(mod.lobbest, 60, 61)
 
     def test_getsourcefile(self):
         self.assertEqual(inspect.getsourcefile(mod.spam), modfile)
@@ -624,6 +679,21 @@ class TestClassesAndFunctions(unittest.TestCase):
             if isinstance(builtin, type):
                 inspect.classify_class_attrs(builtin)
 
+    def test_classify_overrides_bool(self):
+        class NoBool(object):
+            def __eq__(self, other):
+                return NoBool()
+
+            def __bool__(self):
+                raise NotImplementedError(
+                    "This object does not specify a boolean value")
+
+        class HasNB(object):
+            dd = NoBool()
+
+        should_find_attr = inspect.Attribute('dd', 'data', HasNB, HasNB.dd)
+        self.assertIn(should_find_attr, inspect.classify_class_attrs(HasNB))
+
     def test_getmembers_method(self):
         # Old-style classes
         class B:
@@ -853,12 +923,177 @@ class TestGetcallargsUnboundMethods(TestGetcallargsMethods):
         locs = dict(locs or {}, inst=self.inst)
         return (func, 'inst,' + call_params_string, locs)
 
+
+class TestGetGeneratorState(unittest.TestCase):
+
+    def setUp(self):
+        def number_generator():
+            for number in range(5):
+                yield number
+        self.generator = number_generator()
+
+    def _generatorstate(self):
+        return inspect.getgeneratorstate(self.generator)
+
+    def test_created(self):
+        self.assertEqual(self._generatorstate(), inspect.GEN_CREATED)
+
+    def test_suspended(self):
+        next(self.generator)
+        self.assertEqual(self._generatorstate(), inspect.GEN_SUSPENDED)
+
+    def test_closed_after_exhaustion(self):
+        for i in self.generator:
+            pass
+        self.assertEqual(self._generatorstate(), inspect.GEN_CLOSED)
+
+    def test_closed_after_immediate_exception(self):
+        with self.assertRaises(RuntimeError):
+            self.generator.throw(RuntimeError)
+        self.assertEqual(self._generatorstate(), inspect.GEN_CLOSED)
+
+    def test_running(self):
+        # As mentioned on issue #10220, checking for the RUNNING state only
+        # makes sense inside the generator itself.
+        # The following generator checks for this by using the closure's
+        # reference to self and the generator state checking helper method
+        def running_check_generator():
+            for number in range(5):
+                self.assertEqual(self._generatorstate(), inspect.GEN_RUNNING)
+                yield number
+                self.assertEqual(self._generatorstate(), inspect.GEN_RUNNING)
+        self.generator = running_check_generator()
+        # Running up to the first yield
+        next(self.generator)
+        # Running after the first yield
+        next(self.generator)
+
+    def test_easy_debugging(self):
+        # repr() and str() of a generator state should contain the state name
+        names = 'GEN_CREATED GEN_RUNNING GEN_SUSPENDED GEN_CLOSED'.split()
+        for name in names:
+            state = getattr(inspect, name)
+            self.assertIn(name, repr(state))
+            self.assertIn(name, str(state))
+
+    def test_getgeneratorlocals(self):
+        def each(lst, a=None):
+            b=(1, 2, 3)
+            for v in lst:
+                if v == 3:
+                    c = 12
+                yield v
+
+        numbers = each([1, 2, 3])
+        self.assertEqual(inspect.getgeneratorlocals(numbers),
+                         {'a': None, 'lst': [1, 2, 3]})
+        next(numbers)
+        self.assertEqual(inspect.getgeneratorlocals(numbers),
+                         {'a': None, 'lst': [1, 2, 3], 'v': 1,
+                          'b': (1, 2, 3)})
+        next(numbers)
+        self.assertEqual(inspect.getgeneratorlocals(numbers),
+                         {'a': None, 'lst': [1, 2, 3], 'v': 2,
+                          'b': (1, 2, 3)})
+        next(numbers)
+        self.assertEqual(inspect.getgeneratorlocals(numbers),
+                         {'a': None, 'lst': [1, 2, 3], 'v': 3,
+                          'b': (1, 2, 3), 'c': 12})
+        try:
+            next(numbers)
+        except StopIteration:
+            pass
+        self.assertEqual(inspect.getgeneratorlocals(numbers), {})
+
+    def test_getgeneratorlocals_empty(self):
+        def yield_one():
+            yield 1
+        one = yield_one()
+        self.assertEqual(inspect.getgeneratorlocals(one), {})
+        try:
+            next(one)
+        except StopIteration:
+            pass
+        self.assertEqual(inspect.getgeneratorlocals(one), {})
+
+    def test_getgeneratorlocals_error(self):
+        self.assertRaises(TypeError, inspect.getgeneratorlocals, 1)
+        self.assertRaises(TypeError, inspect.getgeneratorlocals, lambda x: True)
+        self.assertRaises(TypeError, inspect.getgeneratorlocals, set)
+        self.assertRaises(TypeError, inspect.getgeneratorlocals, (2,3))
+
+
+class TestGetCoroutineState(unittest.TestCase):
+
+    def setUp(self):
+        @types.coroutine
+        def number_coroutine():
+            for number in range(5):
+                yield number
+        async def coroutine():
+            await number_coroutine()
+        self.coroutine = coroutine()
+
+    def tearDown(self):
+        self.coroutine.close()
+
+    def _coroutinestate(self):
+        return inspect.getcoroutinestate(self.coroutine)
+
+    def test_created(self):
+        self.assertEqual(self._coroutinestate(), inspect.CORO_CREATED)
+
+    def test_suspended(self):
+        self.coroutine.send(None)
+        self.assertEqual(self._coroutinestate(), inspect.CORO_SUSPENDED)
+
+    def test_closed_after_exhaustion(self):
+        while True:
+            try:
+                self.coroutine.send(None)
+            except StopIteration:
+                break
+
+        self.assertEqual(self._coroutinestate(), inspect.CORO_CLOSED)
+
+    def test_closed_after_immediate_exception(self):
+        with self.assertRaises(RuntimeError):
+            self.coroutine.throw(RuntimeError)
+        self.assertEqual(self._coroutinestate(), inspect.CORO_CLOSED)
+
+    def test_easy_debugging(self):
+        # repr() and str() of a coroutine state should contain the state name
+        names = 'CORO_CREATED CORO_RUNNING CORO_SUSPENDED CORO_CLOSED'.split()
+        for name in names:
+            state = getattr(inspect, name)
+            self.assertIn(name, repr(state))
+            self.assertIn(name, str(state))
+
+    def test_getcoroutinelocals(self):
+        @types.coroutine
+        def gencoro():
+            yield
+
+        gencoro = gencoro()
+        async def func(a=None):
+            b = 'spam'
+            await gencoro
+
+        coro = func()
+        self.assertEqual(inspect.getcoroutinelocals(coro),
+                         {'a': None, 'gencoro': gencoro})
+        coro.send(None)
+        self.assertEqual(inspect.getcoroutinelocals(coro),
+                         {'a': None, 'gencoro': gencoro, 'b': 'spam'})
+
+
 def test_main():
     run_unittest(
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
         TestInterpreterStack, TestClassesAndFunctions, TestPredicates,
         TestGetcallargsFunctions, TestGetcallargsMethods,
-        TestGetcallargsUnboundMethods)
+        TestGetcallargsUnboundMethods, TestGetGeneratorState,
+        TestGetCoroutineState)
 
 if __name__ == "__main__":
     test_main()

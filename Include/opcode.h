@@ -50,6 +50,13 @@ extern "C" {
 #define STORE_SLICE_2   42
 #define STORE_SLICE_3   43
 
+#define WITH_CLEANUP_FINISH 44
+#define GET_AITER           45
+#define GET_ANEXT           46
+#define BEFORE_ASYNC_WITH   47
+#define GET_YIELD_FROM_ITER 48
+#define GET_AWAITABLE       49
+
 #define DELETE_SLICE    50
 /* Also uses 51-53 */
 #define DELETE_SLICE_1  51
@@ -85,7 +92,7 @@ extern "C" {
 #define INPLACE_XOR     78
 #define INPLACE_OR      79
 #define BREAK_LOOP      80
-#define WITH_CLEANUP    81
+#define WITH_CLEANUP_START 81
 #define LOAD_LOCALS     82
 #define RETURN_VALUE    83
 #define IMPORT_STAR     84
@@ -162,6 +169,7 @@ extern "C" {
 
 #define SET_ADD         146
 #define MAP_ADD         147
+#define SETUP_ASYNC_WITH 154
 
 
 enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyCmp_GT=Py_GT, PyCmp_GE=Py_GE,

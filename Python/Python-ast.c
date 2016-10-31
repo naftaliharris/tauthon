@@ -44,6 +44,13 @@ static char *FunctionDef_fields[]={
         "body",
         "decorator_list",
 };
+static PyTypeObject *AsyncFunctionDef_type;
+static char *AsyncFunctionDef_fields[]={
+        "name",
+        "args",
+        "body",
+        "decorator_list",
+};
 static PyTypeObject *ClassDef_type;
 static char *ClassDef_fields[]={
         "name",
@@ -83,6 +90,13 @@ static char *For_fields[]={
         "body",
         "orelse",
 };
+static PyTypeObject *AsyncFor_type;
+static char *AsyncFor_fields[]={
+        "target",
+        "iter",
+        "body",
+        "orelse",
+};
 static PyTypeObject *While_type;
 static char *While_fields[]={
         "test",
@@ -97,8 +111,12 @@ static char *If_fields[]={
 };
 static PyTypeObject *With_type;
 static char *With_fields[]={
-        "context_expr",
-        "optional_vars",
+        "items",
+        "body",
+};
+static PyTypeObject *AsyncWith_type;
+static char *AsyncWith_fields[]={
+        "items",
         "body",
 };
 static PyTypeObject *Raise_type;
@@ -212,6 +230,10 @@ static PyTypeObject *GeneratorExp_type;
 static char *GeneratorExp_fields[]={
         "elt",
         "generators",
+};
+static PyTypeObject *Await_type;
+static char *Await_fields[]={
+        "value",
 };
 static PyTypeObject *Yield_type;
 static char *Yield_fields[]={
@@ -388,6 +410,12 @@ static PyObject* ast2obj_alias(void*);
 static char *alias_fields[]={
         "name",
         "asname",
+};
+static PyTypeObject *withitem_type;
+static PyObject* ast2obj_withitem(void*);
+static char *withitem_fields[]={
+        "context_expr",
+        "optional_vars",
 };
 
 
@@ -697,6 +725,9 @@ static int init_types(void)
         FunctionDef_type = make_type("FunctionDef", stmt_type,
                                      FunctionDef_fields, 4);
         if (!FunctionDef_type) return 0;
+        AsyncFunctionDef_type = make_type("AsyncFunctionDef", stmt_type,
+                                          AsyncFunctionDef_fields, 4);
+        if (!AsyncFunctionDef_type) return 0;
         ClassDef_type = make_type("ClassDef", stmt_type, ClassDef_fields, 4);
         if (!ClassDef_type) return 0;
         Return_type = make_type("Return", stmt_type, Return_fields, 1);
@@ -711,12 +742,16 @@ static int init_types(void)
         if (!Print_type) return 0;
         For_type = make_type("For", stmt_type, For_fields, 4);
         if (!For_type) return 0;
+        AsyncFor_type = make_type("AsyncFor", stmt_type, AsyncFor_fields, 4);
+        if (!AsyncFor_type) return 0;
         While_type = make_type("While", stmt_type, While_fields, 3);
         if (!While_type) return 0;
         If_type = make_type("If", stmt_type, If_fields, 3);
         if (!If_type) return 0;
-        With_type = make_type("With", stmt_type, With_fields, 3);
+        With_type = make_type("With", stmt_type, With_fields, 2);
         if (!With_type) return 0;
+        AsyncWith_type = make_type("AsyncWith", stmt_type, AsyncWith_fields, 2);
+        if (!AsyncWith_type) return 0;
         Raise_type = make_type("Raise", stmt_type, Raise_fields, 3);
         if (!Raise_type) return 0;
         TryExcept_type = make_type("TryExcept", stmt_type, TryExcept_fields, 3);
@@ -769,6 +804,8 @@ static int init_types(void)
         GeneratorExp_type = make_type("GeneratorExp", expr_type,
                                       GeneratorExp_fields, 2);
         if (!GeneratorExp_type) return 0;
+        Await_type = make_type("Await", expr_type, Await_fields, 1);
+        if (!Await_type) return 0;
         Yield_type = make_type("Yield", expr_type, Yield_fields, 1);
         if (!Yield_type) return 0;
         YieldFrom_type = make_type("YieldFrom", expr_type, YieldFrom_fields, 1);
@@ -975,6 +1012,8 @@ static int init_types(void)
         if (!keyword_type) return 0;
         alias_type = make_type("alias", &AST_type, alias_fields, 2);
         if (!alias_type) return 0;
+        withitem_type = make_type("withitem", &AST_type, withitem_fields, 2);
+        if (!withitem_type) return 0;
         initialized = 1;
         return 1;
 }
@@ -996,6 +1035,7 @@ static int obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena*
 static int obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena);
 static int obj2ast_keyword(PyObject* obj, keyword_ty* out, PyArena* arena);
 static int obj2ast_alias(PyObject* obj, alias_ty* out, PyArena* arena);
+static int obj2ast_withitem(PyObject* obj, withitem_ty* out, PyArena* arena);
 
 mod_ty
 Module(asdl_seq * body, PyArena *arena)
@@ -1073,6 +1113,34 @@ FunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq *
         p->v.FunctionDef.args = args;
         p->v.FunctionDef.body = body;
         p->v.FunctionDef.decorator_list = decorator_list;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+stmt_ty
+AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq
+                 * decorator_list, int lineno, int col_offset, PyArena *arena)
+{
+        stmt_ty p;
+        if (!name) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field name is required for AsyncFunctionDef");
+                return NULL;
+        }
+        if (!args) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field args is required for AsyncFunctionDef");
+                return NULL;
+        }
+        p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = AsyncFunctionDef_kind;
+        p->v.AsyncFunctionDef.name = name;
+        p->v.AsyncFunctionDef.args = args;
+        p->v.AsyncFunctionDef.body = body;
+        p->v.AsyncFunctionDef.decorator_list = decorator_list;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -1228,6 +1296,34 @@ For(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq * orelse, int
 }
 
 stmt_ty
+AsyncFor(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq * orelse, int
+         lineno, int col_offset, PyArena *arena)
+{
+        stmt_ty p;
+        if (!target) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field target is required for AsyncFor");
+                return NULL;
+        }
+        if (!iter) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field iter is required for AsyncFor");
+                return NULL;
+        }
+        p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = AsyncFor_kind;
+        p->v.AsyncFor.target = target;
+        p->v.AsyncFor.iter = iter;
+        p->v.AsyncFor.body = body;
+        p->v.AsyncFor.orelse = orelse;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+stmt_ty
 While(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno, int
       col_offset, PyArena *arena)
 {
@@ -1272,22 +1368,32 @@ If(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno, int
 }
 
 stmt_ty
-With(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body, int lineno,
-     int col_offset, PyArena *arena)
+With(asdl_seq * items, asdl_seq * body, int lineno, int col_offset, PyArena
+     *arena)
 {
         stmt_ty p;
-        if (!context_expr) {
-                PyErr_SetString(PyExc_ValueError,
-                                "field context_expr is required for With");
-                return NULL;
-        }
         p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
         if (!p)
                 return NULL;
         p->kind = With_kind;
-        p->v.With.context_expr = context_expr;
-        p->v.With.optional_vars = optional_vars;
+        p->v.With.items = items;
         p->v.With.body = body;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+stmt_ty
+AsyncWith(asdl_seq * items, asdl_seq * body, int lineno, int col_offset,
+          PyArena *arena)
+{
+        stmt_ty p;
+        p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = AsyncWith_kind;
+        p->v.AsyncWith.items = items;
+        p->v.AsyncWith.body = body;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -1746,6 +1852,25 @@ GeneratorExp(expr_ty elt, asdl_seq * generators, int lineno, int col_offset,
 }
 
 expr_ty
+Await(expr_ty value, int lineno, int col_offset, PyArena *arena)
+{
+        expr_ty p;
+        if (!value) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field value is required for Await");
+                return NULL;
+        }
+        p = (expr_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = Await_kind;
+        p->v.Await.value = value;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+expr_ty
 Yield(expr_ty value, int lineno, int col_offset, PyArena *arena)
 {
         expr_ty p;
@@ -2163,6 +2288,23 @@ alias(identifier name, identifier asname, PyArena *arena)
         return p;
 }
 
+withitem_ty
+withitem(expr_ty context_expr, expr_ty optional_vars, PyArena *arena)
+{
+        withitem_ty p;
+        if (!context_expr) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field context_expr is required for withitem");
+                return NULL;
+        }
+        p = (withitem_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->context_expr = context_expr;
+        p->optional_vars = optional_vars;
+        return p;
+}
+
 
 PyObject*
 ast2obj_mod(void* _o)
@@ -2249,6 +2391,32 @@ ast2obj_stmt(void* _o)
                         goto failed;
                 Py_DECREF(value);
                 value = ast2obj_list(o->v.FunctionDef.decorator_list,
+                                     ast2obj_expr);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "decorator_list", value) ==
+                    -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case AsyncFunctionDef_kind:
+                result = PyType_GenericNew(AsyncFunctionDef_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_identifier(o->v.AsyncFunctionDef.name);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "name", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_arguments(o->v.AsyncFunctionDef.args);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "args", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.AsyncFunctionDef.body, ast2obj_stmt);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "body", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.AsyncFunctionDef.decorator_list,
                                      ast2obj_expr);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "decorator_list", value) ==
@@ -2376,6 +2544,30 @@ ast2obj_stmt(void* _o)
                         goto failed;
                 Py_DECREF(value);
                 break;
+        case AsyncFor_kind:
+                result = PyType_GenericNew(AsyncFor_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_expr(o->v.AsyncFor.target);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "target", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.AsyncFor.iter);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "iter", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.AsyncFor.body, ast2obj_stmt);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "body", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.AsyncFor.orelse, ast2obj_stmt);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "orelse", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
         case While_kind:
                 result = PyType_GenericNew(While_type, NULL, NULL);
                 if (!result) goto failed;
@@ -2417,18 +2609,26 @@ ast2obj_stmt(void* _o)
         case With_kind:
                 result = PyType_GenericNew(With_type, NULL, NULL);
                 if (!result) goto failed;
-                value = ast2obj_expr(o->v.With.context_expr);
+                value = ast2obj_list(o->v.With.items, ast2obj_withitem);
                 if (!value) goto failed;
-                if (PyObject_SetAttrString(result, "context_expr", value) == -1)
-                        goto failed;
-                Py_DECREF(value);
-                value = ast2obj_expr(o->v.With.optional_vars);
-                if (!value) goto failed;
-                if (PyObject_SetAttrString(result, "optional_vars", value) ==
-                    -1)
+                if (PyObject_SetAttrString(result, "items", value) == -1)
                         goto failed;
                 Py_DECREF(value);
                 value = ast2obj_list(o->v.With.body, ast2obj_stmt);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "body", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case AsyncWith_kind:
+                result = PyType_GenericNew(AsyncWith_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_list(o->v.AsyncWith.items, ast2obj_withitem);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "items", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.AsyncWith.body, ast2obj_stmt);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "body", value) == -1)
                         goto failed;
@@ -2772,6 +2972,15 @@ ast2obj_expr(void* _o)
                                      ast2obj_comprehension);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "generators", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case Await_kind:
+                result = PyType_GenericNew(Await_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_expr(o->v.Await.value);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "value", value) == -1)
                         goto failed;
                 Py_DECREF(value);
                 break;
@@ -3371,6 +3580,35 @@ failed:
         return NULL;
 }
 
+PyObject*
+ast2obj_withitem(void* _o)
+{
+        withitem_ty o = (withitem_ty)_o;
+        PyObject *result = NULL, *value = NULL;
+        if (!o) {
+                Py_INCREF(Py_None);
+                return Py_None;
+        }
+
+        result = PyType_GenericNew(withitem_type, NULL, NULL);
+        if (!result) return NULL;
+        value = ast2obj_expr(o->context_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "context_expr", value) == -1)
+                goto failed;
+        Py_DECREF(value);
+        value = ast2obj_expr(o->optional_vars);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "optional_vars", value) == -1)
+                goto failed;
+        Py_DECREF(value);
+        return result;
+failed:
+        Py_XDECREF(value);
+        Py_XDECREF(result);
+        return NULL;
+}
+
 
 int
 obj2ast_mod(PyObject* obj, mod_ty* out, PyArena* arena)
@@ -3646,6 +3884,95 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 }
                 *out = FunctionDef(name, args, body, decorator_list, lineno,
                                    col_offset, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)AsyncFunctionDef_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                identifier name;
+                arguments_ty args;
+                asdl_seq* body;
+                asdl_seq* decorator_list;
+
+                if (PyObject_HasAttrString(obj, "name")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "name");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_identifier(tmp, &name, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"name\" missing from AsyncFunctionDef");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "args")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "args");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_arguments(tmp, &args, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"args\" missing from AsyncFunctionDef");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "body")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "body");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncFunctionDef field \"body\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        body = asdl_seq_new(len, arena);
+                        if (body == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                stmt_ty value;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(body, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"body\" missing from AsyncFunctionDef");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "decorator_list")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "decorator_list");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncFunctionDef field \"decorator_list\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        decorator_list = asdl_seq_new(len, arena);
+                        if (decorator_list == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                expr_ty value;
+                                res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(decorator_list, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"decorator_list\" missing from AsyncFunctionDef");
+                        return 1;
+                }
+                *out = AsyncFunctionDef(name, args, body, decorator_list,
+                                        lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -4057,6 +4384,95 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 if (*out == NULL) goto failed;
                 return 0;
         }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)AsyncFor_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                expr_ty target;
+                expr_ty iter;
+                asdl_seq* body;
+                asdl_seq* orelse;
+
+                if (PyObject_HasAttrString(obj, "target")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "target");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &target, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"target\" missing from AsyncFor");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "iter")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "iter");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &iter, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"iter\" missing from AsyncFor");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "body")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "body");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncFor field \"body\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        body = asdl_seq_new(len, arena);
+                        if (body == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                stmt_ty value;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(body, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"body\" missing from AsyncFor");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "orelse")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "orelse");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncFor field \"orelse\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        orelse = asdl_seq_new(len, arena);
+                        if (orelse == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                stmt_ty value;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(orelse, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"orelse\" missing from AsyncFor");
+                        return 1;
+                }
+                *out = AsyncFor(target, iter, body, orelse, lineno, col_offset,
+                                arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
         isinstance = PyObject_IsInstance(obj, (PyObject*)While_type);
         if (isinstance == -1) {
                 return 1;
@@ -4212,32 +4628,33 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 return 1;
         }
         if (isinstance) {
-                expr_ty context_expr;
-                expr_ty optional_vars;
+                asdl_seq* items;
                 asdl_seq* body;
 
-                if (PyObject_HasAttrString(obj, "context_expr")) {
+                if (PyObject_HasAttrString(obj, "items")) {
                         int res;
-                        tmp = PyObject_GetAttrString(obj, "context_expr");
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "items");
                         if (tmp == NULL) goto failed;
-                        res = obj2ast_expr(tmp, &context_expr, arena);
-                        if (res != 0) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "With field \"items\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        items = asdl_seq_new(len, arena);
+                        if (items == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                withitem_ty value;
+                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(items, i, value);
+                        }
                         Py_XDECREF(tmp);
                         tmp = NULL;
                 } else {
-                        PyErr_SetString(PyExc_TypeError, "required field \"context_expr\" missing from With");
+                        PyErr_SetString(PyExc_TypeError, "required field \"items\" missing from With");
                         return 1;
-                }
-                if (PyObject_HasAttrString(obj, "optional_vars")) {
-                        int res;
-                        tmp = PyObject_GetAttrString(obj, "optional_vars");
-                        if (tmp == NULL) goto failed;
-                        res = obj2ast_expr(tmp, &optional_vars, arena);
-                        if (res != 0) goto failed;
-                        Py_XDECREF(tmp);
-                        tmp = NULL;
-                } else {
-                        optional_vars = NULL;
                 }
                 if (PyObject_HasAttrString(obj, "body")) {
                         int res;
@@ -4264,8 +4681,69 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         PyErr_SetString(PyExc_TypeError, "required field \"body\" missing from With");
                         return 1;
                 }
-                *out = With(context_expr, optional_vars, body, lineno,
-                            col_offset, arena);
+                *out = With(items, body, lineno, col_offset, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)AsyncWith_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                asdl_seq* items;
+                asdl_seq* body;
+
+                if (PyObject_HasAttrString(obj, "items")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "items");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncWith field \"items\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        items = asdl_seq_new(len, arena);
+                        if (items == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                withitem_ty value;
+                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(items, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"items\" missing from AsyncWith");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "body")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "body");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "AsyncWith field \"body\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        body = asdl_seq_new(len, arena);
+                        if (body == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                stmt_ty value;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(body, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"body\" missing from AsyncWith");
+                        return 1;
+                }
+                *out = AsyncWith(items, body, lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -5304,6 +5782,29 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                         return 1;
                 }
                 *out = GeneratorExp(elt, generators, lineno, col_offset, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)Await_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                expr_ty value;
+
+                if (PyObject_HasAttrString(obj, "value")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "value");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &value, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from Await");
+                        return 1;
+                }
+                *out = Await(value, lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -6715,6 +7216,43 @@ failed:
         return 1;
 }
 
+int
+obj2ast_withitem(PyObject* obj, withitem_ty* out, PyArena* arena)
+{
+        PyObject* tmp = NULL;
+        expr_ty context_expr;
+        expr_ty optional_vars;
+
+        if (PyObject_HasAttrString(obj, "context_expr")) {
+                int res;
+                tmp = PyObject_GetAttrString(obj, "context_expr");
+                if (tmp == NULL) goto failed;
+                res = obj2ast_expr(tmp, &context_expr, arena);
+                if (res != 0) goto failed;
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                PyErr_SetString(PyExc_TypeError, "required field \"context_expr\" missing from withitem");
+                return 1;
+        }
+        if (PyObject_HasAttrString(obj, "optional_vars")) {
+                int res;
+                tmp = PyObject_GetAttrString(obj, "optional_vars");
+                if (tmp == NULL) goto failed;
+                res = obj2ast_expr(tmp, &optional_vars, arena);
+                if (res != 0) goto failed;
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                optional_vars = NULL;
+        }
+        *out = withitem(context_expr, optional_vars, arena);
+        return 0;
+failed:
+        Py_XDECREF(tmp);
+        return 1;
+}
+
 
 PyMODINIT_FUNC
 init_ast(void)
@@ -6740,6 +7278,8 @@ init_ast(void)
         if (PyDict_SetItemString(d, "stmt", (PyObject*)stmt_type) < 0) return;
         if (PyDict_SetItemString(d, "FunctionDef", (PyObject*)FunctionDef_type)
             < 0) return;
+        if (PyDict_SetItemString(d, "AsyncFunctionDef",
+            (PyObject*)AsyncFunctionDef_type) < 0) return;
         if (PyDict_SetItemString(d, "ClassDef", (PyObject*)ClassDef_type) < 0)
             return;
         if (PyDict_SetItemString(d, "Return", (PyObject*)Return_type) < 0)
@@ -6752,9 +7292,13 @@ init_ast(void)
             0) return;
         if (PyDict_SetItemString(d, "Print", (PyObject*)Print_type) < 0) return;
         if (PyDict_SetItemString(d, "For", (PyObject*)For_type) < 0) return;
+        if (PyDict_SetItemString(d, "AsyncFor", (PyObject*)AsyncFor_type) < 0)
+            return;
         if (PyDict_SetItemString(d, "While", (PyObject*)While_type) < 0) return;
         if (PyDict_SetItemString(d, "If", (PyObject*)If_type) < 0) return;
         if (PyDict_SetItemString(d, "With", (PyObject*)With_type) < 0) return;
+        if (PyDict_SetItemString(d, "AsyncWith", (PyObject*)AsyncWith_type) <
+            0) return;
         if (PyDict_SetItemString(d, "Raise", (PyObject*)Raise_type) < 0) return;
         if (PyDict_SetItemString(d, "TryExcept", (PyObject*)TryExcept_type) <
             0) return;
@@ -6793,6 +7337,7 @@ init_ast(void)
             return;
         if (PyDict_SetItemString(d, "GeneratorExp",
             (PyObject*)GeneratorExp_type) < 0) return;
+        if (PyDict_SetItemString(d, "Await", (PyObject*)Await_type) < 0) return;
         if (PyDict_SetItemString(d, "Yield", (PyObject*)Yield_type) < 0) return;
         if (PyDict_SetItemString(d, "YieldFrom", (PyObject*)YieldFrom_type) <
             0) return;
@@ -6880,6 +7425,8 @@ init_ast(void)
         if (PyDict_SetItemString(d, "keyword", (PyObject*)keyword_type) < 0)
             return;
         if (PyDict_SetItemString(d, "alias", (PyObject*)alias_type) < 0) return;
+        if (PyDict_SetItemString(d, "withitem", (PyObject*)withitem_type) < 0)
+            return;
 }
 
 

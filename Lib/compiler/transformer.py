@@ -725,14 +725,29 @@ class Transformer:
         return node
 
     def power(self, nodelist):
-        # power: atom trailer* ('**' factor)*
+        # power: atom_expr ['**' factor]
         node = self.com_node(nodelist[0])
+        if len(nodelist) == 1:
+            return node
+        elif len(nodelist) == 3:
+            elt = nodelist[1]
+            if elt[0] == token.DOUBLESTAR:
+                return Power([node, self.com_node(nodelist[2])],
+                             lineno=elt[2])
+            else:
+                raise ValueError, "unexpected token: %s" % nodelist[1][0]
+        else:
+            raise ValueError, "unexpected number of tokens"
+
+    def atom_expr(self, nodelist):
+        # atom_expr: [AWAIT] atom trailer*
+        if nodelist[0][0] == token.AWAIT:
+            raise NotImplementedError("await not implemented in compile")
+
+        node = self.com_node(nodelist[0])
+
         for i in range(1, len(nodelist)):
             elt = nodelist[i]
-            if elt[0] == token.DOUBLESTAR:
-                return Power([node, self.com_node(nodelist[i+1])],
-                             lineno=elt[2])
-
             node = self.com_apply_trailer(node, elt)
 
         return node
@@ -1044,7 +1059,7 @@ class Transformer:
                     raise SyntaxError, "can't assign to operator"
                 node = node[1]
             elif t == symbol.power:
-                if node[1][0] != symbol.atom:
+                if node[1][0] != symbol.atom_expr:
                     raise SyntaxError, "can't assign to operator"
                 if len(node) > 2:
                     primary = self.com_node(node[1])
@@ -1056,7 +1071,8 @@ class Transformer:
                     return self.com_assign_trailer(primary, node[-1],
                                                    assigning)
                 node = node[1]
-            elif t == symbol.atom:
+            elif t == symbol.atom_expr:
+                node = node[1]
                 t = node[1][0]
                 if t == token.LPAR:
                     node = node[2]
@@ -1439,6 +1455,10 @@ class Transformer:
                 if sub[0] == symbol.stmt:
                     return self.get_docstring(sub)
             return None
+        if n == symbol.atom_expr:
+            if node[0][0] == symbol.atom:
+                n = node[0][0]
+                node = node[0][1:]
         if n == symbol.atom:
             if node[0][0] == token.STRING:
                 s = ''
@@ -1527,6 +1547,7 @@ _legal_node_types = [
     symbol.factor,
     symbol.power,
     symbol.atom,
+    symbol.atom_expr,
     ]
 
 if hasattr(symbol, 'yield_stmt'):

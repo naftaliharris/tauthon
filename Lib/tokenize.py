@@ -241,7 +241,7 @@ class Untokenizer:
         for tok in chain([token], iterable):
             toknum, tokval = tok[:2]
 
-            if toknum in (NAME, NUMBER):
+            if toknum in (NAME, NUMBER, ASYNC, AWAIT):
                 tokval += ' '
 
             # Insert a space between two consecutive strings
@@ -307,6 +307,12 @@ def generate_tokens(readline):
     contstr, needcont = '', 0
     contline = None
     indents = [0]
+
+    # 'stashed' and 'async_*' are used for async/await parsing
+    stashed = None
+    async_def = False
+    async_def_indent = 0
+    async_def_nl = False
 
     while 1:                                   # loop over lines in stream
         try:
@@ -375,7 +381,18 @@ def generate_tokens(readline):
                         "unindent does not match any outer indentation level",
                         ("<tokenize>", lnum, pos, line))
                 indents = indents[:-1]
+
+                if async_def and async_def_indent >= indents[-1]:
+                    async_def = False
+                    async_def_nl = False
+                    async_def_indent = 0
+
                 yield (DEDENT, '', (lnum, pos), (lnum, pos), line)
+
+            if async_def and async_def_nl and async_def_indent >= indents[-1]:
+                async_def = False
+                async_def_nl = False
+                async_def_indent = 0
 
         else:                                  # continued statement
             if not line:
@@ -395,10 +412,21 @@ def generate_tokens(readline):
                    (initial == '.' and token != '.'):      # ordinary number
                     yield (NUMBER, token, spos, epos, line)
                 elif initial in '\r\n':
-                    yield (NL if parenlev > 0 else NEWLINE,
-                           token, spos, epos, line)
+                    if stashed:
+                        yield stashed
+                        stashed = None
+                    if parenlev > 0:
+                        yield (NL, token, spos, epos, line)
+                    else:
+                        yield (NEWLINE, token, spos, epos, line)
+                        if async_def:
+                            async_def_nl = True
+
                 elif initial == '#':
                     assert not token.endswith("\n")
+                    if stashed:
+                        yield stashed
+                        stashed = None
                     yield (COMMENT, token, spos, epos, line)
                 elif token in triple_quoted:
                     endprog = endprogs[token]
@@ -425,7 +453,36 @@ def generate_tokens(readline):
                     else:                                  # ordinary string
                         yield (STRING, token, spos, epos, line)
                 elif initial in namechars:                 # ordinary name
-                    yield (NAME, token, spos, epos, line)
+                    if token in ('async', 'await'):
+                        if async_def:
+                            yield (
+                                ASYNC if token == 'async' else AWAIT,
+                                token, spos, epos, line)
+                            continue
+
+                    tok = (NAME, token, spos, epos, line)
+                    if token == 'async' and not stashed:
+                        stashed = tok
+                        continue
+
+                    if token == 'def':
+                        if (stashed
+                                and stashed[0] == NAME
+                                and stashed[1] == 'async'):
+
+                            async_def = True
+                            async_def_indent = indents[-1]
+
+                            yield (ASYNC, stashed[1],
+                                            stashed[2], stashed[3],
+                                            stashed[4])
+                            stashed = None
+
+                    if stashed:
+                        yield stashed
+                        stashed = None
+
+                    yield tok
                 elif initial == '\\':                      # continued stmt
                     continued = 1
                 else:
@@ -433,11 +490,18 @@ def generate_tokens(readline):
                         parenlev += 1
                     elif initial in ')]}':
                         parenlev -= 1
+                    if stashed:
+                        yield stashed
+                        stashed = None
                     yield (OP, token, spos, epos, line)
             else:
                 yield (ERRORTOKEN, line[pos],
                            (lnum, pos), (lnum, pos+1), line)
                 pos += 1
+
+    if stashed:
+        yield stashed
+        stashed = None
 
     for indent in indents[1:]:                 # pop remaining indent levels
         yield (DEDENT, '', (lnum, 0), (lnum, 0), '')

@@ -1,3 +1,40 @@
+import inspect
+import unittest
+
+
+class YieldFromTests(unittest.TestCase):
+    def test_generator_gi_yieldfrom(self):
+        def a():
+            self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_RUNNING)
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield
+            self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_RUNNING)
+            self.assertIsNone(gen_b.gi_yieldfrom)
+
+        def b():
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield from a()
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield
+            self.assertIsNone(gen_b.gi_yieldfrom)
+
+        gen_b = b()
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_CREATED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+        gen_b.send(None)
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_SUSPENDED)
+        self.assertEqual(gen_b.gi_yieldfrom.gi_code.co_name, 'a')
+
+        gen_b.send(None)
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_SUSPENDED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+        [] = gen_b  # Exhaust generator
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_CLOSED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+
 tutorial_tests = """
 Let's try a simple generator:
 
@@ -382,7 +419,7 @@ From the Iterators list, about the types of these things.
 >>> type(i)
 <type 'generator'>
 >>> [s for s in dir(i) if not s.startswith('_')]
-['close', 'gi_code', 'gi_frame', 'gi_running', 'next', 'send', 'throw']
+['close', 'gi_code', 'gi_frame', 'gi_running', 'gi_yieldfrom', 'next', 'send', 'throw']
 >>> from test.test_support import HAVE_DOCSTRINGS
 >>> print(i.next.__doc__ if HAVE_DOCSTRINGS else 'x.next() -> the next value, or raise StopIteration')
 x.next() -> the next value, or raise StopIteration
@@ -1860,6 +1897,7 @@ __test__ = {"tut":      tutorial_tests,
 def test_main(verbose=None):
     from test import test_support, test_generators
     test_support.run_doctest(test_generators, verbose)
+    test_support.run_unittest(YieldFromTests)
 
 # This part isn't needed for regrtest, but for running the test directly.
 if __name__ == "__main__":

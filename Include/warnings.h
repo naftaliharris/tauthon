@@ -6,6 +6,11 @@ extern "C" {
 
 PyAPI_FUNC(void) _PyWarnings_Init(void);
 
+PyAPI_FUNC(int) PyErr_WarnFormat(
+  PyObject *category,
+  Py_ssize_t stack_level,
+  const char *format, /* ASCII-encoded string  */
+  ...);
 PyAPI_FUNC(int) PyErr_WarnEx(PyObject *, const char *, Py_ssize_t);
 PyAPI_FUNC(int) PyErr_WarnExplicit(PyObject *, const char *, const char *, int,
                                     const char *, PyObject *);

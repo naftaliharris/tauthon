@@ -82,6 +82,13 @@ def_op('STORE_SLICE+1', 41)
 def_op('STORE_SLICE+2', 42)
 def_op('STORE_SLICE+3', 43)
 
+def_op('WITH_CLEANUP_FINISH', 44)
+def_op('GET_AITER', 45)
+def_op('GET_ANEXT', 46)
+def_op('BEFORE_ASYNC_WITH', 47)
+def_op('GET_YIELD_FROM_ITER', 48)
+def_op('GET_AWAITABLE', 49)
+
 def_op('DELETE_SLICE+0', 50)
 def_op('DELETE_SLICE+1', 51)
 def_op('DELETE_SLICE+2', 52)
@@ -115,7 +122,7 @@ def_op('INPLACE_AND', 77)
 def_op('INPLACE_XOR', 78)
 def_op('INPLACE_OR', 79)
 def_op('BREAK_LOOP', 80)
-def_op('WITH_CLEANUP', 81)
+def_op('WITH_CLEANUP_START', 81)
 def_op('LOAD_LOCALS', 82)
 def_op('RETURN_VALUE', 83)
 def_op('IMPORT_STAR', 84)
@@ -192,5 +199,7 @@ def_op('EXTENDED_ARG', 145)
 EXTENDED_ARG = 145
 def_op('SET_ADD', 146)
 def_op('MAP_ADD', 147)
+
+jrel_op('SETUP_ASYNC_WITH', 154)
 
 del def_op, name_op, jrel_op, jabs_op

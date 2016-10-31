@@ -176,6 +176,7 @@ static int symtable_visit_slice(struct symtable *st, slice_ty);
 static int symtable_visit_params(struct symtable *st, asdl_seq *args, int top);
 static int symtable_visit_params_nested(struct symtable *st, asdl_seq *args);
 static int symtable_implicit_arg(struct symtable *st, int pos);
+static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
 static identifier top = NULL, lambda = NULL, genexpr = NULL, setcomp = NULL,
@@ -1025,6 +1026,32 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         if (!symtable_exit_block(st, s))
             return 0;
         break;
+    case AsyncFunctionDef_kind:
+        if (!symtable_add_def(st, s->v.AsyncFunctionDef.name, DEF_LOCAL))
+            return 0;
+        if (s->v.AsyncFunctionDef.args->defaults)
+            VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.args->defaults);
+        if (s->v.AsyncFunctionDef.decorator_list)
+            VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.decorator_list);
+        if (!symtable_enter_block(st, s->v.AsyncFunctionDef.name,
+                                  FunctionBlock, (void *)s, s->lineno))
+            return 0;
+        VISIT_IN_BLOCK(st, arguments, s->v.AsyncFunctionDef.args, s);
+        VISIT_SEQ_IN_BLOCK(st, stmt, s->v.AsyncFunctionDef.body, s);
+        if (!symtable_exit_block(st, s))
+            return 0;
+        break;
+    case AsyncWith_kind:
+        VISIT_SEQ(st, withitem, s->v.AsyncWith.items);
+        VISIT_SEQ(st, stmt, s->v.AsyncWith.body);
+        break;
+    case AsyncFor_kind:
+        VISIT(st, expr, s->v.AsyncFor.target);
+        VISIT(st, expr, s->v.AsyncFor.iter);
+        VISIT_SEQ(st, stmt, s->v.AsyncFor.body);
+        if (s->v.AsyncFor.orelse)
+            VISIT_SEQ(st, stmt, s->v.AsyncFor.orelse);
+        break;
     case ClassDef_kind: {
         PyObject *tmp;
         if (!symtable_add_def(st, s->v.ClassDef.name, DEF_LOCAL))
@@ -1172,10 +1199,7 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         /* nothing to do here */
         break;
     case With_kind:
-        VISIT(st, expr, s->v.With.context_expr);
-        if (s->v.With.optional_vars) {
-            VISIT(st, expr, s->v.With.optional_vars);
-        }
+        VISIT_SEQ(st, withitem, s->v.With.items);
         VISIT_SEQ(st, stmt, s->v.With.body);
         break;
     }
@@ -1249,6 +1273,10 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         VISIT(st, expr, e->v.YieldFrom.value);
         st->st_cur->ste_generator = 1;
         break;
+    case Await_kind:
+         VISIT(st, expr, e->v.Await.value);
+         st->st_cur->ste_generator = 1;
+         break;
     case Compare_kind:
         VISIT(st, expr, e->v.Compare.left);
         VISIT_SEQ(st, expr, e->v.Compare.comparators);
@@ -1393,6 +1421,16 @@ symtable_visit_excepthandler(struct symtable *st, excepthandler_ty eh)
     if (eh->v.ExceptHandler.name)
         VISIT(st, expr, eh->v.ExceptHandler.name);
     VISIT_SEQ(st, stmt, eh->v.ExceptHandler.body);
+    return 1;
+}
+
+static int
+symtable_visit_withitem(struct symtable *st, withitem_ty item)
+{
+    VISIT(st, expr, item->context_expr);
+    if (item->optional_vars) {
+        VISIT(st, expr, item->optional_vars);
+    }
     return 1;
 }
 

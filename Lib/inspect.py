@@ -8,8 +8,9 @@ It also provides some help for examining source code and class layout.
 Here are some of the useful functions provided by this module:
 
     ismodule(), isclass(), ismethod(), isfunction(), isgeneratorfunction(),
-        isgenerator(), istraceback(), isframe(), iscode(), isbuiltin(),
-        isroutine() - check object types
+        iscoroutinefunction(), isgenerator(), iscoroutine(), isawaitable(),
+        istraceback(), isframe(), iscode(), isbuiltin(), isroutine()
+        - check object types
     getmembers() - get members of an object that satisfy a given condition
 
     getfile(), getsourcefile(), getsource() - find an object's source code
@@ -38,12 +39,14 @@ import dis
 import imp
 import tokenize
 import linecache
+import collections
 from operator import attrgetter
 from collections import namedtuple
 
 # These constants are from Include/code.h.
 CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
 CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
+CO_COROUTINE, CO_ITERABLE_COROUTINE = 0x0080, 0x0100
 # See Include/object.h
 TPFLAGS_IS_ABSTRACT = 1 << 20
 
@@ -161,6 +164,15 @@ def isgeneratorfunction(object):
     return bool((isfunction(object) or ismethod(object)) and
                 object.func_code.co_flags & CO_GENERATOR)
 
+def iscoroutinefunction(object):
+    """Return true if the object is a coroutine function.
+
+    Coroutine functions are defined with "async def" syntax,
+    or generators decorated with "types.coroutine".
+    """
+    return bool((isfunction(object) or ismethod(object)) and
+                object.__code__.co_flags & CO_COROUTINE)
+
 def isgenerator(object):
     """Return true if the object is a generator.
 
@@ -177,6 +189,17 @@ def isgenerator(object):
                         the result of the current yield-expression
         throw           used to raise an exception inside the generator"""
     return isinstance(object, types.GeneratorType)
+
+def iscoroutine(object):
+    """Return true if the object is a coroutine."""
+    return isinstance(object, types.CoroutineType)
+
+def isawaitable(object):
+    """Return true is object can be passed to an ``await`` expression."""
+    return (isinstance(object, types.CoroutineType) or
+            isinstance(object, types.GeneratorType) and
+                object.gi_code.co_flags & CO_ITERABLE_COROUTINE or
+            isinstance(object, collections.Awaitable))
 
 def istraceback(object):
     """Return true if the object is a traceback.
@@ -575,7 +598,7 @@ def findsource(object):
         if not hasattr(object, 'co_firstlineno'):
             raise IOError('could not find function definition')
         lnum = object.co_firstlineno - 1
-        pat = re.compile(r'^(\s*def\s)|(.*(?<!\w)lambda(:|\s))|^(\s*@)')
+        pat = re.compile(r'^(\s*def\s)|(\s*async\s+def\s)|(.*(?<!\w)lambda(:|\s))|^(\s*@)')
         while lnum > 0:
             if pat.match(lines[lnum]): break
             lnum = lnum - 1
@@ -1062,3 +1085,83 @@ def stack(context=1):
 def trace(context=1):
     """Return a list of records for the stack below the current exception."""
     return getinnerframes(sys.exc_info()[2], context)
+
+
+# ------------------------------------------------ generator introspection
+
+GEN_CREATED = 'GEN_CREATED'
+GEN_RUNNING = 'GEN_RUNNING'
+GEN_SUSPENDED = 'GEN_SUSPENDED'
+GEN_CLOSED = 'GEN_CLOSED'
+
+def getgeneratorstate(generator):
+    """Get current state of a generator-iterator.
+
+    Possible states are:
+      GEN_CREATED: Waiting to start execution.
+      GEN_RUNNING: Currently being executed by the interpreter.
+      GEN_SUSPENDED: Currently suspended at a yield expression.
+      GEN_CLOSED: Execution has completed.
+    """
+    if generator.gi_running:
+        return GEN_RUNNING
+    if generator.gi_frame is None:
+        return GEN_CLOSED
+    if generator.gi_frame.f_lasti == -1:
+        return GEN_CREATED
+    return GEN_SUSPENDED
+
+
+def getgeneratorlocals(generator):
+    """
+    Get the mapping of generator local variables to their current values.
+
+    A dict is returned, with the keys the local variable names and values the
+    bound values."""
+
+    if not isgenerator(generator):
+        raise TypeError("'{!r}' is not a Python generator".format(generator))
+
+    frame = getattr(generator, "gi_frame", None)
+    if frame is not None:
+        return generator.gi_frame.f_locals
+    else:
+        return {}
+
+
+# ------------------------------------------------ coroutine introspection
+
+CORO_CREATED = 'CORO_CREATED'
+CORO_RUNNING = 'CORO_RUNNING'
+CORO_SUSPENDED = 'CORO_SUSPENDED'
+CORO_CLOSED = 'CORO_CLOSED'
+
+def getcoroutinestate(coroutine):
+    """Get current state of a coroutine object.
+
+    Possible states are:
+      CORO_CREATED: Waiting to start execution.
+      CORO_RUNNING: Currently being executed by the interpreter.
+      CORO_SUSPENDED: Currently suspended at an await expression.
+      CORO_CLOSED: Execution has completed.
+    """
+    if coroutine.cr_running:
+        return CORO_RUNNING
+    if coroutine.cr_frame is None:
+        return CORO_CLOSED
+    if coroutine.cr_frame.f_lasti == -1:
+        return CORO_CREATED
+    return CORO_SUSPENDED
+
+
+def getcoroutinelocals(coroutine):
+    """
+    Get the mapping of coroutine local variables to their current values.
+
+    A dict is returned, with the keys the local variable names and values the
+    bound values."""
+    frame = getattr(coroutine, "cr_frame", None)
+    if frame is not None:
+        return frame.f_locals
+    else:
+        return {}

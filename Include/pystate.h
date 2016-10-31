@@ -98,6 +98,9 @@ typedef struct _ts {
     int trash_delete_nesting;
     PyObject *trash_delete_later;
 
+    PyObject *coroutine_wrapper;
+    int in_coroutine_wrapper;
+
     /* XXX signal handlers should also be here */
 
 } PyThreadState;

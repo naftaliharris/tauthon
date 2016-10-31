@@ -553,6 +553,47 @@ of the Python interpreter stack.  This limit prevents infinite\n\
 recursion from causing an overflow of the C stack and crashing Python."
 );
 
+static PyObject *
+sys_set_coroutine_wrapper(PyObject *self, PyObject *wrapper)
+{
+    if (wrapper != Py_None) {
+        if (!PyCallable_Check(wrapper)) {
+            PyErr_Format(PyExc_TypeError,
+                         "callable expected, got %.50s",
+                         Py_TYPE(wrapper)->tp_name);
+            return NULL;
+        }
+        _PyEval_SetCoroutineWrapper(wrapper);
+    }
+    else {
+        _PyEval_SetCoroutineWrapper(NULL);
+    }
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(set_coroutine_wrapper_doc,
+"set_coroutine_wrapper(wrapper)\n\
+\n\
+Set a wrapper for coroutine objects."
+);
+
+static PyObject *
+sys_get_coroutine_wrapper(PyObject *self, PyObject *args)
+{
+    PyObject *wrapper = _PyEval_GetCoroutineWrapper();
+    if (wrapper == NULL) {
+        wrapper = Py_None;
+    }
+    Py_INCREF(wrapper);
+    return wrapper;
+}
+
+PyDoc_STRVAR(get_coroutine_wrapper_doc,
+"get_coroutine_wrapper()\n\
+\n\
+Return the wrapper for coroutine objects set by sys.set_coroutine_wrapper."
+);
+
 #ifdef MS_WINDOWS
 PyDoc_STRVAR(getwindowsversion_doc,
 "getwindowsversion()\n\
@@ -988,6 +1029,10 @@ static PyMethodDef sys_methods[] = {
     {"settrace",        sys_settrace, METH_O, settrace_doc},
     {"gettrace",        sys_gettrace, METH_NOARGS, gettrace_doc},
     {"call_tracing", sys_call_tracing, METH_VARARGS, call_tracing_doc},
+    {"set_coroutine_wrapper", sys_set_coroutine_wrapper, METH_O,
+     set_coroutine_wrapper_doc},
+    {"get_coroutine_wrapper", sys_get_coroutine_wrapper, METH_NOARGS,
+     get_coroutine_wrapper_doc},
     {NULL,              NULL}           /* sentinel */
 };
 

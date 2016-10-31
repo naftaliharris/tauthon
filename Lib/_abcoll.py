@@ -11,7 +11,8 @@ bootstrapping issues.  Unit tests are in test_collections.
 from abc import ABCMeta, abstractmethod
 import sys
 
-__all__ = ["Hashable", "Iterable", "Iterator",
+__all__ = ["Awaitable", "Coroutine", "AsyncIterable", "AsyncIterator",
+           "Hashable", "Iterable", "Iterator", "Generator",
            "Sized", "Container", "Callable",
            "Set", "MutableSet",
            "Mapping", "MutableMapping",
@@ -52,6 +53,120 @@ class Hashable:
         return NotImplemented
 
 
+class Awaitable:
+    __metaclass__ = ABCMeta
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __await__(self):
+        yield
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Awaitable:
+            try:
+                for B in C.__mro__:
+                    if "__await__" in B.__dict__:
+                        if B.__dict__["__await__"]:
+                            return True
+                        break
+            except AttributeError:
+                # Old-style class
+                if getattr(C, "__await__", None):
+                    return True
+        return NotImplemented
+
+
+class Coroutine(Awaitable):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def send(self, value):
+        """Send a value into the coroutine.
+        Return next yielded value or raise StopIteration.
+        """
+        raise StopIteration
+
+    @abstractmethod
+    def throw(self, typ, val=None, tb=None):
+        """Raise an exception in the coroutine.
+        Return next yielded value or raise StopIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
+
+    def close(self):
+        """Raise GeneratorExit inside coroutine.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("coroutine ignored GeneratorExit")
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Coroutine:
+            for method in ('__await__', 'send', 'throw', 'close'):
+                if not _hasattr(C, method):
+                    return NotImplemented
+            return True
+        return NotImplemented
+
+
+async def _coro(): pass
+_coro = _coro()
+coroutine = type(_coro)
+_coro.close()  # Prevent ResourceWarning
+del _coro
+Coroutine.register(coroutine)
+
+
+class AsyncIterable:
+    __metaclass__ = ABCMeta
+
+    __slots__ = ()
+
+    @abstractmethod
+    async def __aiter__(self):
+        return AsyncIterator()
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AsyncIterable:
+            if _hasattr(C, "__aiter__"):
+                return True
+        return NotImplemented
+
+
+class AsyncIterator(AsyncIterable):
+
+    __slots__ = ()
+
+    @abstractmethod
+    async def __anext__(self):
+        """Return the next item or raise StopAsyncIteration when exhausted."""
+        raise StopAsyncIteration
+
+    async def __aiter__(self):
+        return self
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AsyncIterator:
+            if _hasattr(C, "__anext__") and _hasattr(C, "__aiter__"):
+                return True
+        return NotImplemented
+
+
 class Iterable:
     __metaclass__ = ABCMeta
 
@@ -86,6 +201,60 @@ class Iterator(Iterable):
             if _hasattr(C, "next") and _hasattr(C, "__iter__"):
                 return True
         return NotImplemented
+
+
+class Generator(Iterator):
+
+    __slots__ = ()
+
+    def next(self):
+        """Return the next item from the generator.
+        When exhausted, raise StopIteration.
+        """
+        return self.send(None)
+
+    @abstractmethod
+    def send(self, value):
+        """Send a value into the generator.
+        Return next yielded value or raise StopIteration.
+        """
+        raise StopIteration
+
+    @abstractmethod
+    def throw(self, typ, val=None, tb=None):
+        """Raise an exception in the generator.
+        Return next yielded value or raise StopIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
+
+    def close(self):
+        """Raise GeneratorExit inside generator.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("generator ignored GeneratorExit")
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Generator:
+            for method in ('__iter__', 'next', 'send', 'throw', 'close'):
+                if not _hasattr(C, method):
+                    return NotImplemented
+            return True
+        return NotImplemented
+
+
+generator = type((lambda: (yield))())
+Generator.register(generator)
 
 
 class Sized:
@@ -165,8 +334,7 @@ class Set(Sized, Iterable, Container):
     def __gt__(self, other):
         if not isinstance(other, Set):
             return NotImplemented
-        return len(self) > len(other) and self.__ge__(other)
-
+        return len(self) > len(other) and self.__ge__(other) 
     def __ge__(self, other):
         if not isinstance(other, Set):
             return NotImplemented

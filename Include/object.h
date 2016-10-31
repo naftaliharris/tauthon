@@ -296,6 +296,12 @@ typedef struct {
 } PyMappingMethods;
 
 typedef struct {
+    unaryfunc am_await;
+    unaryfunc am_aiter;
+    unaryfunc am_anext;
+} PyAsyncMethods;
+
+typedef struct {
     readbufferproc bf_getreadbuffer;
     writebufferproc bf_getwritebuffer;
     segcountproc bf_getsegcount;
@@ -393,6 +399,7 @@ typedef struct _typeobject {
     newfunc tp_new;
     freefunc tp_free; /* Low-level free-memory routine */
     inquiry tp_is_gc; /* For PyObject_IS_GC */
+
     PyObject *tp_bases;
     PyObject *tp_mro; /* method resolution order */
     PyObject *tp_cache;
@@ -402,6 +409,8 @@ typedef struct _typeobject {
 
     /* Type attribute cache version tag. Added in version 2.6 */
     unsigned int tp_version_tag;
+
+    PyAsyncMethods *tp_as_async;
 
 #ifdef COUNT_ALLOCS
     /* these must be last and never explicitly initialized */
@@ -419,6 +428,7 @@ typedef struct _heaptypeobject {
     /* Note: there's a dependency on the order of these members
        in slotptr() in typeobject.c . */
     PyTypeObject ht_type;
+    PyAsyncMethods as_async;
     PyNumberMethods as_number;
     PyMappingMethods as_mapping;
     PySequenceMethods as_sequence; /* as_sequence comes after as_mapping,
