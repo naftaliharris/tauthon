@@ -812,10 +812,10 @@ opcode_stack_effect(int opcode, int oparg)
             return 0;
         case SETUP_WITH:
             return 4;
-        case WITH_CLEANUP_START:  /* TODO/RSI */
+        case WITH_CLEANUP_START:
             return 1;
         case WITH_CLEANUP_FINISH:
-            return -1; /* XXX Sometimes more */
+            return -4;
         case LOAD_LOCALS:
             return 1;
         case RETURN_VALUE:
@@ -1784,8 +1784,7 @@ compiler_async_for(struct compiler *c, stmt_ty s)
     ADDOP(c, POP_TOP);
     ADDOP(c, POP_TOP);
     ADDOP(c, POP_TOP);
-    // TODO/RSI
-    //ADDOP(c, POP_EXCEPT); /* for SETUP_EXCEPT */
+    /* NB: Killed the POP_EXCEPT that is here in Python3 */
     ADDOP(c, POP_BLOCK); /* for SETUP_LOOP */
     ADDOP_JABS(c, JUMP_ABSOLUTE, after_loop_else);
 

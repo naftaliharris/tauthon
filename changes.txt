@@ -1,11 +1,8 @@
 git diff e42d34 3_pep0492 --stat
 
 Haven't done yet:
- Python/ceval.c                       |  241 +-   (Made progress, but has TODO/RSI issues still)
- Python/compile.c                     |  317 ++-   WITH RSIs/TODO STILL IN IT!!!!!!!!!!!!!!!!!!!!!!!!!!
- Tools/parser/unparse.py              |   32 +-
 
-Haven't done yet (tests):
+Haven't done yet (waiting for asyncio):
  Lib/test/test_asyncio/test_pep492.py |  208 ++
  Lib/test/test_asyncio/test_tasks.py  |   35 +-
 
@@ -64,6 +61,8 @@ Already did:
  Parser/tokenizer.h                   |    7 +
  Python/Python-ast.c                  |  473 ++++
  Python/ast.c                         |  174 +-
+ Python/ceval.c                       |  241 +-
+ Python/compile.c                     |  317 ++-
  Python/graminit.c                    | 2496 ++++++++---------
  Python/opcode_targets.h              |   16 +-
  Python/peephole.c                    |    3 +
@@ -71,6 +70,7 @@ Already did:
  Python/pystate.c                     |    5 +
  Python/symtable.c                    |   51 +-
  Python/sysmodule.c                   |   46 +
+ Tools/parser/unparse.py              |   32 +-
 
 Not doing:
  Doc/c-api/concrete.rst               |    1 +

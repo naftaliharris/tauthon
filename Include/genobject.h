@@ -11,7 +11,6 @@ struct _frame; /* Avoid including frameobject.h */
 
 /* _PyGenObject_HEAD defines the initial segment of generator
    and coroutine objects. */
-// RSI: check error messages that used to use `gi_name`.
 #define _PyGenObject_HEAD(prefix)                                           \
     PyObject_HEAD                                                           \
     /* Note: gi_frame can be NULL if the generator is "finished" */         \

@@ -162,6 +162,14 @@ class Unparser:
         self.fill("global ")
         interleave(lambda: self.write(", "), self.write, t.names)
 
+    def _Await(self, t):
+        self.write("(")
+        self.write("await")
+        if t.value:
+            self.write(" ")
+            self.dispatch(t.value)
+        self.write(")")
+
     def _Yield(self, t):
         self.write("(")
         self.write("yield")
@@ -239,11 +247,18 @@ class Unparser:
         self.leave()
 
     def _FunctionDef(self, t):
+        self.__FunctionDef_helper(t, "def")
+
+    def _AsyncFunctionDef(self, t):
+        self.__FunctionDef_helper(t, "async def")
+
+    def __FunctionDef_helper(self, t, fill_suffix):
         self.write("\n")
         for deco in t.decorator_list:
             self.fill("@")
             self.dispatch(deco)
-        self.fill("def "+t.name + "(")
+        def_str = fill_suffix+" "+t.name + "("
+        self.fill(def_str)
         self.dispatch(t.args)
         self.write(")")
         self.enter()
@@ -251,7 +266,13 @@ class Unparser:
         self.leave()
 
     def _For(self, t):
-        self.fill("for ")
+        self.__For_helper("for ", t)
+
+    def _AsyncFor(self, t):
+        self.__For_helper("async for ", t)
+
+    def __For_helper(self, fill, t):
+        self.fill(fill)
         self.dispatch(t.target)
         self.write(" in ")
         self.dispatch(t.iter)
@@ -300,10 +321,14 @@ class Unparser:
 
     def _With(self, t):
         self.fill("with ")
-        self.dispatch(t.context_expr)
-        if t.optional_vars:
-            self.write(" as ")
-            self.dispatch(t.optional_vars)
+        interleave(lambda: self.write(", "), self.dispatch, t.items)
+        self.enter()
+        self.dispatch(t.body)
+        self.leave()
+
+    def _AsyncWith(self, t):
+        self.fill("async with ")
+        interleave(lambda: self.write(", "), self.dispatch, t.items)
         self.enter()
         self.dispatch(t.body)
         self.leave()
@@ -567,6 +592,12 @@ class Unparser:
         self.write(t.name)
         if t.asname:
             self.write(" as "+t.asname)
+
+    def _withitem(self, t):
+        self.dispatch(t.context_expr)
+        if t.optional_vars:
+            self.write(" as ")
+            self.dispatch(t.optional_vars)
 
 def roundtrip(filename, output=sys.stdout):
     with open(filename, "r") as pyfile:
