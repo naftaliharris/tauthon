@@ -1733,40 +1733,6 @@ class TestSignatureObject(unittest.TestCase):
                            ('kwargs', Ellipsis, Ellipsis, 'var_keyword')),
                          Ellipsis))
 
-    def test_signature_on_partialmethod(self):
-        from functools import partialmethod
-
-        class Spam:
-            def test():
-                pass
-            ham = partialmethod(test)
-
-        with self.assertRaisesRegexp(ValueError, "has incorrect arguments"):
-            inspect.signature(Spam.ham)
-
-        class Spam:
-            # TODO/RSI: Use annotations when they are supported.
-            #def test(it, a, *, c) -> 'spam':
-            def test(it, a, *, c):
-                pass
-            ham = partialmethod(test, c=1)
-
-        self.assertEqual(self.signature(Spam.ham),
-                         ((('it', Ellipsis, Ellipsis, 'positional_or_keyword'),
-                           ('a', Ellipsis, Ellipsis, 'positional_or_keyword'),
-                           ('c', 1, Ellipsis, 'keyword_only')),
-                          'spam'))
-
-        self.assertEqual(self.signature(Spam().ham),
-                         ((('a', Ellipsis, Ellipsis, 'positional_or_keyword'),
-                           ('c', 1, Ellipsis, 'keyword_only')),
-                          'spam'))
-
-    def test_signature_on_fake_partialmethod(self):
-        def foo(a): pass
-        foo._partialmethod = 'spam'
-        self.assertEqual(str(inspect.signature(foo)), '(a)')
-
     def test_signature_on_decorated(self):
         import functools
 

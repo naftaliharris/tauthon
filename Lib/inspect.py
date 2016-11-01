@@ -1758,32 +1758,6 @@ def _signature_from_callable(obj, *,
                     'attribute'.format(sig))
             return sig
 
-    try:
-        partialmethod = obj._partialmethod
-    except AttributeError:
-        pass
-    else:
-        if isinstance(partialmethod, functools.partialmethod):
-            # Unbound partialmethod (see functools.partialmethod)
-            # This means, that we need to calculate the signature
-            # as if it's a regular partial object, but taking into
-            # account that the first positional argument
-            # (usually `self`, or `cls`) will not be passed
-            # automatically (as for boundmethods)
-
-            wrapped_sig = _signature_from_callable(
-                partialmethod.func,
-                follow_wrapper_chains=follow_wrapper_chains,
-                skip_bound_arg=skip_bound_arg,
-                sigcls=sigcls)
-
-            sig = _signature_get_partial(wrapped_sig, partialmethod, (None,))
-
-            first_wrapped_param = tuple(wrapped_sig.parameters.values())[0]
-            new_params = (first_wrapped_param,) + tuple(sig.parameters.values())
-
-            return sig.replace(parameters=new_params)
-
     if isfunction(obj) or _signature_is_functionlike(obj):
         # If it's a pure Python function, or an object that is duck type
         # of a Python function (Cython functions, for instance), then:
