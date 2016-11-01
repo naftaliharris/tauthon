@@ -406,6 +406,8 @@ static PyGetSetDef func_getsetlist[] = {
      (setter)func_set_defaults},
     {"func_kwdefaults", (getter)func_get_kwdefaults,
      (setter)func_set_kwdefaults},
+    {"__kwdefaults__", (getter)func_get_kwdefaults,
+     (setter)func_set_kwdefaults},
     {"func_dict", (getter)func_get_dict, (setter)func_set_dict},
     {"__dict__", (getter)func_get_dict, (setter)func_set_dict},
     {"func_name", (getter)func_get_name, (setter)func_set_name},

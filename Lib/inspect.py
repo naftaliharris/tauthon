@@ -37,11 +37,14 @@ import string
 import re
 import dis
 import imp
+import itertools
+import functools
 import tokenize
 import linecache
+import token
 import collections
 from operator import attrgetter
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 
 # These constants are from Include/code.h.
 CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
@@ -368,6 +371,40 @@ def getmro(cls):
         result = []
         _searchbases(cls, result)
         return tuple(result)
+
+# -------------------------------------------------------- function helpers
+
+def unwrap(func, *, stop=None):
+    """Get the object wrapped by *func*.
+
+   Follows the chain of :attr:`__wrapped__` attributes returning the last
+   object in the chain.
+
+   *stop* is an optional callback accepting an object in the wrapper chain
+   as its sole argument that allows the unwrapping to be terminated early if
+   the callback returns a true value. If the callback never returns a true
+   value, the last object in the chain is returned as usual. For example,
+   :func:`signature` uses this to stop unwrapping if any object in the
+   chain has a ``__signature__`` attribute defined.
+
+   :exc:`ValueError` is raised if a cycle is encountered.
+
+    """
+    if stop is None:
+        def _is_wrapper(f):
+            return hasattr(f, '__wrapped__')
+    else:
+        def _is_wrapper(f):
+            return hasattr(f, '__wrapped__') and not stop(f)
+    f = func  # remember the original func for error reporting
+    memo = {id(f)} # Memoise by id to tolerate non-hashable objects
+    while _is_wrapper(func):
+        func = func.__wrapped__
+        id_func = id(func)
+        if id_func in memo:
+            raise ValueError('wrapper loop when unwrapping {!r}'.format(f))
+        memo.add(id_func)
+    return func
 
 # -------------------------------------------------- source code extraction
 def indentsize(line):
@@ -1328,7 +1365,9 @@ def _signature_is_functionlike(obj):
     code = getattr(obj, '__code__', None)
     defaults = getattr(obj, '__defaults__', _void) # Important to use _void ...
     kwdefaults = getattr(obj, '__kwdefaults__', _void) # ... and not None here
-    annotations = getattr(obj, '__annotations__', None)
+    # TODO/RSI Fix when you have annotations
+    #annotations = getattr(obj, '__annotations__', None)
+    annotations = getattr(obj, '__annotations__', {})
 
     return (isinstance(code, types.CodeType) and
             isinstance(name, str) and
@@ -1380,8 +1419,8 @@ def _signature_strip_non_python_syntax(signature):
     last_positional_only = None
 
     lines = [l.encode('ascii') for l in signature.split('\n')]
-    generator = iter(lines).__next__
-    token_stream = tokenize.tokenize(generator)
+    generator = iter(lines).next
+    token_stream = tokenize.generate_tokens(generator)
 
     delayed_comma = False
     skip_next_comma = False
@@ -1392,12 +1431,8 @@ def _signature_strip_non_python_syntax(signature):
     OP = token.OP
     ERRORTOKEN = token.ERRORTOKEN
 
-    # token stream always starts with ENCODING token, skip it
-    t = next(token_stream)
-    assert t.type == tokenize.ENCODING
-
     for t in token_stream:
-        type, string = t.type, t.string
+        type, string = t[0], t[1]
 
         if type == OP:
             if string == ',':
@@ -1610,7 +1645,9 @@ def _signature_from_function(cls, func):
     positional = tuple(arg_names[:pos_count])
     keyword_only_count = func_code.co_kwonlyargcount
     keyword_only = arg_names[pos_count:(pos_count + keyword_only_count)]
-    annotations = func.__annotations__
+    # TODO/RSI Fix when you have annotations
+    #annotations = func.__annotations__
+    annotations = {}
     defaults = func.__defaults__
     kwdefaults = func.__kwdefaults__
 
@@ -1891,7 +1928,7 @@ _KEYWORD_ONLY            = _ParameterKind.KEYWORD_ONLY
 _VAR_KEYWORD             = _ParameterKind.VAR_KEYWORD
 
 
-class Parameter:
+class Parameter(object):
     """Represents a parameter in a function signature.
 
     Has the following public attributes:
@@ -1957,7 +1994,8 @@ class Parameter:
             self._kind = _POSITIONAL_ONLY
             name = 'implicit{}'.format(name[1:])
 
-        if not name.isidentifier():
+        identifier = re.compile(r"^[^\d\W]\w*\Z")
+        if not identifier.match(name):
             raise ValueError('{!r} is not a valid parameter name'.format(name))
 
         self._name = name
@@ -2042,7 +2080,7 @@ class Parameter:
                 self._annotation == other._annotation)
 
 
-class BoundArguments:
+class BoundArguments(object):
     """Result of `Signature.bind` call.  Holds the mapping of arguments
     to the function's parameters.
 
@@ -2172,7 +2210,7 @@ class BoundArguments:
         return '<{} ({})>'.format(self.__class__.__name__, ', '.join(args))
 
 
-class Signature:
+class Signature(object):
     """A Signature object represents the overall signature of a function.
     It stores a Parameter object for each parameter accepted by the
     function, as well as information specific to the function itself.
@@ -2250,7 +2288,7 @@ class Signature:
                 params = OrderedDict(((param.name, param)
                                                 for param in parameters))
 
-        self._parameters = types.MappingProxyType(params)
+        self._parameters = params
         self._return_annotation = return_annotation
 
     @classmethod
