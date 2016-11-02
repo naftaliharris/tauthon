@@ -1221,8 +1221,8 @@ class TestSignatureObject(unittest.TestCase):
             pass
         self.assertEqual(self.signature(test),
                          ((('a', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('b', Ellipsis, 'foo', "positional_or_keyword")),
-                          123))
+                           ('b', Ellipsis, Ellipsis, "positional_or_keyword")),
+                          Ellipsis))
 
     def test_signature_on_wkwonly(self):
         # TODO/RSI: Use annotations when they are supported.
@@ -1230,9 +1230,9 @@ class TestSignatureObject(unittest.TestCase):
         def test(*, a, b):
             pass
         self.assertEqual(self.signature(test),
-                         ((('a', Ellipsis, float, "keyword_only"),
-                           ('b', Ellipsis, str, "keyword_only")),
-                           int))
+                         ((('a', Ellipsis, Ellipsis, "keyword_only"),
+                           ('b', Ellipsis, Ellipsis, "keyword_only")),
+                           Ellipsis))
 
     def test_signature_on_complex_args(self):
         # TODO/RSI: Use annotations when they are supported.
@@ -1241,11 +1241,11 @@ class TestSignatureObject(unittest.TestCase):
             pass
         self.assertEqual(self.signature(test),
                          ((('a', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('b', 10, 'foo', "positional_or_keyword"),
-                           ('args', Ellipsis, 'bar', "var_positional"),
-                           ('spam', Ellipsis, 'baz', "keyword_only"),
+                           ('b', 10, Ellipsis, "positional_or_keyword"),
+                           ('args', Ellipsis, Ellipsis, "var_positional"),
+                           ('spam', Ellipsis, Ellipsis, "keyword_only"),
                            ('ham', 123, Ellipsis, "keyword_only"),
-                           ('kwargs', Ellipsis, int, "var_keyword")),
+                           ('kwargs', Ellipsis, Ellipsis, "var_keyword")),
                           Ellipsis))
 
     @cpython_only
@@ -1429,7 +1429,8 @@ class TestSignatureObject(unittest.TestCase):
 
             __name__ = func.__name__
             __code__ = func.__code__
-            __annotations__ = func.__annotations__
+            # TODO/RSI for when we have annotations
+            #__annotations__ = func.__annotations__
             __defaults__ = func.__defaults__
             __kwdefaults__ = func.__kwdefaults__
 
@@ -1451,7 +1452,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(Test().m1),
                          ((('arg1', Ellipsis, Ellipsis, "positional_or_keyword"),
                            ('arg2', 1, Ellipsis, "positional_or_keyword")),
-                          int))
+                          Ellipsis))
 
         self.assertEqual(self.signature(Test().m2),
                          ((('args', Ellipsis, Ellipsis, "var_positional"),),
@@ -1477,7 +1478,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(m1d),
                          ((('arg1', Ellipsis, Ellipsis, "positional_or_keyword"),
                            ('arg2', 1, Ellipsis, "positional_or_keyword")),
-                          int))
+                          Ellipsis))
 
     def test_signature_on_classmethod(self):
         class Test:
@@ -1629,12 +1630,12 @@ class TestSignatureObject(unittest.TestCase):
 
         self.assertEqual(self.signature(partial(partial(test, 1))),
                          ((('b', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('c', Ellipsis, int, "positional_or_keyword")),
-                          42))
+                           ('c', Ellipsis, Ellipsis, "positional_or_keyword")),
+                          Ellipsis))
 
         self.assertEqual(self.signature(partial(partial(test, 1), 2)),
-                         ((('c', Ellipsis, int, "positional_or_keyword"),),
-                          42))
+                         ((('c', Ellipsis, Ellipsis, "positional_or_keyword"),),
+                          Ellipsis))
 
         psig = inspect.signature(partial(partial(test, 1), 2))
 
@@ -2622,7 +2623,7 @@ class TestBoundArguments(unittest.TestCase):
     def test_signature_bound_arguments_apply_defaults(self):
         # TODO/RSI: Use annotations when they are supported.
         #def foo(a, b=1, *args, c:1={}, **kw): pass
-        def foo(a, b, *args, c={}, **kw): pass
+        def foo(a, b=1, *args, c={}, **kw): pass
         sig = inspect.signature(foo)
 
         ba = sig.bind(20)

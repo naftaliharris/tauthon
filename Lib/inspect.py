@@ -1219,6 +1219,13 @@ _NonUserDefinedCallables = (_WrapperDescriptor,
                             types.BuiltinFunctionType)
 
 
+class _NEMixin(object):
+    __slots__ = ('__weakref__',)
+
+    def __ne__(self, other):
+        return not self == other
+
+
 def _signature_get_user_defined_method(cls, method_name):
     """Private helper. Checks if ``cls`` has an attribute
     named ``method_name`` and returns it only if it is a
@@ -1240,6 +1247,9 @@ def _signature_get_partial(wrapped_sig, partial, extra_args=()):
     look like after applying a 'functools.partial' object (or alike)
     on it.
     """
+
+    def _move_to_end(od, key):
+        od[key] = od.pop(key)
 
     old_params = wrapped_sig.parameters
     new_params = OrderedDict(old_params.items())
@@ -1302,9 +1312,9 @@ def _signature_get_partial(wrapped_sig, partial, extra_args=()):
             if param.kind is _POSITIONAL_OR_KEYWORD:
                 new_param = new_params[param_name].replace(kind=_KEYWORD_ONLY)
                 new_params[param_name] = new_param
-                new_params.move_to_end(param_name)
+                _move_to_end(new_params, param_name)
             elif param.kind in (_KEYWORD_ONLY, _VAR_KEYWORD):
-                new_params.move_to_end(param_name)
+                _move_to_end(new_params, param_name)
             elif param.kind is _VAR_POSITIONAL:
                 new_params.pop(param.name)
 
@@ -1884,25 +1894,33 @@ class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
 
 
-class _ParameterKind(object):
-    POSITIONAL_ONLY = 0
-    POSITIONAL_OR_KEYWORD = 1
-    VAR_POSITIONAL = 2
-    KEYWORD_ONLY = 3
-    VAR_KEYWORD = 4
+# This class taken from https://github.com/testing-cabal/funcsigs
+class _ParameterKind(int):
+    def __new__(self, val, name):
+        obj = int.__new__(self, val)
+        return obj
+
+    def __init__(self, val, name):
+        self._name = name
 
     def __str__(self):
-        return self._name_
+        return self._name
+
+    def __repr__(self):
+        return '<_ParameterKind: {0!r}>'.format(self._name)
+
+    def __getnewargs__(self):
+        return (int(self), None)
 
 
-_POSITIONAL_ONLY         = _ParameterKind.POSITIONAL_ONLY
-_POSITIONAL_OR_KEYWORD   = _ParameterKind.POSITIONAL_OR_KEYWORD
-_VAR_POSITIONAL          = _ParameterKind.VAR_POSITIONAL
-_KEYWORD_ONLY            = _ParameterKind.KEYWORD_ONLY
-_VAR_KEYWORD             = _ParameterKind.VAR_KEYWORD
+_POSITIONAL_ONLY        = _ParameterKind(0, name='POSITIONAL_ONLY')
+_POSITIONAL_OR_KEYWORD  = _ParameterKind(1, name='POSITIONAL_OR_KEYWORD')
+_VAR_POSITIONAL         = _ParameterKind(2, name='VAR_POSITIONAL')
+_KEYWORD_ONLY           = _ParameterKind(3, name='KEYWORD_ONLY')
+_VAR_KEYWORD            = _ParameterKind(4, name='VAR_KEYWORD')
 
 
-class Parameter(object):
+class Parameter(_NEMixin):
     """Represents a parameter in a function signature.
 
     Has the following public attributes:
@@ -2054,7 +2072,7 @@ class Parameter(object):
                 self._annotation == other._annotation)
 
 
-class BoundArguments(object):
+class BoundArguments(_NEMixin):
     """Result of `Signature.bind` call.  Holds the mapping of arguments
     to the function's parameters.
 
@@ -2071,7 +2089,9 @@ class BoundArguments(object):
         Dict of keyword arguments values.
     """
 
-    __slots__ = ('arguments', '_signature', '__weakref__')
+    __slots__ = ('arguments', '_signature')
+
+    __hash__ = None
 
     def __init__(self, signature, arguments):
         self.arguments = arguments
@@ -2184,7 +2204,7 @@ class BoundArguments(object):
         return '<{} ({})>'.format(self.__class__.__name__, ', '.join(args))
 
 
-class Signature(object):
+class Signature(_NEMixin):
     """A Signature object represents the overall signature of a function.
     It stores a Parameter object for each parameter accepted by the
     function, as well as information specific to the function itself.
