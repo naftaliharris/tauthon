@@ -2291,7 +2291,7 @@ class Signature(object):
 
     @property
     def parameters(self):
-        return self._parameters
+        return OrderedDict(self._parameters)
 
     @property
     def return_annotation(self):
