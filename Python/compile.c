@@ -831,8 +831,7 @@ opcode_stack_effect(int opcode, int oparg)
         case POP_BLOCK:
             return 0;
         case END_FINALLY:
-            return -3; /* or -1 or -2 if no exception occurred or
-                          return/break/continue */
+            return -1; /* or -2 or -3 if exception occurred */
         case BUILD_CLASS:
             return -2;
 
@@ -913,7 +912,6 @@ opcode_stack_effect(int opcode, int oparg)
             return -NARGS(oparg)-2;
         case MAKE_FUNCTION:
             return -NARGS(oparg);
-#undef NARGS
         case BUILD_SLICE:
             if (oparg == 3)
                 return -2;
@@ -921,7 +919,8 @@ opcode_stack_effect(int opcode, int oparg)
                 return -1;
 
         case MAKE_CLOSURE:
-            return -oparg-1;
+            return -NARGS(oparg)-1;
+#undef NARGS
         case LOAD_CLOSURE:
             return 1;
         case LOAD_DEREF:
