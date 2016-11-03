@@ -1738,7 +1738,9 @@ def _signature_from_callable(obj, *,
             skip_bound_arg=skip_bound_arg,
             sigcls=sigcls)
 
-        if skip_bound_arg:
+        is_bound_method = (obj.im_self is not None)
+
+        if skip_bound_arg and is_bound_method:
             return _signature_bound_method(sig)
         else:
             return sig
@@ -1786,7 +1788,7 @@ def _signature_from_callable(obj, *,
         return _signature_get_partial(wrapped_sig, obj)
 
     sig = None
-    if isinstance(obj, type):
+    if isinstance(obj, (type, types.ClassType)):
         # obj is a class or a metaclass
 
         # First, let's see if it has an overloaded __call__ defined
@@ -1858,7 +1860,10 @@ def _signature_from_callable(obj, *,
         # We also check that the 'obj' is not an instance of
         # _WrapperDescriptor or _MethodWrapper to avoid
         # infinite recursion (and even potential segfault)
-        call = _signature_get_user_defined_method(type(obj), '__call__')
+        if isinstance(obj, types.InstanceType):
+            call = _signature_get_user_defined_method(obj.__class__, '__call__')
+        else:
+            call = _signature_get_user_defined_method(type(obj), '__call__')
         if call is not None:
             try:
                 sig = _signature_from_callable(

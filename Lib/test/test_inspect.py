@@ -1408,13 +1408,14 @@ class TestSignatureObject(unittest.TestCase):
                 return True
             return _orig_isdesc(obj)
 
-        with unittest.mock.patch('inspect.ismethoddescriptor', _isdesc):
-            builtin_func = funclike(func)
-            # Make sure that our mock setup is working
-            self.assertFalse(inspect.ismethoddescriptor(builtin_func))
-            builtin_func._builtinmock = True
-            self.assertTrue(inspect.ismethoddescriptor(builtin_func))
-            self.assertEqual(inspect.signature(builtin_func), sig_func)
+        # TODO/RSI for when we have mocks
+        #with unittest.mock.patch('inspect.ismethoddescriptor', _isdesc):
+        #    builtin_func = funclike(func)
+        #    # Make sure that our mock setup is working
+        #    self.assertFalse(inspect.ismethoddescriptor(builtin_func))
+        #    builtin_func._builtinmock = True
+        #    self.assertTrue(inspect.ismethoddescriptor(builtin_func))
+        #    self.assertEqual(inspect.signature(builtin_func), sig_func)
 
     def test_signature_functionlike_class(self):
         # We only want to duck type function-like objects,
@@ -1828,7 +1829,7 @@ class TestSignatureObject(unittest.TestCase):
 
         class CM(type):
             def __new__(mcls, name, bases, dct, *, foo=1):
-                return super().__new__(mcls, name, bases, dct)
+                return super(CM, mcls).__new__(mcls, name, bases, dct)
         class C(object):
             __metaclass__ = CM
             def __init__(self, b):
@@ -1847,13 +1848,13 @@ class TestSignatureObject(unittest.TestCase):
 
         class CMM(type):
             def __new__(mcls, name, bases, dct, *, foo=1):
-                return super().__new__(mcls, name, bases, dct)
+                return super(CMM, mcls).__new__(mcls, name, bases, dct)
             def __call__(cls, nm, bs, dt):
                 return type(nm, bs, dt)
         class CM(type):
             __metaclass__ = CMM
             def __new__(mcls, name, bases, dct, *, bar=2):
-                return super().__new__(mcls, name, bases, dct)
+                return super(CM, mcls).__new__(mcls, name, bases, dct)
         class C(object):
             __metaclass__ = CM
             def __init__(self, b):
@@ -1878,7 +1879,7 @@ class TestSignatureObject(unittest.TestCase):
 
         class CM(type):
             def __init__(cls, name, bases, dct, *, bar=2):
-                return super().__init__(name, bases, dct)
+                return super(CM, cls).__init__(name, bases, dct)
         class C(object):
             __metaclass__ = CM
             def __init__(self, b):
