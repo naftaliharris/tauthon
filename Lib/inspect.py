@@ -2287,7 +2287,7 @@ class Signature(_NEMixin):
                 params = OrderedDict(((param.name, param)
                                                 for param in parameters))
 
-        self._parameters = params
+        self._parameters = types.MappingProxyType(params)
         self._return_annotation = return_annotation
 
     @classmethod
@@ -2316,7 +2316,7 @@ class Signature(_NEMixin):
 
     @property
     def parameters(self):
-        return OrderedDict(self._parameters)
+        return self._parameters
 
     @property
     def return_annotation(self):

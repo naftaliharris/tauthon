@@ -1350,11 +1350,6 @@ class TestSignatureObject(unittest.TestCase):
 
     @cpython_only
     def test_signature_on_builtins_no_signature(self):
-        import _testcapi
-        with self.assertRaisesRegexp(ValueError,
-                                    'no signature found for builtin'):
-            inspect.signature(_testcapi.docstring_no_signature)
-
         with self.assertRaisesRegexp(ValueError,
                                     'no signature found for builtin'):
             inspect.signature(str)
