@@ -3346,6 +3346,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         TARGET(MAKE_CLOSURE)
         {
+            int posdefaults = oparg & 0xff;
+            int kwdefaults = (oparg>>8) & 0xff;
+
             v = POP(); /* code object */
             x = PyFunction_New(v, f->f_globals);
             Py_DECREF(v);
@@ -3357,22 +3360,33 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 }
                 Py_DECREF(v);
             }
-            if (x != NULL && oparg > 0) {
-                v = PyTuple_New(oparg);
+            if (x != NULL && posdefaults > 0) {
+                v = PyTuple_New(posdefaults);
                 if (v == NULL) {
                     Py_DECREF(x);
                     x = NULL;
                     break;
                 }
-                while (--oparg >= 0) {
+                while (--posdefaults >= 0) {
                     w = POP();
-                    PyTuple_SET_ITEM(v, oparg, w);
+                    PyTuple_SET_ITEM(v, posdefaults, w);
                 }
-                if (PyFunction_SetDefaults(x, v) != 0) {
-                    /* Can't happen unless
-                       PyFunction_SetDefaults changes. */
-                    why = WHY_EXCEPTION;
+                err = PyFunction_SetDefaults(x, v);
+                Py_DECREF(v);
+            }
+            if (x != NULL && kwdefaults > 0 && !err) {
+                v = PyDict_New();
+                if (v == NULL) {
+                    Py_DECREF(x);
+                    x = NULL;
+                    break;
                 }
+                while (--kwdefaults >= 0) {
+                    w = POP(); /* default value */
+                    u = POP(); /* kw only arg name */
+                    PyDict_SetItem(v, u, w);
+                }
+                err = PyFunction_SetKwDefaults(x, v);
                 Py_DECREF(v);
             }
             PUSH(x);
