@@ -9,6 +9,7 @@ import warnings
 import collections
 import pickle
 import functools
+from contextlib import contextmanager
 from UserList import UserList
 from UserDict import UserDict
 
@@ -2777,6 +2778,62 @@ class TestSignatureDefinitions(unittest.TestCase):
         for name in no_signature:
             self.assertIsNone(obj.__text_signature__)
 
+
+class TestUnwrap(unittest.TestCase):
+
+    def test_unwrap_one(self):
+        def func(a, b):
+            return a + b
+        wrapper = contextmanager(func)  # Any wrapper would work
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_unwrap_several(self):
+        def func(a, b):
+            return a + b
+        wrapper = func
+        for __ in range(10):
+            @functools.wraps(wrapper)
+            def wrapper():
+                pass
+        self.assertIsNot(wrapper.__wrapped__, func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_stop(self):
+        def func1(a, b):
+            return a + b
+        @functools.wraps(func1)
+        def func2():
+            pass
+        @functools.wraps(func2)
+        def wrapper():
+            pass
+        func2.stop_here = 1
+        unwrapped = inspect.unwrap(wrapper,
+                                   stop=(lambda f: hasattr(f, "stop_here")))
+        self.assertIs(unwrapped, func2)
+
+    def test_cycle(self):
+        def func1(): pass
+        func1.__wrapped__ = func1
+        with self.assertRaisesRegexp(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+
+        def func2(): pass
+        func2.__wrapped__ = func1
+        func1.__wrapped__ = func2
+        with self.assertRaisesRegexp(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+        with self.assertRaisesRegexp(ValueError, 'wrapper loop'):
+            inspect.unwrap(func2)
+
+    def test_unhashable(self):
+        def func(): pass
+        func.__wrapped__ = None
+        class C:
+            __hash__ = None
+            __wrapped__ = func
+        self.assertIsNone(inspect.unwrap(C()))
+
 def test_main():
     run_unittest(
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
@@ -2785,7 +2842,7 @@ def test_main():
         TestGetcallargsUnboundMethods, TestGetGeneratorState,
         TestGetCoroutineState, TestSignatureObject, TestParameterObject,
         TestSignatureBind, TestBoundArguments, TestSignaturePrivateHelpers,
-        TestSignatureDefinitions)
+        TestSignatureDefinitions, TestUnwrap)
 
 if __name__ == "__main__":
     test_main()
