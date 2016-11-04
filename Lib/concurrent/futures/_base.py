@@ -40,6 +40,7 @@ _STATE_TO_DESCRIPTION_MAP = {
 
 # Logger for internal use by the futures package.
 LOGGER = logging.getLogger("concurrent.futures")
+LOGGER.addHandler(logging.StreamHandler())
 
 class Error(Exception):
     """Base class for all future-related exceptions."""
@@ -94,15 +95,15 @@ class _FirstCompletedWaiter(_Waiter):
     """Used by wait(return_when=FIRST_COMPLETED)."""
 
     def add_result(self, future):
-        super().add_result(future)
+        super(_FirstCompletedWaiter, self).add_result(future)
         self.event.set()
 
     def add_exception(self, future):
-        super().add_exception(future)
+        super(_FirstCompletedWaiter, self).add_exception(future)
         self.event.set()
 
     def add_cancelled(self, future):
-        super().add_cancelled(future)
+        super(_FirstCompletedWaiter, self).add_cancelled(future)
         self.event.set()
 
 class _AllCompletedWaiter(_Waiter):
@@ -112,7 +113,7 @@ class _AllCompletedWaiter(_Waiter):
         self.num_pending_calls = num_pending_calls
         self.stop_on_exception = stop_on_exception
         self.lock = threading.Lock()
-        super().__init__()
+        super(_AllCompletedWaiter, self).__init__()
 
     def _decrement_pending_calls(self):
         with self.lock:
@@ -121,18 +122,18 @@ class _AllCompletedWaiter(_Waiter):
                 self.event.set()
 
     def add_result(self, future):
-        super().add_result(future)
+        super(_AllCompletedWaiter, self).add_result(future)
         self._decrement_pending_calls()
 
     def add_exception(self, future):
-        super().add_exception(future)
+        super(_AllCompletedWaiter, self).add_exception(future)
         if self.stop_on_exception:
             self.event.set()
         else:
             self._decrement_pending_calls()
 
     def add_cancelled(self, future):
-        super().add_cancelled(future)
+        super(_AllCompletedWaiter, self).add_cancelled(future)
         self._decrement_pending_calls()
 
 class _AcquireFutures(object):

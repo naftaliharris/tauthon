@@ -1,16 +1,17 @@
 from __future__ import print_function
-import test.support
+import test.test_support as test_support
 
 # Skip tests if _multiprocessing wasn't built.
-test.support.import_module('_multiprocessing')
+test_support.import_module('_multiprocessing')
 # Skip tests if sem_open implementation is broken.
-test.support.import_module('multiprocessing.synchronize')
+test_support.import_module('multiprocessing.synchronize')
+multiprocessing = test_support.import_module('multiprocessing')
 # import threading after _multiprocessing to raise a more revelant error
 # message: "No module named _multiprocessing". _multiprocessing is not compiled
 # without thread support.
-test.support.import_module('threading')
+test_support.import_module('threading')
 
-from test.support.script_helper import assert_python_ok
+from test.script_helper import assert_python_ok
 
 import os
 import sys
@@ -60,6 +61,10 @@ class MyObject(object):
         pass
 
 
+def _test_traceback():
+    raise RuntimeError(123)
+
+
 class ExecutorMixin:
     worker_count = 5
 
@@ -74,7 +79,7 @@ class ExecutorMixin:
     def tearDown(self):
         self.executor.shutdown(wait=True)
         dt = time.time() - self.t1
-        if test.support.verbose:
+        if test_support.verbose:
             print("%.2fs" % dt, end=' ')
         self.assertLess(dt, 60, "synchronization issue: test lasted too long")
 
@@ -301,14 +306,14 @@ class ThreadPoolWaitTests(ThreadPoolMixin, WaitTests, unittest.TestCase):
         event = threading.Event()
         def future_func():
             event.wait()
-        oldswitchinterval = sys.getswitchinterval()
-        sys.setswitchinterval(1e-6)
+        oldcheckinterval = sys.getcheckinterval()
+        sys.setcheckinterval(1)
         try:
             fs = {self.executor.submit(future_func) for i in range(100)}
             event.set()
             futures.wait(fs, return_when=futures.ALL_COMPLETED)
         finally:
-            sys.setswitchinterval(oldswitchinterval)
+            sys.setcheckinterval(oldcheckinterval)
 
 
 class ProcessPoolWaitTests(ProcessPoolMixin, WaitTests, unittest.TestCase):
@@ -386,9 +391,9 @@ class ExecutorTest:
 
     def test_map_exception(self):
         i = self.executor.map(divmod, [1, 1, 1, 1], [2, 3, 0, 5])
-        self.assertEqual(i.__next__(), (0, 1))
-        self.assertEqual(i.__next__(), (0, 1))
-        self.assertRaises(ZeroDivisionError, i.__next__)
+        self.assertEqual(i.next(), (0, 1))
+        self.assertEqual(i.next(), (0, 1))
+        self.assertRaises(ZeroDivisionError, i.next)
 
     def test_map_timeout(self):
         results = []
@@ -411,7 +416,8 @@ class ExecutorTest:
         self.executor.map(str, [2] * (self.worker_count + 1))
         self.executor.shutdown()
 
-    @test.support.cpython_only
+    @unittest.skip("Can't pickle bound methods in python2")
+    @test_support.cpython_only
     def test_no_stale_references(self):
         # Issue #16284: check that the executors don't unnecessarily hang onto
         # references.
@@ -429,7 +435,7 @@ class ExecutorTest:
 
     def test_max_workers_negative(self):
         for number in (0, -1):
-            with self.assertRaisesRegex(ValueError,
+            with self.assertRaisesRegexp(ValueError,
                                         "max_workers must be greater "
                                         "than 0"):
                 self.executor_type(max_workers=number)
@@ -444,12 +450,12 @@ class ThreadPoolExecutorTest(ThreadPoolMixin, ExecutorTest, unittest.TestCase):
 
         self.executor.map(record_finished, range(10))
         self.executor.shutdown(wait=True)
-        self.assertCountEqual(finished, range(10))
+        self.assertEqual(sorted(finished), range(10))
 
     def test_default_workers(self):
         executor = self.executor_type()
         self.assertEqual(executor._max_workers,
-                         (os.cpu_count() or 1) * 5)
+                         (multiprocessing.cpu_count() or 1) * 5)
 
 
 class ProcessPoolExecutorTest(ProcessPoolMixin, ExecutorTest, unittest.TestCase):
@@ -481,135 +487,115 @@ class ProcessPoolExecutorTest(ProcessPoolMixin, ExecutorTest, unittest.TestCase)
             ref)
         self.assertRaises(ValueError, bad_map)
 
-    @classmethod
-    def _test_traceback(cls):
-        raise RuntimeError(123) # some comment
-
     def test_traceback(self):
-        # We want ensure that the traceback from the child process is
-        # contained in the traceback raised in the main process.
-        future = self.executor.submit(self._test_traceback)
+        future = self.executor.submit(_test_traceback)
         with self.assertRaises(Exception) as cm:
             future.result()
 
         exc = cm.exception
         self.assertIs(type(exc), RuntimeError)
         self.assertEqual(exc.args, (123,))
-        cause = exc.__cause__
-        self.assertIs(type(cause), futures.process._RemoteTraceback)
-        self.assertIn('raise RuntimeError(123) # some comment', cause.tb)
-
-        with test.support.captured_stderr() as f1:
-            try:
-                raise exc
-            except RuntimeError:
-                sys.excepthook(*sys.exc_info())
-        self.assertIn('raise RuntimeError(123) # some comment',
-                      f1.getvalue())
 
 
 class FutureTests(unittest.TestCase):
     def test_done_callback_with_result(self):
-        callback_result = None
+        callback_result = [None]
         def fn(callback_future):
-            nonlocal callback_result
-            callback_result = callback_future.result()
+            callback_result[0] = callback_future.result()
 
         f = Future()
         f.add_done_callback(fn)
         f.set_result(5)
-        self.assertEqual(5, callback_result)
+        self.assertEqual(5, callback_result[0])
 
     def test_done_callback_with_exception(self):
-        callback_exception = None
+        callback_exception = [None]
         def fn(callback_future):
-            nonlocal callback_exception
-            callback_exception = callback_future.exception()
+            callback_exception[0] = callback_future.exception()
 
         f = Future()
         f.add_done_callback(fn)
         f.set_exception(Exception('test'))
-        self.assertEqual(('test',), callback_exception.args)
+        self.assertEqual(('test',), callback_exception[0].args)
 
     def test_done_callback_with_cancel(self):
-        was_cancelled = None
+        was_cancelled = [None]
         def fn(callback_future):
-            nonlocal was_cancelled
-            was_cancelled = callback_future.cancelled()
+            was_cancelled[0] = callback_future.cancelled()
 
         f = Future()
         f.add_done_callback(fn)
         self.assertTrue(f.cancel())
-        self.assertTrue(was_cancelled)
+        self.assertTrue(was_cancelled[0])
 
     def test_done_callback_raises(self):
-        with test.support.captured_stderr() as stderr:
-            raising_was_called = False
-            fn_was_called = False
+        # Use assert_python_ok since can't capture stderr from logger
+        rc, out, err = assert_python_ok('-c', """if 1:
+            from concurrent.futures import Future
+            raising_was_called = [False]
+            fn_was_called = [False]
 
             def raising_fn(callback_future):
-                nonlocal raising_was_called
-                raising_was_called = True
+                raising_was_called[0] = True
                 raise Exception('doh!')
 
             def fn(callback_future):
-                nonlocal fn_was_called
-                fn_was_called = True
+                fn_was_called[0] = True
 
             f = Future()
             f.add_done_callback(raising_fn)
             f.add_done_callback(fn)
             f.set_result(5)
-            self.assertTrue(raising_was_called)
-            self.assertTrue(fn_was_called)
-            self.assertIn('Exception: doh!', stderr.getvalue())
+            assert raising_was_called[0]
+            assert fn_was_called[0]
+            """)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+        self.assertIn('Exception: doh!', err)
 
     def test_done_callback_already_successful(self):
-        callback_result = None
+        callback_result = [None]
         def fn(callback_future):
-            nonlocal callback_result
-            callback_result = callback_future.result()
+            callback_result[0] = callback_future.result()
 
         f = Future()
         f.set_result(5)
         f.add_done_callback(fn)
-        self.assertEqual(5, callback_result)
+        self.assertEqual(5, callback_result[0])
 
     def test_done_callback_already_failed(self):
-        callback_exception = None
+        callback_exception = [None]
         def fn(callback_future):
-            nonlocal callback_exception
-            callback_exception = callback_future.exception()
+            callback_exception[0] = callback_future.exception()
 
         f = Future()
         f.set_exception(Exception('test'))
         f.add_done_callback(fn)
-        self.assertEqual(('test',), callback_exception.args)
+        self.assertEqual(('test',), callback_exception[0].args)
 
     def test_done_callback_already_cancelled(self):
-        was_cancelled = None
+        was_cancelled = [None]
         def fn(callback_future):
-            nonlocal was_cancelled
-            was_cancelled = callback_future.cancelled()
+            was_cancelled[0] = callback_future.cancelled()
 
         f = Future()
         self.assertTrue(f.cancel())
         f.add_done_callback(fn)
-        self.assertTrue(was_cancelled)
+        self.assertTrue(was_cancelled[0])
 
     def test_repr(self):
-        self.assertRegex(repr(PENDING_FUTURE),
+        self.assertRegexpMatches(repr(PENDING_FUTURE),
                          '<Future at 0x[0-9a-f]+ state=pending>')
-        self.assertRegex(repr(RUNNING_FUTURE),
+        self.assertRegexpMatches(repr(RUNNING_FUTURE),
                          '<Future at 0x[0-9a-f]+ state=running>')
-        self.assertRegex(repr(CANCELLED_FUTURE),
+        self.assertRegexpMatches(repr(CANCELLED_FUTURE),
                          '<Future at 0x[0-9a-f]+ state=cancelled>')
-        self.assertRegex(repr(CANCELLED_AND_NOTIFIED_FUTURE),
+        self.assertRegexpMatches(repr(CANCELLED_AND_NOTIFIED_FUTURE),
                          '<Future at 0x[0-9a-f]+ state=cancelled>')
-        self.assertRegex(
+        self.assertRegexpMatches(
                 repr(EXCEPTION_FUTURE),
                 '<Future at 0x[0-9a-f]+ state=finished raised OSError>')
-        self.assertRegex(
+        self.assertRegexpMatches(
                 repr(SUCCESSFUL_FUTURE),
                 '<Future at 0x[0-9a-f]+ state=finished returned int>')
 
@@ -730,12 +716,12 @@ class FutureTests(unittest.TestCase):
 
         self.assertTrue(isinstance(f1.exception(timeout=5), OSError))
 
-@test.support.reap_threads
+@test_support.reap_threads
 def test_main():
     try:
-        test.support.run_unittest(__name__)
+        test_support.run_unittest(__name__)
     finally:
-        test.support.reap_children()
+        test_support.reap_children()
 
 if __name__ == "__main__":
     test_main()

@@ -10,7 +10,7 @@ from concurrent.futures import _base
 import Queue as queue
 import threading
 import weakref
-import os
+from multiprocessing import cpu_count
 
 # Workers are created as daemon threads. This is done to allow the interpreter
 # to exit when there are still idle threads in a ThreadPoolExecutor's thread
@@ -91,7 +91,7 @@ class ThreadPoolExecutor(_base.Executor):
         if max_workers is None:
             # Use this number because ThreadPoolExecutor is often
             # used to overlap I/O instead of CPU work.
-            max_workers = (os.cpu_count() or 1) * 5
+            max_workers = (cpu_count() or 1) * 5
         if max_workers <= 0:
             raise ValueError("max_workers must be greater than 0")
 

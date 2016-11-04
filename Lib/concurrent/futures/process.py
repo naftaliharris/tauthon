@@ -47,6 +47,7 @@ __author__ = 'Brian Quinlan (brian@sweetapp.com)'
 
 import atexit
 import os
+import sys
 from concurrent.futures import _base
 import Queue as queue
 from Queue import Full
@@ -91,27 +92,6 @@ def _python_exit():
 # (Futures in the call queue cannot be cancelled).
 EXTRA_QUEUED_CALLS = 1
 
-# Hack to embed stringification of remote traceback in local traceback
-
-class _RemoteTraceback(Exception):
-    def __init__(self, tb):
-        self.tb = tb
-    def __str__(self):
-        return self.tb
-
-class _ExceptionWithTraceback:
-    def __init__(self, exc, tb):
-        tb = traceback.format_exception(type(exc), exc, tb)
-        tb = ''.join(tb)
-        self.exc = exc
-        self.tb = '\n"""\n%s"""' % tb
-    def __reduce__(self):
-        return _rebuild_exc, (self.exc, self.tb)
-
-def _rebuild_exc(exc, tb):
-    exc.__cause__ = _RemoteTraceback(tb)
-    return exc
-
 class _WorkItem(object):
     def __init__(self, future, fn, args, kwargs):
         self.future = future
@@ -134,7 +114,7 @@ class _CallItem(object):
 
 def _get_chunks(*iterables, chunksize):
     """ Iterates over zip()ed iterables in chunks. """
-    it = zip(*iterables)
+    it = itertools.izip(*iterables)
     while True:
         chunk = tuple(itertools.islice(it, chunksize))
         if not chunk:
@@ -174,8 +154,7 @@ def _process_worker(call_queue, result_queue):
         try:
             r = call_item.fn(*call_item.args, **call_item.kwargs)
         except BaseException as e:
-            exc = _ExceptionWithTraceback(e, e.__traceback__)
-            result_queue.put(_ResultItem(call_item.work_id, exception=exc))
+            result_queue.put(_ResultItem(call_item.work_id, exception=e))
         else:
             result_queue.put(_ResultItem(call_item.work_id,
                                          result=r))
@@ -376,7 +355,7 @@ class ProcessPoolExecutor(_base.Executor):
         _check_system_limits()
 
         if max_workers is None:
-            self._max_workers = os.cpu_count() or 1
+            self._max_workers = multiprocessing.cpu_count() or 1
         else:
             if max_workers <= 0:
                 raise ValueError("max_workers must be greater than 0")
@@ -479,7 +458,7 @@ class ProcessPoolExecutor(_base.Executor):
         if chunksize < 1:
             raise ValueError("chunksize must be >= 1.")
 
-        results = super().map(partial(_process_chunk, fn),
+        results = super(ProcessPoolExecutor, self).map(partial(_process_chunk, fn),
                               _get_chunks(*iterables, chunksize=chunksize),
                               timeout=timeout)
         return itertools.chain.from_iterable(results)
