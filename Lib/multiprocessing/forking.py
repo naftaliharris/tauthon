@@ -101,6 +101,7 @@ else:
 
 if sys.platform != 'win32':
     import time
+    from .util import Finalize
 
     exit = os._exit
     duplicate = os.dup
@@ -117,16 +118,7 @@ if sys.platform != 'win32':
             sys.stdout.flush()
             sys.stderr.flush()
             self.returncode = None
-
-            self.pid = os.fork()
-            if self.pid == 0:
-                if 'random' in sys.modules:
-                    import random
-                    random.seed()
-                code = process_obj._bootstrap()
-                sys.stdout.flush()
-                sys.stderr.flush()
-                os._exit(code)
+            self._launch(process_obj)
 
         def poll(self, flag=os.WNOHANG):
             if self.returncode is None:
@@ -172,6 +164,24 @@ if sys.platform != 'win32':
                 except OSError, e:
                     if self.wait(timeout=0.1) is None:
                         raise
+
+        def _launch(self, process_obj):
+            code = 1
+            parent_r, child_w = os.pipe()
+            self.pid = os.fork()
+            if self.pid == 0:
+                try:
+                    os.close(parent_r)
+                    if 'random' in sys.modules:
+                        import random
+                        random.seed()
+                    code = process_obj._bootstrap()
+                finally:
+                    os._exit(code)
+            else:
+                os.close(child_w)
+                Finalize(self, os.close, (parent_r,))
+                self.sentinel = parent_r
 
         @staticmethod
         def thread_is_spawning():

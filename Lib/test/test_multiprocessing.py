@@ -2432,6 +2432,162 @@ class TestStdinBadfiledescriptor(unittest.TestCase):
         flike.flush()
         assert sio.getvalue() == 'foo'
 
+
+class TestWait(unittest.TestCase):
+
+    @classmethod
+    def _child_test_wait(cls, w, slow):
+        for i in range(10):
+            if slow:
+                time.sleep(random.random()*0.1)
+            w.send((i, os.getpid()))
+        w.close()
+
+    def test_wait(self, slow=False):
+        from multiprocessing import Pipe, Process
+        from multiprocessing.connection import wait
+        readers = []
+        procs = []
+        messages = []
+
+        for i in range(4):
+            r, w = Pipe(duplex=False)
+            p = Process(target=self._child_test_wait, args=(w, slow))
+            p.daemon = True
+            p.start()
+            w.close()
+            readers.append(r)
+            procs.append(p)
+
+        while readers:
+            for r in wait(readers):
+                try:
+                    msg = r.recv()
+                except EOFError:
+                    readers.remove(r)
+                    r.close()
+                else:
+                    messages.append(msg)
+
+        messages.sort()
+        expected = sorted((i, p.pid) for i in range(10) for p in procs)
+        self.assertEqual(messages, expected)
+
+    @classmethod
+    def _child_test_wait_socket(cls, address, slow):
+        s = socket.socket()
+        s.connect(address)
+        for i in range(10):
+            if slow:
+                time.sleep(random.random()*0.1)
+            s.sendall(('%s\n' % i).encode('ascii'))
+        s.close()
+
+    def test_wait_socket(self, slow=False):
+        from multiprocessing import Process
+        from multiprocessing.connection import wait
+        l = socket.socket()
+        l.bind(('', 0))
+        l.listen(4)
+        addr = ('localhost', l.getsockname()[1])
+        readers = []
+        procs = []
+        dic = {}
+
+        for i in range(4):
+            p = Process(target=self._child_test_wait_socket, args=(addr, slow))
+            p.daemon = True
+            p.start()
+            procs.append(p)
+
+        for i in range(4):
+            r, _ = l.accept()
+            readers.append(r)
+            dic[r] = []
+        l.close()
+
+        while readers:
+            for r in wait(readers):
+                msg = r.recv(32)
+                if not msg:
+                    readers.remove(r)
+                    r.close()
+                else:
+                    dic[r].append(msg)
+
+        expected = ''.join('%s\n' % i for i in range(10)).encode('ascii')
+        for v in dic.values():
+            self.assertEqual(b''.join(v), expected)
+
+    def test_wait_slow(self):
+        self.test_wait(True)
+
+    def test_wait_socket_slow(self):
+        self.test_wait(True)
+
+    def test_wait_timeout(self):
+        from multiprocessing.connection import wait
+
+        expected = 1
+        a, b = multiprocessing.Pipe()
+
+        start = time.time()
+        res = wait([a, b], 1)
+        delta = time.time() - start
+
+        self.assertEqual(res, [])
+        self.assertLess(delta, expected + 0.2)
+        self.assertGreater(delta, expected - 0.2)
+
+        b.send(None)
+
+        start = time.time()
+        res = wait([a, b], 1)
+        delta = time.time() - start
+
+        self.assertEqual(res, [a])
+        self.assertLess(delta, 0.2)
+
+    def test_wait_integer(self):
+        from multiprocessing.connection import wait
+
+        expected = 5
+        sorted_ = lambda l: sorted(l, key=lambda x: id(x))
+        a, b = multiprocessing.Pipe()
+        p = multiprocessing.Process(target=time.sleep, args=(expected,))
+
+        p.start()
+        self.assertIsInstance(p.sentinel, int)
+
+        start = time.time()
+        res = wait([a, p.sentinel, b], expected + 20)
+        delta = time.time() - start
+
+        self.assertEqual(res, [p.sentinel])
+        self.assertLess(delta, expected + 1)
+        self.assertGreater(delta, expected - 1)
+
+        a.send(None)
+
+        start = time.time()
+        res = wait([a, p.sentinel, b], 20)
+        delta = time.time() - start
+
+        self.assertEqual(sorted_(res), sorted_([p.sentinel, b]))
+        self.assertLess(delta, 0.2)
+
+        b.send(None)
+
+        start = time.time()
+        res = wait([a, p.sentinel, b], 20)
+        delta = time.time() - start
+
+        self.assertEqual(sorted_(res), sorted_([a, p.sentinel, b]))
+        self.assertLess(delta, 0.2)
+
+        p.join()
+
+
 #
 # Test interaction with socket timeouts - see Issue #6056
 #
@@ -2617,8 +2773,9 @@ class TestIgnoreEINTR(unittest.TestCase):
 #
 
 testcases_other = [OtherTest, TestInvalidHandle, TestInitializers,
-                   TestStdinBadfiledescriptor, TestTimeouts, TestNoForkBomb,
-                   TestFlags, TestForkAwareThreadLock, TestIgnoreEINTR]
+                   TestStdinBadfiledescriptor, TestWait, TestTimeouts,
+                   TestNoForkBomb, TestFlags, TestForkAwareThreadLock,
+                   TestIgnoreEINTR]
 
 #
 #

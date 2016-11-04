@@ -293,12 +293,12 @@ class SelectSelector(_BaseSelectorImpl):
     """Select-based selector."""
 
     def __init__(self):
-        super().__init__()
+        super(SelectSelector, self).__init__()
         self._readers = set()
         self._writers = set()
 
     def register(self, fileobj, events, data=None):
-        key = super().register(fileobj, events, data)
+        key = super(SelectSelector, self).register(fileobj, events, data)
         if events & EVENT_READ:
             self._readers.add(key.fd)
         if events & EVENT_WRITE:
@@ -306,7 +306,7 @@ class SelectSelector(_BaseSelectorImpl):
         return key
 
     def unregister(self, fileobj):
-        key = super().unregister(fileobj)
+        key = super(SelectSelector, self).unregister(fileobj)
         self._readers.discard(key.fd)
         self._writers.discard(key.fd)
         return key
@@ -346,11 +346,11 @@ if hasattr(select, 'poll'):
         """Poll-based selector."""
 
         def __init__(self):
-            super().__init__()
+            super(PollSelector, self).__init__()
             self._poll = select.poll()
 
         def register(self, fileobj, events, data=None):
-            key = super().register(fileobj, events, data)
+            key = super(PollSelector, self).register(fileobj, events, data)
             poll_events = 0
             if events & EVENT_READ:
                 poll_events |= select.POLLIN
@@ -360,7 +360,7 @@ if hasattr(select, 'poll'):
             return key
 
         def unregister(self, fileobj):
-            key = super().unregister(fileobj)
+            key = super(PollSelector, self).unregister(fileobj)
             self._poll.unregister(key.fd)
             return key
 
@@ -397,14 +397,14 @@ if hasattr(select, 'epoll'):
         """Epoll-based selector."""
 
         def __init__(self):
-            super().__init__()
+            super(EpollSelector, self).__init__()
             self._epoll = select.epoll()
 
         def fileno(self):
             return self._epoll.fileno()
 
         def register(self, fileobj, events, data=None):
-            key = super().register(fileobj, events, data)
+            key = super(EpollSelector, self).register(fileobj, events, data)
             epoll_events = 0
             if events & EVENT_READ:
                 epoll_events |= select.EPOLLIN
@@ -414,7 +414,7 @@ if hasattr(select, 'epoll'):
             return key
 
         def unregister(self, fileobj):
-            key = super().unregister(fileobj)
+            key = super(EpollSelector, self).unregister(fileobj)
             try:
                 self._epoll.unregister(key.fd)
             except OSError:
@@ -457,7 +457,7 @@ if hasattr(select, 'epoll'):
 
         def close(self):
             self._epoll.close()
-            super().close()
+            super(EpollSelector, self).close()
 
 
 if hasattr(select, 'devpoll'):
@@ -466,14 +466,14 @@ if hasattr(select, 'devpoll'):
         """Solaris /dev/poll selector."""
 
         def __init__(self):
-            super().__init__()
+            super(DevpollSelector, self).__init__()
             self._devpoll = select.devpoll()
 
         def fileno(self):
             return self._devpoll.fileno()
 
         def register(self, fileobj, events, data=None):
-            key = super().register(fileobj, events, data)
+            key = super(DevpollSelector, self).register(fileobj, events, data)
             poll_events = 0
             if events & EVENT_READ:
                 poll_events |= select.POLLIN
@@ -483,7 +483,7 @@ if hasattr(select, 'devpoll'):
             return key
 
         def unregister(self, fileobj):
-            key = super().unregister(fileobj)
+            key = super(DevpollSelector, self).unregister(fileobj)
             self._devpoll.unregister(key.fd)
             return key
 
@@ -515,7 +515,7 @@ if hasattr(select, 'devpoll'):
 
         def close(self):
             self._devpoll.close()
-            super().close()
+            super(DevpollSelector, self).close()
 
 
 if hasattr(select, 'kqueue'):
@@ -524,14 +524,14 @@ if hasattr(select, 'kqueue'):
         """Kqueue-based selector."""
 
         def __init__(self):
-            super().__init__()
+            super(KqueueSelector, self).__init__()
             self._kqueue = select.kqueue()
 
         def fileno(self):
             return self._kqueue.fileno()
 
         def register(self, fileobj, events, data=None):
-            key = super().register(fileobj, events, data)
+            key = super(KqueueSelector, self).register(fileobj, events, data)
             if events & EVENT_READ:
                 kev = select.kevent(key.fd, select.KQ_FILTER_READ,
                                     select.KQ_EV_ADD)
@@ -543,7 +543,7 @@ if hasattr(select, 'kqueue'):
             return key
 
         def unregister(self, fileobj):
-            key = super().unregister(fileobj)
+            key = super(KqueueSelector, self).unregister(fileobj)
             if key.events & EVENT_READ:
                 kev = select.kevent(key.fd, select.KQ_FILTER_READ,
                                     select.KQ_EV_DELETE)
@@ -587,7 +587,7 @@ if hasattr(select, 'kqueue'):
 
         def close(self):
             self._kqueue.close()
-            super().close()
+            super(KqueueSelector, self).close()
 
 
 # Choose the best implementation, roughly:
