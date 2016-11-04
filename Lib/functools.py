@@ -34,6 +34,12 @@ def update_wrapper(wrapper,
     for attr in updated:
         getattr(wrapper, attr).update(getattr(wrapped, attr, {}))
     # Return the wrapper so this can be used as a decorator via partial()
+
+    if not hasattr(wrapper, "__wrapped__") or\
+            hasattr(wrapper, "__functools_wrapped"):
+        # Don't overwrite user-defined __wrapped__ attributes.
+        wrapper.__wrapped__ = wrapped
+        wrapper.__functools_wrapped = True
     return wrapper
 
 def wraps(wrapped,

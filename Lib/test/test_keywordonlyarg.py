@@ -153,6 +153,14 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
         # used to fail with a SystemError.
         lambda *, k1=unittest: None
 
+    def test_highly_nested(self):
+        compile("""
+def foo():
+    def bar():
+        def hello(*, b=1):
+            return bar
+        """, "<test>", "exec")
+
 def test_main():
     run_unittest(KeywordOnlyArgTestCase)
 
