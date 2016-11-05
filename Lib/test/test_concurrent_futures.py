@@ -50,11 +50,6 @@ def sleep_and_raise(t):
     time.sleep(t)
     raise Exception('this is an exception')
 
-def sleep_and_print(t, msg):
-    time.sleep(t)
-    print(msg)
-    sys.stdout.flush()
-
 
 class MyObject(object):
     def my_method(self):
@@ -112,8 +107,12 @@ class ExecutorShutdownTest:
         # Test the atexit hook for shutdown of worker threads and processes
         rc, out, err = assert_python_ok('-c', """if 1:
             from concurrent.futures import {executor_type}
-            from time import sleep
-            from test.test_concurrent_futures import sleep_and_print
+            import time
+            import sys
+            def sleep_and_print(t, msg):
+                time.sleep(t)
+                print(msg)
+                sys.stdout.flush()
             t = {executor_type}(5)
             t.submit(sleep_and_print, 1.0, "apple")
             """.format(executor_type=self.executor_type.__name__))
