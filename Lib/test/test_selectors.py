@@ -8,8 +8,8 @@ import sys
 from test import test_support as support
 from time import sleep
 import unittest
-import unittest.mock
-from time import monotonic as time
+import test._mock_backport as mock
+from time import time
 try:
     import resource
 except ImportError:
@@ -167,8 +167,8 @@ class BaseSelectorTestCase(unittest.TestCase):
 
         # modify use a shortcut
         d3 = object()
-        s.register = unittest.mock.Mock()
-        s.unregister = unittest.mock.Mock()
+        s.register = mock.Mock()
+        s.unregister = mock.Mock()
 
         s.modify(rd, selectors.EVENT_READ, d3)
         self.assertFalse(s.register.called)
