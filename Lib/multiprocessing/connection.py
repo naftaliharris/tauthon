@@ -32,7 +32,7 @@
 # SUCH DAMAGE.
 #
 
-__all__ = [ 'Client', 'Listener', 'Pipe' ]
+__all__ = [ 'Client', 'Listener', 'Pipe', 'wait' ]
 
 import os
 import sys
@@ -475,3 +475,46 @@ def XmlClient(*args, **kwds):
     global xmlrpclib
     import xmlrpclib
     return ConnectionWrapper(Client(*args, **kwds), _xml_dumps, _xml_loads)
+
+#
+# Wait
+#
+
+if sys.platform == 'win32':
+    def wait(object_list, timeout=None):
+        raise NotImplementedError("wait is not implemented on Windows yet")
+
+else:
+
+    import selectors
+
+    # poll/select have the advantage of not requiring any extra file
+    # descriptor, contrarily to epoll/kqueue (also, they require a single
+    # syscall).
+    if hasattr(selectors, 'PollSelector'):
+        _WaitSelector = selectors.PollSelector
+    else:
+        _WaitSelector = selectors.SelectSelector
+
+    def wait(object_list, timeout=None):
+        '''
+        Wait till an object in object_list is ready/readable.
+
+        Returns list of those objects in object_list which are ready/readable.
+        '''
+        with _WaitSelector() as selector:
+            for obj in object_list:
+                selector.register(obj, selectors.EVENT_READ)
+
+            if timeout is not None:
+                deadline = time.time() + timeout
+
+            while True:
+                ready = selector.select(timeout)
+                if ready:
+                    return [key.fileobj for (key, events) in ready]
+                else:
+                    if timeout is not None:
+                        timeout = deadline - time.time()
+                        if timeout < 0:
+                            return ready
