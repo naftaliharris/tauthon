@@ -10,7 +10,7 @@ from unittest import mock
 import asyncio
 from asyncio import test_utils
 try:
-    from test import support
+    import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
 

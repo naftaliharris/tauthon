@@ -5,7 +5,7 @@ import types
 import unittest
 
 try:
-    from test import support
+    import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
 from unittest import mock

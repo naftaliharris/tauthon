@@ -1,5 +1,5 @@
 import os
-from test.support import load_package_tests, import_module
+from test.test_support import load_package_tests, import_module
 
 # Skip tests if we don't have threading.
 import_module('threading')

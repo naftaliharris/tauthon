@@ -14,7 +14,7 @@ import _winapi
 from asyncio import _overlapped
 from asyncio import windows_utils
 try:
-    from test import support
+    import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
 

@@ -110,6 +110,25 @@ def _save_and_block_module(name, orig_modules):
     return saved
 
 
+def load_package_tests(pkg_dir, loader, standard_tests, pattern):
+    """Generic load_tests implementation for simple test packages.
+
+    Most packages can implement load_tests using this function as follows:
+
+       def load_tests(*args):
+           return load_package_tests(os.path.dirname(__file__), *args)
+    """
+    if pattern is None:
+        pattern = "test*"
+    top_dir = os.path.dirname(              # Lib
+                  os.path.dirname(__file__))   # test
+    package_tests = loader.discover(start_dir=pkg_dir,
+                                    top_level_dir=top_dir,
+                                    pattern=pattern)
+    standard_tests.addTests(package_tests)
+    return standard_tests
+
+
 def import_fresh_module(name, fresh=(), blocked=(), deprecated=False):
     """Imports and returns a module, deliberately bypassing the sys.modules cache
     and importing a fresh copy of the module. Once the import is complete,

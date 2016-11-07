@@ -28,7 +28,7 @@ from asyncio import selector_events
 from asyncio import sslproto
 from asyncio import test_utils
 try:
-    from test import support
+    import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
 

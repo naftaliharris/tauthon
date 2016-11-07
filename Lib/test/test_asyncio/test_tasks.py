@@ -16,11 +16,11 @@ import asyncio
 from asyncio import coroutines
 from asyncio import test_utils
 try:
-    from test import support
+    import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
 try:
-    from test.support.script_helper import assert_python_ok
+    from test.script_helper import assert_python_ok
 except ImportError:
     try:
         from test.script_helper import assert_python_ok
