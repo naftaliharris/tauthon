@@ -94,7 +94,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._transport = None
 
 
-class Process:
+class Process(object):
     def __init__(self, transport, protocol, loop):
         self._transport = transport
         self._protocol = protocol

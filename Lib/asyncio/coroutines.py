@@ -81,7 +81,7 @@ def debug_wrapper(gen):
     return CoroWrapper(gen, None)
 
 
-class CoroWrapper:
+class CoroWrapper(object):
     # Wrapper for coroutine object in _DEBUG mode.
 
     def __init__(self, gen, func=None):

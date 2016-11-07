@@ -130,7 +130,7 @@ def pipe(*, duplex=False, overlapped=(True, True), bufsize=BUFSIZE):
 # Wrapper for a pipe handle
 
 
-class PipeHandle:
+class PipeHandle(object):
     """Wrapper for an overlapped pipe handle which is vaguely file-object like.
 
     The IOCP event loop can use these instead of socket objects.

@@ -28,7 +28,7 @@ class QueueFull(Exception):
     pass
 
 
-class Queue:
+class Queue(object):
     """A queue, useful for coordinating producer and consumer coroutines.
 
     If maxsize is less than or equal to zero, the queue size is infinite. If it

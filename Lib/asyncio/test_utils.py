@@ -9,15 +9,15 @@ import logging
 import os
 import re
 import socket
-import socketserver
+import SocketServer as socketserver
 import sys
 import tempfile
 import threading
 import time
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 
-from http.server import HTTPServer
+from BaseHTTPServer import HTTPServer
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 
 try:
@@ -98,7 +98,7 @@ class SilentWSGIServer(WSGIServer):
     request_timeout = 2
 
     def get_request(self):
-        request, client_addr = super().get_request()
+        request, client_addr = super(SilentWSGIServer, self).get_request()
         request.settimeout(self.request_timeout)
         return request, client_addr
 
@@ -106,7 +106,7 @@ class SilentWSGIServer(WSGIServer):
         pass
 
 
-class SSLWSGIServerMixin:
+class SSLWSGIServerMixin(object):
 
     def finish_request(self, request, client_address):
         # The relative location of our test directory (which
@@ -179,7 +179,7 @@ if hasattr(socket, 'AF_UNIX'):
             self.setup_environ()
 
         def get_request(self):
-            request, client_addr = super().get_request()
+            request, client_addr = super(UnixWSGIServer, self).get_request()
             request.settimeout(self.request_timeout)
             # Code in the stdlib expects that get_request
             # will return a socket and a tuple (host, port).
@@ -282,7 +282,7 @@ class TestLoop(base_events.BaseEventLoop):
     """
 
     def __init__(self, gen=None):
-        super().__init__()
+        super(TestLoop, self).__init__()
 
         if gen is None:
             def gen():
@@ -311,7 +311,7 @@ class TestLoop(base_events.BaseEventLoop):
             self._time += advance
 
     def close(self):
-        super().close()
+        super(TestLoop, self).close()
         if self._check_on_close:
             try:
                 self._gen.send(0)
@@ -363,7 +363,7 @@ class TestLoop(base_events.BaseEventLoop):
         self.remove_writer_count = collections.defaultdict(int)
 
     def _run_once(self):
-        super()._run_once()
+        super(TestLoop, self)._run_once()
         for when in self._timers:
             advance = self._gen.send(when)
             self.advance_time(advance)
@@ -371,7 +371,7 @@ class TestLoop(base_events.BaseEventLoop):
 
     def call_at(self, when, callback, *args):
         self._timers.append(when)
-        return super().call_at(when, callback, *args)
+        return super(TestLoop, self).call_at(when, callback, *args)
 
     def _process_events(self, event_list):
         return

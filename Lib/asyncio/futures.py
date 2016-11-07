@@ -32,7 +32,7 @@ class InvalidStateError(Error):
     """The operation is not allowed in this state."""
 
 
-class _TracebackLogger:
+class _TracebackLogger(object):
     """Helper to log a traceback upon destruction if not cleared.
 
     This solves a nasty problem with Futures and Tasks that have an
@@ -112,7 +112,7 @@ class _TracebackLogger:
             self.loop.call_exception_handler({'message': msg})
 
 
-class Future:
+class Future(object):
     """This class is *almost* compatible with concurrent.futures.Future.
 
     Differences:

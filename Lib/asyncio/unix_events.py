@@ -654,7 +654,7 @@ class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
             self._proc.stdin = open(stdin_w.detach(), 'wb', buffering=bufsize)
 
 
-class AbstractChildWatcher:
+class AbstractChildWatcher(object):
     """Abstract base class for monitoring child processes.
 
     Objects derived from this class monitor a collection of subprocesses and

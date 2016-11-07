@@ -390,7 +390,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         return transp
 
 
-class IocpProactor:
+class IocpProactor(object):
     """Proactor implementation using IOCP."""
 
     def __init__(self, concurrency=0xffffffff):

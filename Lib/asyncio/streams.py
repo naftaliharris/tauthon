@@ -264,7 +264,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
         return True
 
 
-class StreamWriter:
+class StreamWriter(object):
     """Wraps a Transport.
 
     This exposes write(), writelines(), [can_]write_eof(),
@@ -335,7 +335,7 @@ class StreamWriter:
         yield from self._protocol._drain_helper()
 
 
-class StreamReader:
+class StreamReader(object):
 
     def __init__(self, limit=_DEFAULT_LIMIT, loop=None):
         # The line length limit is  a security feature;

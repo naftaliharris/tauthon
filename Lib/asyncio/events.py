@@ -76,7 +76,7 @@ def _format_callback_source(func, args):
     return func_repr
 
 
-class Handle:
+class Handle(object):
     """Object returned by callback registration methods."""
 
     __slots__ = ('_callback', '_args', '_cancelled', '_loop',
@@ -195,7 +195,7 @@ class TimerHandle(Handle):
         super().cancel()
 
 
-class AbstractServer:
+class AbstractServer(object):
     """Abstract server returned by create_server()."""
 
     def close(self):
@@ -207,7 +207,7 @@ class AbstractServer:
         return NotImplemented
 
 
-class AbstractEventLoop:
+class AbstractEventLoop(object):
     """Abstract event loop."""
 
     # Running and stopping the event loop.
@@ -510,7 +510,7 @@ class AbstractEventLoop:
         raise NotImplementedError
 
 
-class AbstractEventLoopPolicy:
+class AbstractEventLoopPolicy(object):
     """Abstract policy for accessing the event loop."""
 
     def get_event_loop(self):

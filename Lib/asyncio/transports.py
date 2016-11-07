@@ -9,7 +9,7 @@ __all__ = ['BaseTransport', 'ReadTransport', 'WriteTransport',
            ]
 
 
-class BaseTransport:
+class BaseTransport(object):
     """Base class for transports."""
 
     def __init__(self, extra=None):

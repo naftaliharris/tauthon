@@ -12,7 +12,7 @@ from . import futures
 from .coroutines import coroutine
 
 
-class _ContextManager:
+class _ContextManager(object):
     """Context manager.
 
     This enables the following idiom for acquiring and releasing a
@@ -42,7 +42,7 @@ class _ContextManager:
             self._lock = None  # Crudely prevent reuse.
 
 
-class _ContextManagerMixin:
+class _ContextManagerMixin(object):
     def __enter__(self):
         raise RuntimeError(
             '"yield from" should be used as context manager expression')
@@ -203,7 +203,7 @@ class Lock(_ContextManagerMixin):
             raise RuntimeError('Lock is not acquired.')
 
 
-class Event:
+class Event(object):
     """Asynchronous equivalent to threading.Event.
 
     Class implementing event objects. An event manages a flag that can be set
