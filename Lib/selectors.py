@@ -324,7 +324,7 @@ class SelectSelector(_BaseSelectorImpl):
         ready = []
         try:
             r, w, _ = self._select(self._readers, self._writers, [], timeout)
-        except (OSError, select.error) as e:
+        except (EnvironmentError, select.error) as e:
             if e.args[0] == errno.EINTR:
                 return ready
         r = set(r)
@@ -378,7 +378,7 @@ if hasattr(select, 'poll'):
             ready = []
             try:
                 fd_event_list = self._poll.poll(timeout)
-            except (OSError, select.error) as e:
+            except (EnvironmentError, select.error) as e:
                 if e.args[0] == errno.EINTR:
                     return ready
             for fd, event in fd_event_list:
@@ -420,7 +420,7 @@ if hasattr(select, 'epoll'):
             key = super(EpollSelector, self).unregister(fileobj)
             try:
                 self._epoll.unregister(key.fd)
-            except OSError:
+            except EnvironmentError:
                 # This can happen if the FD was closed since it
                 # was registered.
                 pass
@@ -444,7 +444,7 @@ if hasattr(select, 'epoll'):
             ready = []
             try:
                 fd_event_list = self._epoll.poll(timeout, max_ev)
-            except (OSError, select.error) as e:
+            except (EnvironmentError, select.error) as e:
                 if e.args[0] == errno.EINTR:
                     return ready
             for fd, event in fd_event_list:
@@ -503,7 +503,7 @@ if hasattr(select, 'devpoll'):
             ready = []
             try:
                 fd_event_list = self._devpoll.poll(timeout)
-            except (OSError, select.error) as e:
+            except (EnvironmentError, select.error) as e:
                 if e.args[0] == errno.EINTR:
                     return ready
             for fd, event in fd_event_list:
@@ -554,7 +554,7 @@ if hasattr(select, 'kqueue'):
                                     select.KQ_EV_DELETE)
                 try:
                     self._kqueue.control([kev], 0, 0)
-                except OSError:
+                except EnvironmentError:
                     # This can happen if the FD was closed since it
                     # was registered.
                     pass
@@ -563,7 +563,7 @@ if hasattr(select, 'kqueue'):
                                     select.KQ_EV_DELETE)
                 try:
                     self._kqueue.control([kev], 0, 0)
-                except OSError:
+                except EnvironmentError:
                     # See comment above.
                     pass
             return key
@@ -574,7 +574,7 @@ if hasattr(select, 'kqueue'):
             ready = []
             try:
                 kev_list = self._kqueue.control(None, max_ev, timeout)
-            except (OSError, select.error) as e:
+            except (EnvironmentError, select.error) as e:
                 if e.args[0] == errno.EINTR:
                     return ready
             for kev in kev_list:
