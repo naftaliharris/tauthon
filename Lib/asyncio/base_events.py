@@ -233,7 +233,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Identifier of the thread running the event loop, or None if the
         # event loop is not running
         self._thread_id = None
-        self._clock_resolution = time.get_clock_info('monotonic').resolution
         self._exception_handler = None
         self.set_debug((not sys.flags.ignore_environment
                         and bool(os.environ.get('PYTHONASYNCIODEBUG'))))
@@ -443,7 +442,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         epoch, precision, accuracy and drift are unspecified and may
         differ per event loop.
         """
-        return time.monotonic()
+        return time.time()  # TODO/RSI: Replace with time.monotonic()
 
     def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -1279,10 +1278,10 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.
-        end_time = self.time() + self._clock_resolution
+        end_time = self.time()
         while self._scheduled:
             handle = self._scheduled[0]
-            if handle._when >= end_time:
+            if handle._when > end_time:
                 break
             handle = heapq.heappop(self._scheduled)
             handle._scheduled = False
