@@ -1,7 +1,7 @@
 """Tests for lock.py"""
 
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 import re
 
 import asyncio

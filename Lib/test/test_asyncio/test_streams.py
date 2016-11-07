@@ -7,7 +7,7 @@ import socket
 import sys
 import threading
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 try:
     import ssl
 except ImportError:

@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Windows only')

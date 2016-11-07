@@ -8,7 +8,7 @@ try:
     import test.test_support as support
 except ImportError:
     from asyncio import test_support as support
-from unittest import mock
+import test._mock_backport as mock
 
 import asyncio
 from asyncio import test_utils

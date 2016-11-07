@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 
 import asyncio
 from asyncio import base_events

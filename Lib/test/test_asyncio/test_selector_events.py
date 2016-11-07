@@ -3,7 +3,7 @@
 import errno
 import socket
 import unittest
-from unittest import mock
+import test._mock_backport as mock
 try:
     import ssl
 except ImportError:
