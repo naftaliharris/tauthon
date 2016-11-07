@@ -376,10 +376,9 @@ class SubprocessMixin:
                                                *PROGRAM_BLOCKED)
             transport, protocol = yield from create
 
-            kill_called = False
+            kill_called = [False]
             def kill():
-                nonlocal kill_called
-                kill_called = True
+                kill_called[0] = True
                 orig_kill()
 
             proc = transport.get_extra_info('subprocess')
@@ -388,7 +387,7 @@ class SubprocessMixin:
             returncode = transport.get_returncode()
             transport.close()
             yield from transport._wait()
-            return (returncode, kill_called)
+            return (returncode, kill_called[0])
 
         # Ignore "Close running child process: kill ..." log
         with test_utils.disable_logger():

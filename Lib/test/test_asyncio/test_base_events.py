@@ -454,13 +454,12 @@ class BaseEventLoopTests(test_utils.TestCase):
         self.assertEqual(logging.DEBUG, m_logger.log.call_args[0][0])
 
     def test__run_once_schedule_handle(self):
-        handle = None
-        processed = False
+        handle = [None]
+        processed = [False]
 
         def cb(loop):
-            nonlocal processed, handle
-            processed = True
-            handle = loop.call_soon(lambda: True)
+            processed[0] = True
+            handle[0] = loop.call_soon(lambda: True)
 
         h = asyncio.TimerHandle(time.monotonic() - 1, cb, (self.loop,),
                                 self.loop)
@@ -469,8 +468,8 @@ class BaseEventLoopTests(test_utils.TestCase):
         self.loop._scheduled.append(h)
         self.loop._run_once()
 
-        self.assertTrue(processed)
-        self.assertEqual([handle], list(self.loop._ready))
+        self.assertTrue(processed[0])
+        self.assertEqual([handle[0]], list(self.loop._ready))
 
     def test__run_once_cancelled_event_cleanup(self):
         self.loop._process_events = mock.Mock()
@@ -725,7 +724,7 @@ class BaseEventLoopTests(test_utils.TestCase):
                 exc_info=(AttributeError, MOCK_ANY, MOCK_ANY))
 
     def test_default_exc_handler_broken(self):
-        _context = None
+        _context = [None]
 
         class Loop(base_events.BaseEventLoop):
 
@@ -733,8 +732,7 @@ class BaseEventLoopTests(test_utils.TestCase):
             _process_events = mock.Mock()
 
             def default_exception_handler(self, context):
-                nonlocal _context
-                _context = context
+                _context[0] = context
                 # Simulates custom buggy "default_exception_handler"
                 raise ValueError('spam')
 
@@ -757,7 +755,7 @@ class BaseEventLoopTests(test_utils.TestCase):
         def custom_handler(loop, context):
             raise ValueError('ham')
 
-        _context = None
+        _context = [None]
         loop.set_exception_handler(custom_handler)
         with mock.patch('asyncio.base_events.logger') as log:
             run_loop()
@@ -768,8 +766,8 @@ class BaseEventLoopTests(test_utils.TestCase):
 
             # Check that original context was passed to default
             # exception handler.
-            self.assertIn('context', _context)
-            self.assertIs(type(_context['context']['exception']),
+            self.assertIn('context', _context[0])
+            self.assertIs(type(_context[0]['context']['exception']),
                           ZeroDivisionError)
 
     def test_set_task_factory_invalid(self):
@@ -903,21 +901,19 @@ class BaseEventLoopTests(test_utils.TestCase):
         # Python issue #25593: A stopped event loop may cause event callbacks
         # to run more than once.
         event_sentinel = object()
-        callcount = 0
-        doer = None
+        callcount = [0]
+        doer = [None]
 
         def proc_events(event_list):
-            nonlocal doer
             if event_sentinel in event_list:
-                doer = self.loop.call_soon(do_event)
+                doer[0] = self.loop.call_soon(do_event)
 
         def do_event():
-            nonlocal callcount
-            callcount += 1
+            callcount[0] += 1
             self.loop.call_soon(clear_selector)
 
         def clear_selector():
-            doer.cancel()
+            doer[0].cancel()
             self.loop._selector.select.return_value = ()
 
         self.loop._process_events = proc_events
@@ -927,23 +923,22 @@ class BaseEventLoopTests(test_utils.TestCase):
             with self.subTest('Loop %d/2' % i):
                 self.loop.call_soon(self.loop.stop)
                 self.loop.run_forever()
-                self.assertEqual(callcount, 1)
+                self.assertEqual(callcount[0], 1)
 
     def test_run_once(self):
         # Simple test for test_utils.run_once().  It may seem strange
         # to have a test for this (the function isn't even used!) but
         # it's a de-factor standard API for library tests.  This tests
         # the idiom: loop.call_soon(loop.stop); loop.run_forever().
-        count = 0
+        count = [0]
 
         def callback():
-            nonlocal count
-            count += 1
+            count[0] += 1
 
         self.loop._process_events = mock.Mock()
         self.loop.call_soon(callback)
         test_utils.run_once(self.loop)
-        self.assertEqual(count, 1)
+        self.assertEqual(count[0], 1)
 
     def test_run_forever_pre_stopped(self):
         # Test that the old idiom for pre-stopping the loop works.
@@ -1032,13 +1027,12 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         def getaddrinfo_task(*args, **kwds):
             return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
 
-        idx = -1
+        idx = [-1]
         errors = ['err1', 'err2']
 
         def _socket(*args, **kw):
-            nonlocal idx, errors
-            idx += 1
-            raise OSError(errors[idx])
+            idx[0] += 1
+            raise OSError(errors[idx[0]])
 
         m_socket.socket = _socket
 
@@ -1327,12 +1321,11 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     def test_create_server_empty_host(self):
         # if host is empty string use None instead
-        host = object()
+        host = [object()]
 
         @asyncio.coroutine
         def getaddrinfo(*args, **kw):
-            nonlocal host
-            host = args[0]
+            host[0] = args[0]
             yield from []
 
         def getaddrinfo_task(*args, **kwds):
@@ -1341,7 +1334,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.loop.getaddrinfo = getaddrinfo_task
         fut = self.loop.create_server(MyProto, '', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, fut)
-        self.assertIsNone(host)
+        self.assertIsNone(host[0])
 
     def test_create_server_host_port_sock(self):
         fut = self.loop.create_server(

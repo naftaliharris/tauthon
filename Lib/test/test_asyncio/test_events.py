@@ -476,11 +476,10 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
     def test_add_signal_handler(self):
-        caught = 0
+        caught = [0]
 
         def my_handler():
-            nonlocal caught
-            caught += 1
+            caught[0] += 1
 
         # Check error behavior first.
         self.assertRaises(
@@ -509,7 +508,7 @@ class EventLoopTestsMixin:
         self.loop.add_signal_handler(signal.SIGINT, my_handler)
 
         os.kill(os.getpid(), signal.SIGINT)
-        test_utils.run_until(self.loop, lambda: caught)
+        test_utils.run_until(self.loop, lambda: caught[0])
 
         # Removing it should restore the default handler.
         self.assertTrue(self.loop.remove_signal_handler(signal.SIGINT))
@@ -521,27 +520,25 @@ class EventLoopTestsMixin:
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_while_selecting(self):
         # Test with a signal actually arriving during a select() call.
-        caught = 0
+        caught = [0]
 
         def my_handler():
-            nonlocal caught
-            caught += 1
+            caught[0] += 1
             self.loop.stop()
 
         self.loop.add_signal_handler(signal.SIGALRM, my_handler)
 
         signal.setitimer(signal.ITIMER_REAL, 0.01, 0)  # Send SIGALRM once.
         self.loop.run_forever()
-        self.assertEqual(caught, 1)
+        self.assertEqual(caught[0], 1)
 
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_args(self):
         some_args = (42,)
-        caught = 0
+        caught = [0]
 
         def my_handler(*args):
-            nonlocal caught
-            caught += 1
+            caught[0] += 1
             self.assertEqual(args, some_args)
 
         self.loop.add_signal_handler(signal.SIGALRM, my_handler, *some_args)
@@ -549,7 +546,7 @@ class EventLoopTestsMixin:
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
         self.loop.call_later(0.5, self.loop.stop)
         self.loop.run_forever()
-        self.assertEqual(caught, 1)
+        self.assertEqual(caught[0], 1)
 
     def _basetest_create_connection(self, connection_fut, check_sockname=True):
         tr, pr = self.loop.run_until_complete(connection_fut)

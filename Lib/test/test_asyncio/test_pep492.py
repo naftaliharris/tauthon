@@ -190,7 +190,7 @@ class CoroutineTests(BaseTest):
         self.assertEqual(data, 'spam')
 
     def test_task_print_stack(self):
-        T = None
+        T = [None]
 
         async def foo():
             f = T.get_stack(limit=1)
@@ -200,9 +200,8 @@ class CoroutineTests(BaseTest):
                 f = None
 
         async def runner():
-            nonlocal T
-            T = asyncio.ensure_future(foo(), loop=self.loop)
-            await T
+            T[0] = asyncio.ensure_future(foo(), loop=self.loop)
+            await T[0]
 
         self.loop.run_until_complete(runner())
 

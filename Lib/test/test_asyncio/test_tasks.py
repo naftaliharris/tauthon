@@ -198,7 +198,7 @@ class TaskTests(test_utils.TestCase):
             self.assertIs(f, asyncio.async(f))
 
     def test_get_stack(self):
-        T = None
+        T = [None]
 
         @asyncio.coroutine
         def foo():
@@ -207,7 +207,7 @@ class TaskTests(test_utils.TestCase):
         @asyncio.coroutine
         def bar():
             # test get_stack()
-            f = T.get_stack(limit=1)
+            f = T[0].get_stack(limit=1)
             try:
                 self.assertEqual(f[0].f_code.co_name, 'foo')
             finally:
@@ -215,16 +215,15 @@ class TaskTests(test_utils.TestCase):
 
             # test print_stack()
             file = io.StringIO()
-            T.print_stack(limit=1, file=file)
+            T[0].print_stack(limit=1, file=file)
             file.seek(0)
             tb = file.read()
             self.assertRegex(tb, r'foo\(\) running')
 
         @asyncio.coroutine
         def runner():
-            nonlocal T
-            T = asyncio.ensure_future(foo(), loop=self.loop)
-            yield from T
+            T[0] = asyncio.ensure_future(foo(), loop=self.loop)
+            yield from T[0]
 
         self.loop.run_until_complete(runner())
 
@@ -574,17 +573,16 @@ class TaskTests(test_utils.TestCase):
 
         loop = self.new_test_loop(gen)
 
-        x = 0
+        x = [0]
         waiters = []
 
         @asyncio.coroutine
         def task():
-            nonlocal x
-            while x < 10:
+            while x[0] < 10:
                 waiters.append(asyncio.sleep(0.1, loop=loop))
                 yield from waiters[-1]
-                x += 1
-                if x == 2:
+                x[0] += 1
+                if x[0] == 2:
                     loop.stop()
 
         t = asyncio.Task(task(), loop=loop)
@@ -593,7 +591,7 @@ class TaskTests(test_utils.TestCase):
         self.assertEqual(str(cm.exception),
                          'Event loop stopped before Future completed.')
         self.assertFalse(t.done())
-        self.assertEqual(x, 2)
+        self.assertEqual(x[0], 2)
         self.assertAlmostEqual(0.3, loop.time())
 
         # close generators
@@ -613,16 +611,15 @@ class TaskTests(test_utils.TestCase):
 
         loop = self.new_test_loop(gen)
 
-        foo_running = None
+        foo_running = [None]
 
         @asyncio.coroutine
         def foo():
-            nonlocal foo_running
-            foo_running = True
+            foo_running[0] = True
             try:
                 yield from asyncio.sleep(0.2, loop=loop)
             finally:
-                foo_running = False
+                foo_running[0] = False
             return 'done'
 
         fut = asyncio.Task(foo(), loop=loop)
@@ -633,7 +630,7 @@ class TaskTests(test_utils.TestCase):
         # it should have been cancelled due to the timeout
         self.assertTrue(fut.cancelled())
         self.assertAlmostEqual(0.1, loop.time())
-        self.assertEqual(foo_running, False)
+        self.assertEqual(foo_running[0], False)
 
     def test_wait_for_blocking(self):
         loop = self.new_test_loop()
@@ -998,15 +995,14 @@ class TaskTests(test_utils.TestCase):
         # disable "slow callback" warning
         loop.slow_callback_duration = 1.0
         completed = set()
-        time_shifted = False
+        time_shifted = [False]
 
         @asyncio.coroutine
         def sleeper(dt, x):
-            nonlocal time_shifted
             yield from asyncio.sleep(dt, loop=loop)
             completed.add(x)
-            if not time_shifted and 'a' in completed and 'b' in completed:
-                time_shifted = True
+            if not time_shifted[0] and 'a' in completed and 'b' in completed:
+                time_shifted[0] = True
                 loop.advance_time(0.14)
             return x
 
@@ -1186,22 +1182,21 @@ class TaskTests(test_utils.TestCase):
         t = asyncio.Task(asyncio.sleep(10.0, 'yeah', loop=loop),
                          loop=loop)
 
-        handle = None
+        handle = [None]
         orig_call_later = loop.call_later
 
         def call_later(delay, callback, *args):
-            nonlocal handle
-            handle = orig_call_later(delay, callback, *args)
-            return handle
+            handle[0] = orig_call_later(delay, callback, *args)
+            return handle[0]
 
         loop.call_later = call_later
         test_utils.run_briefly(loop)
 
-        self.assertFalse(handle._cancelled)
+        self.assertFalse(handle[0]._cancelled)
 
         t.cancel()
         test_utils.run_briefly(loop)
-        self.assertTrue(handle._cancelled)
+        self.assertTrue(handle[0]._cancelled)
 
     def test_task_cancel_sleeping_task(self):
 
@@ -1286,12 +1281,11 @@ class TaskTests(test_utils.TestCase):
                 super().add_done_callback(fn)
 
         fut = Fut(loop=self.loop)
-        result = None
+        result = [None]
 
         @asyncio.coroutine
         def wait_for_future():
-            nonlocal result
-            result = yield from fut
+            result[0] = yield from fut
 
         t = asyncio.Task(wait_for_future(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1300,7 +1294,7 @@ class TaskTests(test_utils.TestCase):
         res = object()
         fut.set_result(res)
         test_utils.run_briefly(self.loop)
-        self.assertIs(res, result)
+        self.assertIs(res, result[0])
         self.assertTrue(t.done())
         self.assertIsNone(t.result())
 
@@ -1468,54 +1462,50 @@ class TaskTests(test_utils.TestCase):
 
     def test_yield_future_passes_cancel(self):
         # Cancelling outer() cancels inner() cancels waiter.
-        proof = 0
+        proof = [0]
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
             try:
                 yield from waiter
             except asyncio.CancelledError:
-                proof += 1
+                proof[0] += 1
                 raise
             else:
                 self.fail('got past sleep() in inner()')
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
             try:
                 yield from inner()
             except asyncio.CancelledError:
-                proof += 100  # Expect this path.
+                proof[0] += 100  # Expect this path.
             else:
-                proof += 10
+                proof[0] += 10
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         f.cancel()
         self.loop.run_until_complete(f)
-        self.assertEqual(proof, 101)
+        self.assertEqual(proof[0], 101)
         self.assertTrue(waiter.cancelled())
 
     def test_yield_wait_does_not_shield_cancel(self):
         # Cancelling outer() makes wait() return early, leaves inner()
         # running.
-        proof = 0
+        proof = [0]
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
             yield from waiter
-            proof += 1
+            proof[0] += 1
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
             d, p = yield from asyncio.wait([inner()], loop=self.loop)
-            proof += 100
+            proof[0] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1524,7 +1514,7 @@ class TaskTests(test_utils.TestCase):
             asyncio.CancelledError, self.loop.run_until_complete, f)
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
-        self.assertEqual(proof, 1)
+        self.assertEqual(proof[0], 1)
 
     def test_shield_result(self):
         inner = asyncio.Future(loop=self.loop)
@@ -1558,20 +1548,18 @@ class TaskTests(test_utils.TestCase):
 
     def test_shield_effect(self):
         # Cancelling outer() does not affect inner().
-        proof = 0
+        proof = [0]
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
             yield from waiter
-            proof += 1
+            proof[0] += 1
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
             yield from asyncio.shield(inner(), loop=self.loop)
-            proof += 100
+            proof[0] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1580,7 +1568,7 @@ class TaskTests(test_utils.TestCase):
             self.loop.run_until_complete(f)
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
-        self.assertEqual(proof, 1)
+        self.assertEqual(proof[0], 1)
 
     def test_shield_gather(self):
         child1 = asyncio.Future(loop=self.loop)
@@ -2084,37 +2072,35 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
 
     def test_cancellation_broadcast(self):
         # Cancelling outer() cancels all children.
-        proof = 0
+        proof = [0]
         waiter = asyncio.Future(loop=self.one_loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
             yield from waiter
-            proof += 1
+            proof[0] += 1
 
         child1 = asyncio.ensure_future(inner(), loop=self.one_loop)
         child2 = asyncio.ensure_future(inner(), loop=self.one_loop)
-        gatherer = None
+        gatherer = [None]
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof, gatherer
-            gatherer = asyncio.gather(child1, child2, loop=self.one_loop)
-            yield from gatherer
-            proof += 100
+            gatherer[0] = asyncio.gather(child1, child2, loop=self.one_loop)
+            yield from gatherer[0]
+            proof[0] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.one_loop)
         test_utils.run_briefly(self.one_loop)
         self.assertTrue(f.cancel())
         with self.assertRaises(asyncio.CancelledError):
             self.one_loop.run_until_complete(f)
-        self.assertFalse(gatherer.cancel())
+        self.assertFalse(gatherer[0].cancel())
         self.assertTrue(waiter.cancelled())
         self.assertTrue(child1.cancelled())
         self.assertTrue(child2.cancelled())
         test_utils.run_briefly(self.one_loop)
-        self.assertEqual(proof, 0)
+        self.assertEqual(proof[0], 0)
 
     def test_exception_marking(self):
         # Test for the first line marked "Mark exception retrieved."
@@ -2242,22 +2228,21 @@ class SleepTests(test_utils.TestCase):
         self.loop = None
 
     def test_sleep_zero(self):
-        result = 0
+        result = [0]
 
         def inc_result(num):
-            nonlocal result
-            result += num
+            result[0] += num
 
         @asyncio.coroutine
         def coro():
             self.loop.call_soon(inc_result, 1)
-            self.assertEqual(result, 0)
+            self.assertEqual(result[0], 0)
             num = yield from asyncio.sleep(0, loop=self.loop, result=10)
-            self.assertEqual(result, 1) # inc'ed by call_soon
+            self.assertEqual(result[0], 1) # inc'ed by call_soon
             inc_result(num) # num should be 11
 
         self.loop.run_until_complete(coro())
-        self.assertEqual(result, 11)
+        self.assertEqual(result[0], 11)
 
 
 if __name__ == '__main__':
