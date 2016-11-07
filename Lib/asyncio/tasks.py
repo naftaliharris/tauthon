@@ -70,7 +70,7 @@ class Task(futures.Future):
 
     def __init__(self, coro, *, loop=None):
         assert coroutines.iscoroutine(coro), repr(coro)
-        super().__init__(loop=loop)
+        super(Task, self).__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         self._coro = coro
@@ -95,7 +95,7 @@ class Task(futures.Future):
             futures.Future.__del__(self)
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(Task, self)._repr_info()
 
         if self._must_cancel:
             # replace status
@@ -244,7 +244,7 @@ class Task(futures.Future):
         except StopIteration as exc:
             self.set_result(exc.value)
         except futures.CancelledError as exc:
-            super().cancel()  # I.e., Future.cancel(self).
+            super(Task, self).cancel()  # I.e., Future.cancel(self).
         except Exception as exc:
             self.set_exception(exc)
         except BaseException as exc:
@@ -574,7 +574,7 @@ class _GatheringFuture(futures.Future):
     """
 
     def __init__(self, children, *, loop=None):
-        super().__init__(loop=loop)
+        super(_GatheringFuture, self).__init__(loop=loop)
         self._children = children
 
     def cancel(self):

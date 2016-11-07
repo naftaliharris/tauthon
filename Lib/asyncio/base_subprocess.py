@@ -16,7 +16,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
     def __init__(self, loop, protocol, args, shell,
                  stdin, stdout, stderr, bufsize,
                  waiter=None, extra=None, **kwargs):
-        super().__init__(extra)
+        super(BaseSubprocessTransport, self).__init__(extra)
         self._closed = False
         self._protocol = protocol
         self._loop = loop

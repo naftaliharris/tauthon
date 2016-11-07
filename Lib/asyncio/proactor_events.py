@@ -26,7 +26,7 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
 
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
-        super().__init__(extra, loop)
+        super(_ProactorBasePipeTransport, self).__init__(extra, loop)
         self._set_extra(sock)
         self._sock = sock
         self._protocol = protocol
@@ -149,7 +149,7 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
 
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
-        super().__init__(loop, sock, protocol, waiter, extra, server)
+        super(_ProactorReadPipeTransport, self).__init__(loop, sock, protocol, waiter, extra, server)
         self._paused = False
         self._loop.call_soon(self._loop_reading)
 
@@ -307,7 +307,7 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
 
 class _ProactorWritePipeTransport(_ProactorBaseWritePipeTransport):
     def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
+        super(_ProactorWritePipeTransport, self).__init__(*args, **kw)
         self._read_fut = self._loop._proactor.recv(self._sock, 16)
         self._read_fut.add_done_callback(self._pipe_closed)
 
@@ -374,7 +374,7 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
 class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def __init__(self, proactor):
-        super().__init__()
+        super(BaseProactorEventLoop, self).__init__()
         logger.debug('Using proactor: %s', proactor.__class__.__name__)
         self._proactor = proactor
         self._selector = proactor   # convenient alias
@@ -433,7 +433,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._selector = None
 
         # Close the event loop
-        super().close()
+        super(BaseProactorEventLoop, self).close()
 
     def sock_recv(self, sock, n):
         return self._proactor.recv(sock, n)

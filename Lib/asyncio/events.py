@@ -146,14 +146,14 @@ class TimerHandle(Handle):
 
     def __init__(self, when, callback, args, loop):
         assert when is not None
-        super().__init__(callback, args, loop)
+        super(TimerHandle, self).__init__(callback, args, loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         self._when = when
         self._scheduled = False
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(TimerHandle, self)._repr_info()
         pos = 2 if self._cancelled else 1
         info.insert(pos, 'when=%s' % self._when)
         return info
@@ -192,7 +192,7 @@ class TimerHandle(Handle):
     def cancel(self):
         if not self._cancelled:
             self._loop._timer_handle_cancelled(self)
-        super().cancel()
+        super(TimerHandle, self).cancel()
 
 
 class AbstractServer(object):

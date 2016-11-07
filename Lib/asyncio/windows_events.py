@@ -45,13 +45,13 @@ class _OverlappedFuture(futures.Future):
     """
 
     def __init__(self, ov, *, loop=None):
-        super().__init__(loop=loop)
+        super(_OverlappedFuture, self).__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         self._ov = ov
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(_OverlappedFuture, self)._repr_info()
         if self._ov is not None:
             state = 'pending' if self._ov.pending else 'completed'
             info.insert(1, 'overlapped=<%s, %#x>' % (state, self._ov.address))
@@ -75,14 +75,14 @@ class _OverlappedFuture(futures.Future):
 
     def cancel(self):
         self._cancel_overlapped()
-        return super().cancel()
+        return super(_OverlappedFuture, self).cancel()
 
     def set_exception(self, exception):
-        super().set_exception(exception)
+        super(_OverlappedFuture, self).set_exception(exception)
         self._cancel_overlapped()
 
     def set_result(self, result):
-        super().set_result(result)
+        super(_OverlappedFuture, self).set_result(result)
         self._ov = None
 
 
@@ -90,7 +90,7 @@ class _BaseWaitHandleFuture(futures.Future):
     """Subclass of Future which represents a wait handle."""
 
     def __init__(self, ov, handle, wait_handle, *, loop=None):
-        super().__init__(loop=loop)
+        super(_BaseWaitHandleFuture, self).__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         # Keep a reference to the Overlapped object to keep it alive until the
@@ -109,7 +109,7 @@ class _BaseWaitHandleFuture(futures.Future):
                 _winapi.WAIT_OBJECT_0)
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(_BaseWaitHandleFuture, self)._repr_info()
         info.append('handle=%#x' % self._handle)
         if self._handle is not None:
             state = 'signaled' if self._poll() else 'waiting'
@@ -149,15 +149,15 @@ class _BaseWaitHandleFuture(futures.Future):
 
     def cancel(self):
         self._unregister_wait()
-        return super().cancel()
+        return super(_BaseWaitHandleFuture, self).cancel()
 
     def set_exception(self, exception):
         self._unregister_wait()
-        super().set_exception(exception)
+        super(_BaseWaitHandleFuture, self).set_exception(exception)
 
     def set_result(self, result):
         self._unregister_wait()
-        super().set_result(result)
+        super(_BaseWaitHandleFuture, self).set_result(result)
 
 
 class _WaitCancelFuture(_BaseWaitHandleFuture):
@@ -166,7 +166,7 @@ class _WaitCancelFuture(_BaseWaitHandleFuture):
     """
 
     def __init__(self, ov, event, wait_handle, *, loop=None):
-        super().__init__(ov, event, wait_handle, loop=loop)
+        super(_WaitCancelFuture, self).__init__(ov, event, wait_handle, loop=loop)
 
         self._done_callback = None
 
@@ -181,7 +181,7 @@ class _WaitCancelFuture(_BaseWaitHandleFuture):
 
 class _WaitHandleFuture(_BaseWaitHandleFuture):
     def __init__(self, ov, handle, wait_handle, proactor, *, loop=None):
-        super().__init__(ov, handle, wait_handle, loop=loop)
+        super(_WaitHandleFuture, self).__init__(ov, handle, wait_handle, loop=loop)
         self._proactor = proactor
         self._unregister_proactor = True
         self._event = _overlapped.CreateEvent(None, True, False, None)
@@ -203,7 +203,7 @@ class _WaitHandleFuture(_BaseWaitHandleFuture):
         self._proactor._unregister(self._ov)
         self._proactor = None
 
-        super()._unregister_wait_cb(fut)
+        super(_WaitHandleFuture, self)._unregister_wait_cb(fut)
 
     def _unregister_wait(self):
         if not self._registered:
@@ -303,7 +303,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
     def __init__(self, proactor=None):
         if proactor is None:
             proactor = IocpProactor()
-        super().__init__(proactor)
+        super(ProactorEventLoop, self).__init__(proactor)
 
     def _socketpair(self):
         return windows_utils.socketpair()

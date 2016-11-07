@@ -23,7 +23,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     """Like StreamReaderProtocol, but for a subprocess."""
 
     def __init__(self, limit, loop):
-        super().__init__(loop=loop)
+        super(SubprocessStreamProtocol, self).__init__(loop=loop)
         self._limit = limit
         self.stdin = self.stdout = self.stderr = None
         self._transport = None

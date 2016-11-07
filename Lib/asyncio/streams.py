@@ -32,7 +32,7 @@ class IncompleteReadError(EOFError):
     - expected: total number of expected bytes (or None if unknown)
     """
     def __init__(self, partial, expected):
-        super().__init__("%d bytes read on a total of %r expected bytes"
+        super(IncompleteReadError, self).__init__("%d bytes read on a total of %r expected bytes"
                          % (len(partial), expected))
         self.partial = partial
         self.expected = expected
@@ -45,7 +45,7 @@ class LimitOverrunError(Exception):
     - consumed: total number of to be consumed bytes.
     """
     def __init__(self, message, consumed):
-        super().__init__(message)
+        super(LimitOverrunError, self).__init__(message)
         self.consumed = consumed
 
 
@@ -223,7 +223,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """
 
     def __init__(self, stream_reader, client_connected_cb=None, loop=None):
-        super().__init__(loop=loop)
+        super(StreamReaderProtocol, self).__init__(loop=loop)
         self._stream_reader = stream_reader
         self._stream_writer = None
         self._client_connected_cb = client_connected_cb
@@ -247,7 +247,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
                 self._stream_reader.feed_eof()
             else:
                 self._stream_reader.set_exception(exc)
-        super().connection_lost(exc)
+        super(StreamReaderProtocol, self).connection_lost(exc)
         self._stream_reader = None
         self._stream_writer = None
 

@@ -48,7 +48,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     """
 
     def __init__(self, selector=None):
-        super().__init__()
+        super(BaseSelectorEventLoop, self).__init__()
 
         if selector is None:
             selector = selectors.DefaultSelector()
@@ -97,7 +97,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         if self.is_closed():
             return
         self._close_self_pipe()
-        super().close()
+        super(BaseSelectorEventLoop, self).close()
         if self._selector is not None:
             self._selector.close()
             self._selector = None
@@ -511,7 +511,7 @@ class _SelectorTransport(transports._FlowControlMixin,
     _sock = None
 
     def __init__(self, loop, sock, protocol, extra=None, server=None):
-        super().__init__(extra, loop)
+        super(_SelectorTransport, self).__init__(extra, loop)
         self._extra['socket'] = sock
         self._extra['sockname'] = sock.getsockname()
         if 'peername' not in self._extra:
@@ -631,7 +631,7 @@ class _SelectorSocketTransport(_SelectorTransport):
 
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
-        super().__init__(loop, sock, protocol, extra, server)
+        super(_SelectorSocketTransport, self).__init__(loop, sock, protocol, extra, server)
         self._eof = False
         self._paused = False
 
@@ -779,7 +779,7 @@ class _SelectorSslTransport(_SelectorTransport):
             wrap_kwargs['server_hostname'] = server_hostname
         sslsock = sslcontext.wrap_socket(rawsock, **wrap_kwargs)
 
-        super().__init__(loop, sslsock, protocol, extra, server)
+        super(_SelectorSslTransport, self).__init__(loop, sslsock, protocol, extra, server)
         # the protocol connection is only made after the SSL handshake
         self._protocol_connected = False
 
@@ -996,7 +996,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
 
     def __init__(self, loop, sock, protocol, address=None,
                  waiter=None, extra=None):
-        super().__init__(loop, sock, protocol, extra)
+        super(_SelectorDatagramTransport, self).__init__(loop, sock, protocol, extra)
         self._address = address
         self._loop.call_soon(self._protocol.connection_made, self)
         # only start reading when connection_made() has been called

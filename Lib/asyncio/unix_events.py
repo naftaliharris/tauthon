@@ -48,14 +48,14 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     """
 
     def __init__(self, selector=None):
-        super().__init__(selector)
+        super(_UnixSelectorEventLoop, self).__init__(selector)
         self._signal_handlers = {}
 
     def _socketpair(self):
         return socket.socketpair()
 
     def close(self):
-        super().close()
+        super(_UnixSelectorEventLoop, self).close()
         for sig in list(self._signal_handlers):
             self.remove_signal_handler(sig)
 
@@ -302,7 +302,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     max_size = 256 * 1024  # max bytes we read in one event loop iteration
 
     def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
-        super().__init__(extra)
+        super(_UnixReadPipeTransport, self).__init__(extra)
         self._extra['pipe'] = pipe
         self._loop = loop
         self._pipe = pipe
@@ -419,7 +419,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
                               transports.WriteTransport):
 
     def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
-        super().__init__(extra, loop)
+        super(_UnixWritePipeTransport, self).__init__(extra, loop)
         self._extra['pipe'] = pipe
         self._pipe = pipe
         self._fileno = pipe.fileno()
@@ -790,12 +790,12 @@ class SafeChildWatcher(BaseChildWatcher):
     """
 
     def __init__(self):
-        super().__init__()
+        super(SafeChildWatcher, self).__init__()
         self._callbacks = {}
 
     def close(self):
         self._callbacks.clear()
-        super().close()
+        super(SafeChildWatcher, self).close()
 
     def __enter__(self):
         return self
@@ -867,7 +867,7 @@ class FastChildWatcher(BaseChildWatcher):
     (O(1) each time a child terminates).
     """
     def __init__(self):
-        super().__init__()
+        super(FastChildWatcher, self).__init__()
         self._callbacks = {}
         self._lock = threading.Lock()
         self._zombies = {}
@@ -876,7 +876,7 @@ class FastChildWatcher(BaseChildWatcher):
     def close(self):
         self._callbacks.clear()
         self._zombies.clear()
-        super().close()
+        super(FastChildWatcher, self).close()
 
     def __enter__(self):
         with self._lock:
@@ -966,7 +966,7 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
     _loop_factory = _UnixSelectorEventLoop
 
     def __init__(self):
-        super().__init__()
+        super(_UnixDefaultEventLoopPolicy, self).__init__()
         self._watcher = None
 
     def _init_watcher(self):
@@ -985,7 +985,7 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
         the child watcher.
         """
 
-        super().set_event_loop(loop)
+        super(_UnixDefaultEventLoopPolicy, self).set_event_loop(loop)
 
         if self._watcher is not None and \
             isinstance(threading.current_thread(), threading._MainThread):

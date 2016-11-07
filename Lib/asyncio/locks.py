@@ -151,7 +151,7 @@ class Lock(_ContextManagerMixin):
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Lock, self).__repr__()
         extra = 'locked' if self._locked else 'unlocked'
         if self._waiters:
             extra = '{},waiters:{}'.format(extra, len(self._waiters))
@@ -221,7 +221,7 @@ class Event(object):
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Event, self).__repr__()
         extra = 'set' if self._value else 'unset'
         if self._waiters:
             extra = '{},waiters:{}'.format(extra, len(self._waiters))
@@ -299,7 +299,7 @@ class Condition(_ContextManagerMixin):
         self._waiters = collections.deque()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Condition, self).__repr__()
         extra = 'locked' if self.locked() else 'unlocked'
         if self._waiters:
             extra = '{},waiters:{}'.format(extra, len(self._waiters))
@@ -412,7 +412,7 @@ class Semaphore(_ContextManagerMixin):
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Semaphore, self).__repr__()
         extra = 'locked' if self.locked() else 'unlocked,value:{}'.format(
             self._value)
         if self._waiters:
@@ -472,9 +472,9 @@ class BoundedSemaphore(Semaphore):
 
     def __init__(self, value=1, *, loop=None):
         self._bound_value = value
-        super().__init__(value, loop=loop)
+        super(BoundedSemaphore, self).__init__(value, loop=loop)
 
     def release(self):
         if self._value >= self._bound_value:
             raise ValueError('BoundedSemaphore released too many times')
-        super().release()
+        super(BoundedSemaphore, self).release()

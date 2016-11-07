@@ -239,7 +239,7 @@ class _FlowControlMixin(Transport):
     """
 
     def __init__(self, extra=None, loop=None):
-        super().__init__(extra)
+        super(_FlowControlMixin, self).__init__(extra)
         assert loop is not None
         self._loop = loop
         self._protocol_paused = False
