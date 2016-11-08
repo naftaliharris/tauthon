@@ -992,6 +992,8 @@ class TestCase(object):
         with context:
             callable_obj(*args, **kwargs)
 
+    assertRaisesRegex = assertRaisesRegexp
+
     def assertRegexpMatches(self, text, expected_regexp, msg=None):
         """Fail the test unless the text matches the regular expression."""
         if isinstance(expected_regexp, basestring):
@@ -1000,6 +1002,8 @@ class TestCase(object):
             msg = msg or "Regexp didn't match"
             msg = '%s: %r not found in %r' % (msg, expected_regexp.pattern, text)
             raise self.failureException(msg)
+
+    assertRegex = assertRegexpMatches
 
     def assertNotRegexpMatches(self, text, unexpected_regexp, msg=None):
         """Fail the test if the text matches the regular expression."""

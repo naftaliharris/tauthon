@@ -525,7 +525,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         data = b''.join(self._buffer)
         assert data, 'Data should not be empty'
 
-        self._buffer.clear()
+        del self._buffer[:]
         try:
             n = os.write(self._fileno, data)
         except (BlockingIOError, InterruptedError):
@@ -599,7 +599,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         self._closing = True
         if self._buffer:
             self._loop.remove_writer(self._fileno)
-        self._buffer.clear()
+        del self._buffer[:]
         self._loop.remove_reader(self._fileno)
         self._loop.call_soon(self._call_connection_lost, exc)
 

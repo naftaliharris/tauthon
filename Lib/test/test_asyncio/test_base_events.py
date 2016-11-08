@@ -36,7 +36,8 @@ def mock_socket_module():
     m_socket = mock.MagicMock(spec=socket)
     for name in (
         'AF_INET', 'AF_INET6', 'AF_UNSPEC', 'IPPROTO_TCP', 'IPPROTO_UDP',
-        'SOCK_STREAM', 'SOCK_DGRAM', 'SOL_SOCKET', 'SO_REUSEADDR', 'inet_pton'
+        'SOCK_STREAM', 'SOCK_DGRAM', 'SOL_SOCKET', 'SO_REUSEADDR', 'inet_pton',
+        "error"
     ):
         if hasattr(socket, name):
             setattr(m_socket, name, getattr(socket, name))
@@ -1666,7 +1667,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         # slow callback
         self.loop.call_soon(stop_loop_cb, self.loop)
         self.loop.run_forever()
-        fmt, *args = m_logger.warning.call_args[0]
+        fmt = m_logger.warning.call_args[0]
+        fmt, args = fmt[0], fmt[1:]
         self.assertRegex(fmt % tuple(args),
                          "^Executing <Handle.*stop_loop_cb.*> "
                          "took .* seconds$")
@@ -1674,7 +1676,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         # slow task
         asyncio.ensure_future(stop_loop_coro(self.loop), loop=self.loop)
         self.loop.run_forever()
-        fmt, *args = m_logger.warning.call_args[0]
+        fmt = m_logger.warning.call_args[0]
+        fmt, args = fmt[0], fmt[1:]
         self.assertRegex(fmt % tuple(args),
                          "^Executing <Task.*stop_loop_coro.*> "
                          "took .* seconds$")

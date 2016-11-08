@@ -34,7 +34,7 @@ __all__ = ['activeCount', 'active_count', 'Condition', 'currentThread',
 
 _start_new_thread = thread.start_new_thread
 _allocate_lock = thread.allocate_lock
-_get_ident = thread.get_ident
+get_ident = thread.get_ident
 ThreadError = thread.error
 del thread
 
@@ -66,7 +66,7 @@ if __debug__:
                 format = format % args
                 # Issue #4188: calling current_thread() can incur an infinite
                 # recursion if it has to create a DummyThread on the fly.
-                ident = _get_ident()
+                ident = get_ident()
                 try:
                     name = _active[ident].name
                 except KeyError:
@@ -165,7 +165,7 @@ class _RLock(_Verbose):
         return true.
 
         """
-        me = _get_ident()
+        me = get_ident()
         if self.__owner == me:
             self.__count = self.__count + 1
             if __debug__:
@@ -200,7 +200,7 @@ class _RLock(_Verbose):
         There is no return value.
 
         """
-        if self.__owner != _get_ident():
+        if self.__owner != get_ident():
             raise RuntimeError("cannot release un-acquired lock")
         self.__count = count = self.__count - 1
         if not count:
@@ -236,7 +236,7 @@ class _RLock(_Verbose):
         return (count, owner)
 
     def _is_owned(self):
-        return self.__owner == _get_ident()
+        return self.__owner == get_ident()
 
 
 def Condition(*args, **kwargs):
@@ -778,7 +778,7 @@ class Thread(_Verbose):
             raise
 
     def _set_ident(self):
-        self.__ident = _get_ident()
+        self.__ident = get_ident()
 
     def __bootstrap_inner(self):
         try:
@@ -850,7 +850,7 @@ class Thread(_Verbose):
                 try:
                     # We don't call self.__delete() because it also
                     # grabs _active_limbo_lock.
-                    del _active[_get_ident()]
+                    del _active[get_ident()]
                 except:
                     pass
 
@@ -890,7 +890,7 @@ class Thread(_Verbose):
 
         try:
             with _active_limbo_lock:
-                del _active[_get_ident()]
+                del _active[get_ident()]
                 # There must not be any python code between the previous line
                 # and after the lock is released.  Otherwise a tracing function
                 # could try to acquire the lock again in the same thread, (in
@@ -1083,7 +1083,7 @@ class _MainThread(Thread):
         self._Thread__started.set()
         self._set_ident()
         with _active_limbo_lock:
-            _active[_get_ident()] = self
+            _active[get_ident()] = self
 
     def _set_daemon(self):
         return False
@@ -1129,7 +1129,7 @@ class _DummyThread(Thread):
         self._Thread__started.set()
         self._set_ident()
         with _active_limbo_lock:
-            _active[_get_ident()] = self
+            _active[get_ident()] = self
 
     def _set_daemon(self):
         return True
@@ -1148,9 +1148,9 @@ def currentThread():
 
     """
     try:
-        return _active[_get_ident()]
+        return _active[get_ident()]
     except KeyError:
-        ##print "current_thread(): no current thread for", _get_ident()
+        ##print "current_thread(): no current thread for", get_ident()
         return _DummyThread()
 
 current_thread = currentThread
@@ -1221,7 +1221,7 @@ def _after_fork():
             if thread is current:
                 # There is only one active thread. We reset the ident to
                 # its new value since it can have changed.
-                ident = _get_ident()
+                ident = get_ident()
                 thread._Thread__ident = ident
                 new_active[ident] = thread
             else:

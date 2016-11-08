@@ -142,8 +142,10 @@ def _ipaddr_info(host, port, family, type, proto):
             socket.inet_pton(af, host)
             # The host has already been resolved.
             return af, type, proto, '', (host, port)
-        except OSError:
+        except (OSError, socket.error):
             pass
+        except Exception as e:
+            import pdb; pdb.set_trace()
 
     # "host" is not an IP address.
     return None
@@ -411,7 +413,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             logger.debug("Close %r", self)
         self._closed = True
         self._ready.clear()
-        self._scheduled.clear()
+        del self._scheduled[:]
         executor = self._default_executor
         if executor is not None:
             self._default_executor = None

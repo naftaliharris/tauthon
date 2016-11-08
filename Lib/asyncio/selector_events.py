@@ -165,11 +165,13 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 logger.debug("%r got a new connection from %r: %r",
                              server, addr, conn)
             conn.setblocking(False)
-        except (BlockingIOError, InterruptedError, ConnectionAbortedError):
-            pass  # False alarm.
-        except OSError as exc:
+        except EnvironmentError as exc:
+            if exc.args[0] in (errno.EAGAIN, errno.EALREADY, errno.EWOULDBLOCK, errno.EINPROGRESS,  # BlockingIOError
+                               errno.EINTR,  # InterruptedError
+                               errno.ECONNABORTED):  # ConnectionAbortedError
+                pass  # False alarm.
             # There's nowhere to send the error, so just log it.
-            if exc.errno in (errno.EMFILE, errno.ENFILE,
+            elif exc.errno in (errno.EMFILE, errno.ENFILE,
                              errno.ENOBUFS, errno.ENOMEM):
                 # Some platforms (e.g. Linux keep reporting the FD as
                 # ready, so we remove the read handler temporarily.
