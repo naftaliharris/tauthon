@@ -10,12 +10,13 @@ quickly and successfully.
 
 import errno
 import sys
-import select
 import __builtin__
 
 
 class _OSErrorMeta(type):
     def __subclasscheck__(cls, other):
+        import select  # Hide import since this module may not be built yet.
+
         if cls in getattr(other, '__mro__', ()):
             return True
 
