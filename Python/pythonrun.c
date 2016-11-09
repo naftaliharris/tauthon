@@ -56,6 +56,7 @@ extern grammar _PyParser_Grammar; /* From graminit.c */
 /* Forward */
 static void initmain(void);
 static void initsite(void);
+static void initmod(char *);
 static PyObject *run_mod(mod_ty, const char *, PyObject *, PyObject *,
                           PyCompilerFlags *, PyArena *);
 static PyObject *run_pyc_file(FILE *, const char *, PyObject *, PyObject *,
@@ -279,6 +280,8 @@ Py_InitializeEx(int install_sigs)
 #ifdef WITH_THREAD
     _PyGILState_Init(interp, tstate);
 #endif /* WITH_THREAD */
+
+    initmod("_oserror");  /* Fine-grained OSError's */
 
     if (!Py_NoSiteFlag)
         initsite(); /* Module site */
@@ -722,8 +725,14 @@ initmain(void)
 static void
 initsite(void)
 {
+    initmod("site");
+}
+
+static void
+initmod(char *name)
+{
     PyObject *m;
-    m = PyImport_ImportModule("site");
+    m = PyImport_ImportModule(name);
     if (m == NULL) {
         PyErr_Print();
         Py_Finalize();
