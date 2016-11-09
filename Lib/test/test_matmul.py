@@ -1,4 +1,5 @@
 import unittest
+from test.test_support import run_unittest
 
 
 class TestMatMul(unittest.TestCase):
@@ -20,5 +21,9 @@ class TestMatMul(unittest.TestCase):
             m @= 42
             self.assertEqual(m.other, 42)
 
+
+def test_main():
+    run_unittest(TestMatMul)
+
 if __name__ == "__main__":
-    unittest.main()
+    test_main()
