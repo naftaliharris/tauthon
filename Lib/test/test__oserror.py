@@ -26,6 +26,7 @@ class OSErrorTest(unittest.TestCase):
         self.assertIsSubclass(BlockingIOError, Exception)
         self.assertIsSubclass(BlockingIOError, EnvironmentError)
         self.assertIsSubclass(BlockingIOError, OSError)
+        self.assertIsSubclass(BlockingIOError, BlockingIOError)
         self.assertNotIsSubclass(BlockingIOError, int)
         self.assertNotIsSubclass(BlockingIOError, str)
 
@@ -96,6 +97,13 @@ class OSErrorTest(unittest.TestCase):
             self.fail("FileNotFoundError shouldn't have caught this")
         except:
             pass
+
+    def test_catch_self(self):
+        with self.assertRaises(FileNotFoundError):
+            raise FileNotFoundError()
+
+        with self.assertRaises(OSError):
+            raise FileNotFoundError()
 
     @unittest.skipIf(sys.platform == "win32", "No signal.alarm() Windows")
     def test_select(self):
