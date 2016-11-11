@@ -623,7 +623,7 @@ class SizeofTest(unittest.TestCase):
         check(x, vsize('12P3i' + CO_MAXBLOCKS*'3i' + 'P' + extras*'P'))
         # function
         def func(): pass
-        check(func, size('10P'))
+        check(func, size('11P'))
         class c():
             @staticmethod
             def foo():
