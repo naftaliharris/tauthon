@@ -1118,6 +1118,7 @@ PyToken_TwoChars(int c1, int c2)
     case '-':
         switch (c2) {
         case '=':               return MINEQUAL;
+        case '>':               return RARROW;
         }
         break;
     case '*':
