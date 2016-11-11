@@ -30,6 +30,8 @@ typedef struct _excepthandler *excepthandler_ty;
 
 typedef struct _arguments *arguments_ty;
 
+typedef struct _arg *arg_ty;
+
 typedef struct _keyword *keyword_ty;
 
 typedef struct _alias *alias_ty;
@@ -77,6 +79,7 @@ struct _stmt {
                         arguments_ty args;
                         asdl_seq *body;
                         asdl_seq *decorator_list;
+                        expr_ty returns;
                 } FunctionDef;
                 
                 struct {
@@ -84,6 +87,7 @@ struct _stmt {
                         arguments_ty args;
                         asdl_seq *body;
                         asdl_seq *decorator_list;
+                        expr_ty returns;
                 } AsyncFunctionDef;
                 
                 struct {
@@ -387,10 +391,28 @@ struct _excepthandler {
 struct _arguments {
         asdl_seq *args;
         identifier vararg;
+        expr_ty varargannotation;
         asdl_seq *kwonlyargs;
         identifier kwarg;
+        expr_ty kwargannotation;
         asdl_seq *defaults;
         asdl_seq *kw_defaults;
+};
+
+enum _arg_kind {SimpleArg_kind=1, NestedArgs_kind=2};
+struct _arg {
+        enum _arg_kind kind;
+        union {
+                struct {
+                        identifier arg;
+                        expr_ty annotation;
+                } SimpleArg;
+                
+                struct {
+                        asdl_seq *args;
+                } NestedArgs;
+                
+        } v;
 };
 
 struct _keyword {
@@ -417,14 +439,14 @@ mod_ty _Py_Interactive(asdl_seq * body, PyArena *arena);
 mod_ty _Py_Expression(expr_ty body, PyArena *arena);
 #define Suite(a0, a1) _Py_Suite(a0, a1)
 mod_ty _Py_Suite(asdl_seq * body, PyArena *arena);
-#define FunctionDef(a0, a1, a2, a3, a4, a5, a6) _Py_FunctionDef(a0, a1, a2, a3, a4, a5, a6)
+#define FunctionDef(a0, a1, a2, a3, a4, a5, a6, a7) _Py_FunctionDef(a0, a1, a2, a3, a4, a5, a6, a7)
 stmt_ty _Py_FunctionDef(identifier name, arguments_ty args, asdl_seq * body,
-                        asdl_seq * decorator_list, int lineno, int col_offset,
-                        PyArena *arena);
-#define AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6) _Py_AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6)
+                        asdl_seq * decorator_list, expr_ty returns, int lineno,
+                        int col_offset, PyArena *arena);
+#define AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6, a7) _Py_AsyncFunctionDef(a0, a1, a2, a3, a4, a5, a6, a7)
 stmt_ty _Py_AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq *
-                             body, asdl_seq * decorator_list, int lineno, int
-                             col_offset, PyArena *arena);
+                             body, asdl_seq * decorator_list, expr_ty returns,
+                             int lineno, int col_offset, PyArena *arena);
 #define ClassDef(a0, a1, a2, a3, a4, a5, a6) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * body,
                      asdl_seq * decorator_list, int lineno, int col_offset,
@@ -574,10 +596,15 @@ comprehension_ty _Py_comprehension(expr_ty target, expr_ty iter, asdl_seq *
 #define ExceptHandler(a0, a1, a2, a3, a4, a5) _Py_ExceptHandler(a0, a1, a2, a3, a4, a5)
 excepthandler_ty _Py_ExceptHandler(expr_ty type, expr_ty name, asdl_seq * body,
                                    int lineno, int col_offset, PyArena *arena);
-#define arguments(a0, a1, a2, a3, a4, a5, a6) _Py_arguments(a0, a1, a2, a3, a4, a5, a6)
-arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, asdl_seq *
-                           kwonlyargs, identifier kwarg, asdl_seq * defaults,
+#define arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8) _Py_arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8)
+arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, expr_ty
+                           varargannotation, asdl_seq * kwonlyargs, identifier
+                           kwarg, expr_ty kwargannotation, asdl_seq * defaults,
                            asdl_seq * kw_defaults, PyArena *arena);
+#define SimpleArg(a0, a1, a2) _Py_SimpleArg(a0, a1, a2)
+arg_ty _Py_SimpleArg(identifier arg, expr_ty annotation, PyArena *arena);
+#define NestedArgs(a0, a1) _Py_NestedArgs(a0, a1)
+arg_ty _Py_NestedArgs(asdl_seq * args, PyArena *arena);
 #define keyword(a0, a1, a2) _Py_keyword(a0, a1, a2)
 keyword_ty _Py_keyword(identifier arg, expr_ty value, PyArena *arena);
 #define alias(a0, a1, a2) _Py_alias(a0, a1, a2)

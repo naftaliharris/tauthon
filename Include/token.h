@@ -61,12 +61,13 @@ extern "C" {
 #define DOUBLESLASHEQUAL 49
 #define AT              50	
 #define ATEQUAL         51
+#define RARROW          52
 /* Don't forget to update the table _PyParser_TokenNames in tokenizer.c! */
-#define OP		52
-#define AWAIT           53
-#define ASYNC           54
-#define ERRORTOKEN	55
-#define N_TOKENS	56
+#define OP		53
+#define AWAIT           54
+#define ASYNC           55
+#define ERRORTOKEN	56
+#define N_TOKENS	57
 
 /* Special definitions for cooperation with parser */
 

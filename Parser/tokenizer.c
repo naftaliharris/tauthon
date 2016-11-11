@@ -87,6 +87,7 @@ char *_PyParser_TokenNames[] = {
     "DOUBLESLASHEQUAL",
     "AT",
     "ATEQUAL",
+    "RARROW",
     /* This table must match the #defines in token.h! */
     "OP",
     "AWAIT",
