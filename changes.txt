@@ -15,10 +15,6 @@ Not done yet:
  Lib/test/tokenize_tests.txt   |    3 +
  Lib/token.py                  |    7 +-
  Lib/tokenize.py               |    2 +-
- Modules/parsermodule.c        |  135 ++-
- Objects/funcobject.c          |   71 ++
- Python/ceval.c                |   28 +
- Python/compile.c              |  141 ++-
  Tools/compiler/ast.txt        |   10 +-
  Tools/compiler/astgen.py      |    5 +-
 
@@ -28,10 +24,14 @@ Done:
  Include/funcobject.h          |    5 +
  Include/graminit.h            |  157 +--
  Include/token.h               |    7 +-
+ Modules/parsermodule.c        |  135 ++-
+ Objects/funcobject.c          |   71 ++
  Parser/Python.asdl            |   10 +-
  Parser/tokenizer.c            |    2 +
  Python/Python-ast.c           |  139 ++-
  Python/ast.c                  |  303 +++--
+ Python/ceval.c                |   28 +
+ Python/compile.c              |  141 ++-
  Python/graminit.c             | 2667 ++++++++++++++++++++++-------------------
  Python/symtable.c             |   73 +-
 
