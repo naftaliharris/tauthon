@@ -624,8 +624,7 @@ compiler_simple_arg(struct compiling *c, const node *n)
 
     assert(TYPE(n) == tname || TYPE(n) == vname);
     ch = CHILD(n, 0);
-    if (!strcmp(STR(ch), "None")) {
-        ast_error(ch, "assignment to None");
+    if (!forbidden_check(c, ch, STR(ch))) {
         return NULL;
     }
     name = NEW_IDENTIFIER(ch);
