@@ -225,16 +225,20 @@ class GrammarTests(unittest.TestCase):
         x = eval('1, 0 or 1')
 
     def testFuncdef(self):
-        ### 'def' NAME parameters ':' suite
-        ### parameters: '(' [varargslist] ')'
-        ### varargslist: (fpdef ['=' test] ',')* 
-        ###           ('*' (NAME|',' fpdef ['=' test]) [',' ('**'|'*' '*') NAME]
-        ###            | ('**'|'*' '*') NAME)
-        ###            | fpdef ['=' test] (',' fpdef ['=' test])* [',']
-        ### fpdef: NAME | '(' fplist ')'
-        ### fplist: fpdef (',' fpdef)* [',']
-        ### arglist: (argument ',')* (argument | *' test [',' '**' test] | '**' test)
-        ### argument: [test '='] test   # Really [keyword '='] test
+        ### 'def' NAME parameters ['->' test] ':' suite
+        ### parameters: '(' [typedargslist] ')'
+        ### typedargslist: ((tfpdef ['=' test] ',')*
+        ###                ('*' [tname] (',' tname ['=' test])* [',' '**' tname] | '**' tname)
+        ###                | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
+        ### tname: NAME [':' test]
+        ### tfpdef: tname | '(' tfplist ')'
+        ### tfplist: tfpdef (',' tfpdef)* [',']
+        ### varargslist: ((vfpdef ['=' test] ',')*
+        ###              ('*' [vname] (',' vname ['=' test])*  [',' '**' vname] | '**' vname)
+        ###              | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
+        ### vname: NAME
+        ### vfpdef: vname | '(' vfplist ')'
+        ### vfplist: vfpdef (',' vfpdef)* [',']
         def f1(): pass
         f1()
         f1(*())
@@ -396,6 +400,28 @@ class GrammarTests(unittest.TestCase):
         # Check ast errors in *args and *kwargs
         check_syntax_error(self, "f(*g(1=2))")
         check_syntax_error(self, "f(**g(1=2))")
+
+        # argument annotation tests
+        def f(x) -> list: pass
+        self.assertEquals(f.func_annotations, {'return': list})
+        def f(x:int): pass
+        self.assertEquals(f.func_annotations, {'x': int})
+        def f(*x:str): pass
+        self.assertEquals(f.func_annotations, {'x': str})
+        def f(**x:float): pass
+        self.assertEquals(f.func_annotations, {'x': float})
+        def f(x, y:1+2): pass
+        self.assertEquals(f.func_annotations, {'y': 3})
+        def f(a, (b:1, c:2, d)): pass
+        self.assertEquals(f.func_annotations, {'b': 1, 'c': 2})
+        def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6): pass
+        self.assertEquals(f.func_annotations,
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6})
+        def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6, h:7, i=8, j:9=10,
+              **k:11) -> 12: pass
+        self.assertEquals(f.func_annotations,
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
+                           'k': 11, 'return': 12})
 
     def testLambdef(self):
         ### lambdef: 'lambda' [varargslist] ':' test

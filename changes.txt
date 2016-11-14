@@ -1,13 +1,6 @@
 $ git show a801935e
 
 Not done yet:
- Lib/test/output/test_tokenize |   18 +-
- Lib/test/test_compiler.py     |   41 +-
- Lib/test/test_grammar.py      |   48 +-
- Lib/test/test_tokenize.py     |   10 +
- Lib/test/tokenize_tests.txt   |    3 +
- Tools/compiler/ast.txt        |   10 +-
- Tools/compiler/astgen.py      |    5 +-
 
 Done:
  Grammar/Grammar               |   21 +-
@@ -24,6 +17,10 @@ Done:
  Lib/token.py                  |    7 +-
  Lib/tokenize.py               |    2 +-
  Lib/test/test_ast.py          |    8 +-
+ Lib/test/test_compiler.py     |   41 +-
+ Lib/test/test_grammar.py      |   48 +-
+ Lib/test/test_tokenize.py     |   10 +
+ Lib/test/tokenize_tests.txt   |    3 +
  Modules/parsermodule.c        |  135 ++-
  Objects/funcobject.c          |   71 ++
  Parser/Python.asdl            |   10 +-
@@ -34,6 +31,9 @@ Done:
  Python/compile.c              |  141 ++-
  Python/graminit.c             | 2667 ++++++++++++++++++++++-------------------
  Python/symtable.c             |   73 +-
+ Tools/compiler/ast.txt        |   10 +-
+ Tools/compiler/astgen.py      |    5 +-
 
 Won't do:
  Misc/NEWS                     |    2 +
+ Lib/test/output/test_tokenize |   18 +-
