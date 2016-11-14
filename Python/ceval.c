@@ -3320,7 +3320,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     Py_DECREF(v);
             }
 
-	    if (x != NULL && num_annotations > 0) {
+	    if (x != NULL && num_annotations > 0 && !err) {
 		Py_ssize_t name_ix;
 		u = POP(); /* names of args with annotations */
 		v = PyDict_New();
@@ -3346,20 +3346,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	    }
 
             /* XXX Maybe this should be a separate opcode? */
-            if (x != NULL && posdefaults > 0) {
-                v = PyTuple_New(posdefaults);
-                if (v == NULL) {
-                    Py_DECREF(x);
-                    x = NULL;
-                    break;
-                }
-                while (--posdefaults >= 0) {
-                    w = POP();
-                    PyTuple_SET_ITEM(v, posdefaults, w);
-                }
-                err = PyFunction_SetDefaults(x, v);
-                Py_DECREF(v);
-            }
             if (x != NULL && kwdefaults > 0 && !err) {
                 v = PyDict_New();
                 if (v == NULL) {
@@ -3374,6 +3360,20 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     PyDict_SetItem(v, u, w);
                 }
                 err = PyFunction_SetKwDefaults(x, v);
+                Py_DECREF(v);
+            }
+            if (x != NULL && posdefaults > 0 && !err) {
+                v = PyTuple_New(posdefaults);
+                if (v == NULL) {
+                    Py_DECREF(x);
+                    x = NULL;
+                    break;
+                }
+                while (--posdefaults >= 0) {
+                    w = POP();
+                    PyTuple_SET_ITEM(v, posdefaults, w);
+                }
+                err = PyFunction_SetDefaults(x, v);
                 Py_DECREF(v);
             }
             PUSH(x);

@@ -1558,6 +1558,8 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
@@ -1565,8 +1567,6 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
             return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     num_annotations = compiler_visit_annotations(c, args, returns);
     if (num_annotations < 0)
         return 0;
