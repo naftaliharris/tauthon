@@ -425,14 +425,14 @@ class GrammarTests(unittest.TestCase):
 
 
         d = {}
-        exec """
+        exec("""
 def foo():
     def bar():
         def baz(a:int) -> bar:
             return bar
         return baz
     return bar
-        """ in d
+        """, d)
 
         foo = d['foo']
         bar = foo()
@@ -444,6 +444,14 @@ def foo():
         @null
         def f(x) -> list: pass
         self.assertEquals(f.__annotations__, {'return': list})
+
+    def testFuncdefClosures(self):
+        # test MAKE_CLOSURE with a variety of oparg's
+        closure = 1
+        def f(): return closure
+        def f(x=1): return closure
+        def f(*, k=1): return closure
+        def f() -> int: return closure
 
     def testLambdef(self):
         ### lambdef: 'lambda' [varargslist] ':' test
