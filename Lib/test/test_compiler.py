@@ -293,7 +293,7 @@ class CompilerTest(unittest.TestCase):
             c = compiler.compile(sourcecode, '<string>', 'exec')
             dct = {}
             exec(c, dct)
-            self.assertEquals(dct['f'].func_annotations, expected)
+            self.assertEquals(dct['f'].__annotations__, expected)
 
 
 NOLINENO = (compiler.ast.Module, compiler.ast.Stmt, compiler.ast.Discard)

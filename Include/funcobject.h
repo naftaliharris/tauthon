@@ -30,7 +30,7 @@ typedef struct {
     PyObject *func_dict;	/* The __dict__ attribute, a dict or NULL */
     PyObject *func_weakreflist;	/* List of weak references */
     PyObject *func_module;	/* The __module__ attribute, can be anything */
-    PyObject *func_annotations;        /* Annotations, a dict or NULL */
+    PyObject *__annotations__;        /* Annotations, a dict or NULL */
 
     /* Invariant:
      *     func_closure contains the bindings for func_code->co_freevars, so
@@ -71,7 +71,7 @@ PyAPI_FUNC(int) PyFunction_SetAnnotations(PyObject *, PyObject *);
 #define PyFunction_GET_CLOSURE(func) \
 	(((PyFunctionObject *)func) -> func_closure)
 #define PyFunction_GET_ANNOTATIONS(func) \
-       (((PyFunctionObject *)func) -> func_annotations)
+       (((PyFunctionObject *)func) -> __annotations__)
 
 /* The classmethod and staticmethod types lives here, too */
 PyAPI_DATA(PyTypeObject) PyClassMethod_Type;

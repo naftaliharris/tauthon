@@ -38,7 +38,7 @@ PyFunction_New(PyObject *code, PyObject *globals)
         op->func_doc = doc;
         op->func_dict = NULL;
         op->func_module = NULL;
-        op->func_annotations = NULL;
+        op->__annotations__ = NULL;
 
         /* __module__: If module name is in globals, use it.
            Otherwise, use None.
@@ -193,7 +193,7 @@ PyFunction_GetAnnotations(PyObject *op)
 	PyErr_BadInternalCall();
 	return NULL;
     }
-    return ((PyFunctionObject *) op) -> func_annotations;
+    return ((PyFunctionObject *) op) -> __annotations__;
 }
 
 int
@@ -213,8 +213,8 @@ PyFunction_SetAnnotations(PyObject *op, PyObject *annotations)
 			"non-dict annotations");
 	return -1;
     }
-    Py_XDECREF(((PyFunctionObject *)op) -> func_annotations);
-    ((PyFunctionObject *) op) -> func_annotations = annotations;
+    Py_XDECREF(((PyFunctionObject *)op) -> __annotations__);
+    ((PyFunctionObject *) op) -> __annotations__ = annotations;
     return 0;
 }
 
@@ -433,13 +433,13 @@ func_set_kwdefaults(PyFunctionObject *op, PyObject *value)
 static PyObject *
 func_get_annotations(PyFunctionObject *op)
 {
-    if (op->func_annotations == NULL) {
-	op->func_annotations = PyDict_New();
-	if (op->func_annotations == NULL)
+    if (op->__annotations__ == NULL) {
+	op->__annotations__ = PyDict_New();
+	if (op->__annotations__ == NULL)
 	    return NULL;
     }
-    Py_INCREF(op->func_annotations);
-    return op->func_annotations;
+    Py_INCREF(op->__annotations__);
+    return op->__annotations__;
 }
 
 static int
@@ -449,17 +449,17 @@ func_set_annotations(PyFunctionObject *op, PyObject *value)
 
     if (value == Py_None)
 	value = NULL;
-    /* Legal to del f.func_annotations.
-     * Can only set func_annotations to NULL (through C api)
+    /* Legal to del f.__annotations__.
+     * Can only set __annotations__ to NULL (through C api)
      * or a dict. */
     if (value != NULL && !PyDict_Check(value)) {
 	PyErr_SetString(PyExc_TypeError,
-		"func_annotations must be set to a dict object");
+		"__annotations__ must be set to a dict object");
 	return -1;
     }
-    tmp = op->func_annotations;
+    tmp = op->__annotations__;
     Py_XINCREF(value);
-    op->func_annotations = value;
+    op->__annotations__ = value;
     Py_XDECREF(tmp);
     return 0;
 }
@@ -475,7 +475,7 @@ static PyGetSetDef func_getsetlist[] = {
      (setter)func_set_kwdefaults},
     {"__kwdefaults__", (getter)func_get_kwdefaults,
      (setter)func_set_kwdefaults},
-    {"func_annotations", (getter)func_get_annotations,
+    {"__annotations__", (getter)func_get_annotations,
      (setter)func_set_annotations},
     {"func_dict", (getter)func_get_dict, (setter)func_set_dict},
     {"__dict__", (getter)func_get_dict, (setter)func_set_dict},
@@ -599,7 +599,7 @@ func_dealloc(PyFunctionObject *op)
     Py_XDECREF(op->func_doc);
     Py_XDECREF(op->func_dict);
     Py_XDECREF(op->func_closure);
-    Py_XDECREF(op->func_annotations);
+    Py_XDECREF(op->__annotations__);
     PyObject_GC_Del(op);
 }
 
@@ -622,7 +622,7 @@ func_traverse(PyFunctionObject *f, visitproc visit, void *arg)
     Py_VISIT(f->func_name);
     Py_VISIT(f->func_dict);
     Py_VISIT(f->func_closure);
-    Py_VISIT(f->func_annotations);
+    Py_VISIT(f->__annotations__);
     return 0;
 }
 
