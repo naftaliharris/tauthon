@@ -1,11 +1,6 @@
 $ git show a801935e
 
 Not done yet:
- Lib/compiler/ast.py           |   88 +-
- Lib/compiler/pyassem.py       |   44 +-
- Lib/compiler/pycodegen.py     |   77 +-
- Lib/compiler/symbols.py       |   21 +-
- Lib/compiler/transformer.py   |  118 +-
  Lib/test/output/test_tokenize |   18 +-
  Lib/test/test_compiler.py     |   41 +-
  Lib/test/test_grammar.py      |   48 +-
@@ -20,6 +15,11 @@ Done:
  Include/funcobject.h          |    5 +
  Include/graminit.h            |  157 +--
  Include/token.h               |    7 +-
+ Lib/compiler/ast.py           |   88 +-
+ Lib/compiler/pyassem.py       |   44 +-
+ Lib/compiler/pycodegen.py     |   77 +-
+ Lib/compiler/symbols.py       |   21 +-
+ Lib/compiler/transformer.py   |  118 +-
  Lib/symbol.py                 |  157 +--
  Lib/token.py                  |    7 +-
  Lib/tokenize.py               |    2 +-
