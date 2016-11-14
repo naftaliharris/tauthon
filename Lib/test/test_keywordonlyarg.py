@@ -153,6 +153,12 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
         # used to fail with a SystemError.
         lambda *, k1=unittest: None
 
+    def test_mangling(self):
+        class X:
+            def f(self, *, __a=42):
+                return __a
+        self.assertEqual(X().f(), 42)
+
     def test_highly_nested(self):
         compile("""
 def foo():
