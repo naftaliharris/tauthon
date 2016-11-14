@@ -919,7 +919,7 @@ opcode_stack_effect(int opcode, int oparg)
                 return -1;
 
         case MAKE_CLOSURE:
-            return -NARGS(oparg)-1;  /* TODO/RSI: Need to update this for annotations? */
+            return -NARGS(oparg) - ((oparg >> 16) & 0xffff) - 1;
 #undef NARGS
         case LOAD_CLOSURE:
             return 1;

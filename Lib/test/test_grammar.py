@@ -423,6 +423,22 @@ class GrammarTests(unittest.TestCase):
                           {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
                            'k': 11, 'return': 12})
 
+
+        d = {}
+        exec """
+def foo():
+    def bar():
+        def baz(a:int) -> bar:
+            return bar
+        return baz
+    return bar
+        """ in d
+
+        foo = d['foo']
+        bar = foo()
+        baz = bar()
+        self.assertEquals(baz.__annotations__, {'a': int, 'return': bar})
+
         # Check for SF Bug #1697248 - mixing decorators and a return annotation
         def null(x): return x
         @null
