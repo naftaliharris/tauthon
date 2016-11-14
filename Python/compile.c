@@ -1720,14 +1720,14 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, COMPILER_SCOPE_LAMBDA,
                               (void *)e, e->lineno))
         return 0;
