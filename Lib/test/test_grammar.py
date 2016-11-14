@@ -423,6 +423,12 @@ class GrammarTests(unittest.TestCase):
                           {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
                            'k': 11, 'return': 12})
 
+        # Check for SF Bug #1697248 - mixing decorators and a return annotation
+        def null(x): return x
+        @null
+        def f(x) -> list: pass
+        self.assertEquals(f.func_annotations, {'return': list})
+
     def testLambdef(self):
         ### lambdef: 'lambda' [varargslist] ':' test
         l1 = lambda : 0
