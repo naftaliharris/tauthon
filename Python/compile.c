@@ -912,15 +912,15 @@ opcode_stack_effect(int opcode, int oparg)
             return -NARGS(oparg)-2;
         case MAKE_FUNCTION:
             return -NARGS(oparg) - ((oparg >> 16) & 0xffff);
+        case MAKE_CLOSURE:
+            return -1 - NARGS(oparg) - ((oparg >> 16) & 0xffff);
+#undef NARGS
         case BUILD_SLICE:
             if (oparg == 3)
                 return -2;
             else
                 return -1;
 
-        case MAKE_CLOSURE:
-            return -NARGS(oparg)-1;  /* TODO/RSI: Need to update this for annotations? */
-#undef NARGS
         case LOAD_CLOSURE:
             return 1;
         case LOAD_DEREF:
@@ -1403,7 +1403,11 @@ compiler_visit_kwonlydefaults(struct compiler *c, asdl_seq *kwonlyargs,
         arg_ty arg = asdl_seq_GET(kwonlyargs, i);
         expr_ty default_ = asdl_seq_GET(kw_defaults, i);
         if (default_) {
-            ADDOP_O(c, LOAD_CONST, arg->v.SimpleArg.arg, consts);
+            PyObject *mangled = _Py_Mangle(c->u->u_private, arg->v.SimpleArg.arg);
+            if (!mangled)
+                return -1;
+            ADDOP_O(c, LOAD_CONST, mangled, consts);
+            Py_DECREF(mangled);
             if (!compiler_visit_expr(c, default_)) {
                 return -1;
             }
@@ -1453,8 +1457,12 @@ static int
 compiler_visit_annotations(struct compiler *c, arguments_ty args,
                            expr_ty returns)
 {
-    /* push arg annotations and a list of the argument names. return the #
-       of items pushed. this is out-of-order wrt the source code. */
+    /* Push arg annotations and a list of the argument names. Return the #
+       of items pushed. The expressions are evaluated out-of-order wrt the
+       source code.
+
+       More than 2^16-1 annotations is a SyntaxError. Returns -1 on error.
+       */
     static identifier return_str;
     PyObject *names;
     int len;
@@ -1485,6 +1493,12 @@ compiler_visit_annotations(struct compiler *c, arguments_ty args,
     }
 
     len = PyList_GET_SIZE(names);
+    if (len > 65534) {
+        /* len must fit in 16 bits, and len is incremented below */
+        PyErr_SetString(PyExc_SyntaxError,
+                        "too many annotations");
+        goto error;
+    }
     if (len) {
 	/* convert names to a tuple and place on stack */
 	PyObject *elt;
@@ -1544,6 +1558,8 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
@@ -1551,9 +1567,10 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
             return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     num_annotations = compiler_visit_annotations(c, args, returns);
+    if (num_annotations < 0)
+        return 0;
+    assert((num_annotations & 0xFFFF) == num_annotations);
 
     if (!compiler_enter_scope(c, name,
                               scope_type, (void *)s,
@@ -1703,14 +1720,14 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, COMPILER_SCOPE_LAMBDA,
                               (void *)e, e->lineno))
         return 0;

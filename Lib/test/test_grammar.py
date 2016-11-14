@@ -403,31 +403,55 @@ class GrammarTests(unittest.TestCase):
 
         # argument annotation tests
         def f(x) -> list: pass
-        self.assertEquals(f.func_annotations, {'return': list})
+        self.assertEquals(f.__annotations__, {'return': list})
         def f(x:int): pass
-        self.assertEquals(f.func_annotations, {'x': int})
+        self.assertEquals(f.__annotations__, {'x': int})
         def f(*x:str): pass
-        self.assertEquals(f.func_annotations, {'x': str})
+        self.assertEquals(f.__annotations__, {'x': str})
         def f(**x:float): pass
-        self.assertEquals(f.func_annotations, {'x': float})
+        self.assertEquals(f.__annotations__, {'x': float})
         def f(x, y:1+2): pass
-        self.assertEquals(f.func_annotations, {'y': 3})
+        self.assertEquals(f.__annotations__, {'y': 3})
         def f(a, (b:1, c:2, d)): pass
-        self.assertEquals(f.func_annotations, {'b': 1, 'c': 2})
+        self.assertEquals(f.__annotations__, {'b': 1, 'c': 2})
         def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6): pass
-        self.assertEquals(f.func_annotations,
+        self.assertEquals(f.__annotations__,
                           {'b': 1, 'c': 2, 'e': 3, 'g': 6})
         def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6, h:7, i=8, j:9=10,
               **k:11) -> 12: pass
-        self.assertEquals(f.func_annotations,
+        self.assertEquals(f.__annotations__,
                           {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
                            'k': 11, 'return': 12})
+
+
+        d = {}
+        exec("""
+def foo():
+    def bar():
+        def baz(a:int) -> bar:
+            return bar
+        return baz
+    return bar
+        """, d)
+
+        foo = d['foo']
+        bar = foo()
+        baz = bar()
+        self.assertEquals(baz.__annotations__, {'a': int, 'return': bar})
 
         # Check for SF Bug #1697248 - mixing decorators and a return annotation
         def null(x): return x
         @null
         def f(x) -> list: pass
-        self.assertEquals(f.func_annotations, {'return': list})
+        self.assertEquals(f.__annotations__, {'return': list})
+
+    def testFuncdefClosures(self):
+        # test MAKE_CLOSURE with a variety of oparg's
+        closure = 1
+        def f(): return closure
+        def f(x=1): return closure
+        def f(*, k=1): return closure
+        def f() -> int: return closure
 
     def testLambdef(self):
         ### lambdef: 'lambda' [varargslist] ':' test
