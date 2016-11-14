@@ -43,6 +43,7 @@ static char *FunctionDef_fields[]={
         "args",
         "body",
         "decorator_list",
+        "returns",
 };
 static PyTypeObject *AsyncFunctionDef_type;
 static char *AsyncFunctionDef_fields[]={
@@ -50,6 +51,7 @@ static char *AsyncFunctionDef_fields[]={
         "args",
         "body",
         "decorator_list",
+        "returns",
 };
 static PyTypeObject *ClassDef_type;
 static char *ClassDef_fields[]={
@@ -394,10 +396,23 @@ static PyObject* ast2obj_arguments(void*);
 static char *arguments_fields[]={
         "args",
         "vararg",
+        "varargannotation",
         "kwonlyargs",
         "kwarg",
+        "kwargannotation",
         "defaults",
         "kw_defaults",
+};
+static PyTypeObject *arg_type;
+static PyObject* ast2obj_arg(void*);
+static PyTypeObject *SimpleArg_type;
+static char *SimpleArg_fields[]={
+        "arg",
+        "annotation",
+};
+static PyTypeObject *NestedArgs_type;
+static char *NestedArgs_fields[]={
+        "args",
 };
 static PyTypeObject *keyword_type;
 static PyObject* ast2obj_keyword(void*);
@@ -723,10 +738,10 @@ static int init_types(void)
         if (!stmt_type) return 0;
         if (!add_attributes(stmt_type, stmt_attributes, 2)) return 0;
         FunctionDef_type = make_type("FunctionDef", stmt_type,
-                                     FunctionDef_fields, 4);
+                                     FunctionDef_fields, 5);
         if (!FunctionDef_type) return 0;
         AsyncFunctionDef_type = make_type("AsyncFunctionDef", stmt_type,
-                                          AsyncFunctionDef_fields, 4);
+                                          AsyncFunctionDef_fields, 5);
         if (!AsyncFunctionDef_type) return 0;
         ClassDef_type = make_type("ClassDef", stmt_type, ClassDef_fields, 4);
         if (!ClassDef_type) return 0;
@@ -1006,8 +1021,16 @@ static int init_types(void)
         ExceptHandler_type = make_type("ExceptHandler", excepthandler_type,
                                        ExceptHandler_fields, 3);
         if (!ExceptHandler_type) return 0;
-        arguments_type = make_type("arguments", &AST_type, arguments_fields, 6);
+        arguments_type = make_type("arguments", &AST_type, arguments_fields, 8);
         if (!arguments_type) return 0;
+        arg_type = make_type("arg", &AST_type, NULL, 0);
+        if (!arg_type) return 0;
+        if (!add_attributes(arg_type, NULL, 0)) return 0;
+        SimpleArg_type = make_type("SimpleArg", arg_type, SimpleArg_fields, 2);
+        if (!SimpleArg_type) return 0;
+        NestedArgs_type = make_type("NestedArgs", arg_type, NestedArgs_fields,
+                                    1);
+        if (!NestedArgs_type) return 0;
         keyword_type = make_type("keyword", &AST_type, keyword_fields, 2);
         if (!keyword_type) return 0;
         alias_type = make_type("alias", &AST_type, alias_fields, 2);
@@ -1033,6 +1056,7 @@ static int obj2ast_comprehension(PyObject* obj, comprehension_ty* out, PyArena*
 static int obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena*
                                  arena);
 static int obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena);
+static int obj2ast_arg(PyObject* obj, arg_ty* out, PyArena* arena);
 static int obj2ast_keyword(PyObject* obj, keyword_ty* out, PyArena* arena);
 static int obj2ast_alias(PyObject* obj, alias_ty* out, PyArena* arena);
 static int obj2ast_withitem(PyObject* obj, withitem_ty* out, PyArena* arena);
@@ -1092,7 +1116,8 @@ Suite(asdl_seq * body, PyArena *arena)
 
 stmt_ty
 FunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq *
-            decorator_list, int lineno, int col_offset, PyArena *arena)
+            decorator_list, expr_ty returns, int lineno, int col_offset,
+            PyArena *arena)
 {
         stmt_ty p;
         if (!name) {
@@ -1113,6 +1138,7 @@ FunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq *
         p->v.FunctionDef.args = args;
         p->v.FunctionDef.body = body;
         p->v.FunctionDef.decorator_list = decorator_list;
+        p->v.FunctionDef.returns = returns;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -1120,7 +1146,8 @@ FunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq *
 
 stmt_ty
 AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq
-                 * decorator_list, int lineno, int col_offset, PyArena *arena)
+                 * decorator_list, expr_ty returns, int lineno, int col_offset,
+                 PyArena *arena)
 {
         stmt_ty p;
         if (!name) {
@@ -1141,6 +1168,7 @@ AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq
         p->v.AsyncFunctionDef.args = args;
         p->v.AsyncFunctionDef.body = body;
         p->v.AsyncFunctionDef.decorator_list = decorator_list;
+        p->v.AsyncFunctionDef.returns = returns;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -2233,8 +2261,9 @@ ExceptHandler(expr_ty type, expr_ty name, asdl_seq * body, int lineno, int
 }
 
 arguments_ty
-arguments(asdl_seq * args, identifier vararg, asdl_seq * kwonlyargs, identifier
-          kwarg, asdl_seq * defaults, asdl_seq * kw_defaults, PyArena *arena)
+arguments(asdl_seq * args, identifier vararg, expr_ty varargannotation,
+          asdl_seq * kwonlyargs, identifier kwarg, expr_ty kwargannotation,
+          asdl_seq * defaults, asdl_seq * kw_defaults, PyArena *arena)
 {
         arguments_ty p;
         p = (arguments_ty)PyArena_Malloc(arena, sizeof(*p));
@@ -2242,10 +2271,42 @@ arguments(asdl_seq * args, identifier vararg, asdl_seq * kwonlyargs, identifier
                 return NULL;
         p->args = args;
         p->vararg = vararg;
+        p->varargannotation = varargannotation;
         p->kwonlyargs = kwonlyargs;
         p->kwarg = kwarg;
+        p->kwargannotation = kwargannotation;
         p->defaults = defaults;
         p->kw_defaults = kw_defaults;
+        return p;
+}
+
+arg_ty
+SimpleArg(identifier arg, expr_ty annotation, PyArena *arena)
+{
+        arg_ty p;
+        if (!arg) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field arg is required for SimpleArg");
+                return NULL;
+        }
+        p = (arg_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = SimpleArg_kind;
+        p->v.SimpleArg.arg = arg;
+        p->v.SimpleArg.annotation = annotation;
+        return p;
+}
+
+arg_ty
+NestedArgs(asdl_seq * args, PyArena *arena)
+{
+        arg_ty p;
+        p = (arg_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = NestedArgs_kind;
+        p->v.NestedArgs.args = args;
         return p;
 }
 
@@ -2397,6 +2458,11 @@ ast2obj_stmt(void* _o)
                     -1)
                         goto failed;
                 Py_DECREF(value);
+                value = ast2obj_expr(o->v.FunctionDef.returns);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "returns", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
                 break;
         case AsyncFunctionDef_kind:
                 result = PyType_GenericNew(AsyncFunctionDef_type, NULL, NULL);
@@ -2421,6 +2487,11 @@ ast2obj_stmt(void* _o)
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "decorator_list", value) ==
                     -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.AsyncFunctionDef.returns);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "returns", value) == -1)
                         goto failed;
                 Py_DECREF(value);
                 break;
@@ -3485,7 +3556,7 @@ ast2obj_arguments(void* _o)
 
         result = PyType_GenericNew(arguments_type, NULL, NULL);
         if (!result) return NULL;
-        value = ast2obj_list(o->args, ast2obj_expr);
+        value = ast2obj_list(o->args, ast2obj_arg);
         if (!value) goto failed;
         if (PyObject_SetAttrString(result, "args", value) == -1)
                 goto failed;
@@ -3495,7 +3566,12 @@ ast2obj_arguments(void* _o)
         if (PyObject_SetAttrString(result, "vararg", value) == -1)
                 goto failed;
         Py_DECREF(value);
-        value = ast2obj_list(o->kwonlyargs, ast2obj_expr);
+        value = ast2obj_expr(o->varargannotation);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "varargannotation", value) == -1)
+                goto failed;
+        Py_DECREF(value);
+        value = ast2obj_list(o->kwonlyargs, ast2obj_arg);
         if (!value) goto failed;
         if (PyObject_SetAttrString(result, "kwonlyargs", value) == -1)
                 goto failed;
@@ -3503,6 +3579,11 @@ ast2obj_arguments(void* _o)
         value = ast2obj_identifier(o->kwarg);
         if (!value) goto failed;
         if (PyObject_SetAttrString(result, "kwarg", value) == -1)
+                goto failed;
+        Py_DECREF(value);
+        value = ast2obj_expr(o->kwargannotation);
+        if (!value) goto failed;
+        if (PyObject_SetAttrString(result, "kwargannotation", value) == -1)
                 goto failed;
         Py_DECREF(value);
         value = ast2obj_list(o->defaults, ast2obj_expr);
@@ -3515,6 +3596,48 @@ ast2obj_arguments(void* _o)
         if (PyObject_SetAttrString(result, "kw_defaults", value) == -1)
                 goto failed;
         Py_DECREF(value);
+        return result;
+failed:
+        Py_XDECREF(value);
+        Py_XDECREF(result);
+        return NULL;
+}
+
+PyObject*
+ast2obj_arg(void* _o)
+{
+        arg_ty o = (arg_ty)_o;
+        PyObject *result = NULL, *value = NULL;
+        if (!o) {
+                Py_INCREF(Py_None);
+                return Py_None;
+        }
+
+        switch (o->kind) {
+        case SimpleArg_kind:
+                result = PyType_GenericNew(SimpleArg_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_identifier(o->v.SimpleArg.arg);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "arg", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.SimpleArg.annotation);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "annotation", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case NestedArgs_kind:
+                result = PyType_GenericNew(NestedArgs_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_list(o->v.NestedArgs.args, ast2obj_arg);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "args", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        }
         return result;
 failed:
         Py_XDECREF(value);
@@ -3807,6 +3930,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 arguments_ty args;
                 asdl_seq* body;
                 asdl_seq* decorator_list;
+                expr_ty returns;
 
                 if (PyObject_HasAttrString(obj, "name")) {
                         int res;
@@ -3882,8 +4006,19 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         PyErr_SetString(PyExc_TypeError, "required field \"decorator_list\" missing from FunctionDef");
                         return 1;
                 }
-                *out = FunctionDef(name, args, body, decorator_list, lineno,
-                                   col_offset, arena);
+                if (PyObject_HasAttrString(obj, "returns")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "returns");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &returns, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        returns = NULL;
+                }
+                *out = FunctionDef(name, args, body, decorator_list, returns,
+                                   lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -3896,6 +4031,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 arguments_ty args;
                 asdl_seq* body;
                 asdl_seq* decorator_list;
+                expr_ty returns;
 
                 if (PyObject_HasAttrString(obj, "name")) {
                         int res;
@@ -3971,8 +4107,19 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         PyErr_SetString(PyExc_TypeError, "required field \"decorator_list\" missing from AsyncFunctionDef");
                         return 1;
                 }
+                if (PyObject_HasAttrString(obj, "returns")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "returns");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &returns, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        returns = NULL;
+                }
                 *out = AsyncFunctionDef(name, args, body, decorator_list,
-                                        lineno, col_offset, arena);
+                                        returns, lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -7006,8 +7153,10 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         PyObject* tmp = NULL;
         asdl_seq* args;
         identifier vararg;
+        expr_ty varargannotation;
         asdl_seq* kwonlyargs;
         identifier kwarg;
+        expr_ty kwargannotation;
         asdl_seq* defaults;
         asdl_seq* kw_defaults;
 
@@ -7025,8 +7174,8 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 args = asdl_seq_new(len, arena);
                 if (args == NULL) goto failed;
                 for (i = 0; i < len; i++) {
-                        expr_ty value;
-                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                        arg_ty value;
+                        res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &value, arena);
                         if (res != 0) goto failed;
                         asdl_seq_SET(args, i, value);
                 }
@@ -7047,6 +7196,17 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
         } else {
                 vararg = NULL;
         }
+        if (PyObject_HasAttrString(obj, "varargannotation")) {
+                int res;
+                tmp = PyObject_GetAttrString(obj, "varargannotation");
+                if (tmp == NULL) goto failed;
+                res = obj2ast_expr(tmp, &varargannotation, arena);
+                if (res != 0) goto failed;
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                varargannotation = NULL;
+        }
         if (PyObject_HasAttrString(obj, "kwonlyargs")) {
                 int res;
                 Py_ssize_t len;
@@ -7061,8 +7221,8 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 kwonlyargs = asdl_seq_new(len, arena);
                 if (kwonlyargs == NULL) goto failed;
                 for (i = 0; i < len; i++) {
-                        expr_ty value;
-                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                        arg_ty value;
+                        res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &value, arena);
                         if (res != 0) goto failed;
                         asdl_seq_SET(kwonlyargs, i, value);
                 }
@@ -7082,6 +7242,17 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 tmp = NULL;
         } else {
                 kwarg = NULL;
+        }
+        if (PyObject_HasAttrString(obj, "kwargannotation")) {
+                int res;
+                tmp = PyObject_GetAttrString(obj, "kwargannotation");
+                if (tmp == NULL) goto failed;
+                res = obj2ast_expr(tmp, &kwargannotation, arena);
+                if (res != 0) goto failed;
+                Py_XDECREF(tmp);
+                tmp = NULL;
+        } else {
+                kwargannotation = NULL;
         }
         if (PyObject_HasAttrString(obj, "defaults")) {
                 int res;
@@ -7133,9 +7304,100 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 PyErr_SetString(PyExc_TypeError, "required field \"kw_defaults\" missing from arguments");
                 return 1;
         }
-        *out = arguments(args, vararg, kwonlyargs, kwarg, defaults,
-                         kw_defaults, arena);
+        *out = arguments(args, vararg, varargannotation, kwonlyargs, kwarg,
+                         kwargannotation, defaults, kw_defaults, arena);
         return 0;
+failed:
+        Py_XDECREF(tmp);
+        return 1;
+}
+
+int
+obj2ast_arg(PyObject* obj, arg_ty* out, PyArena* arena)
+{
+        PyObject* tmp = NULL;
+        int isinstance;
+
+
+        if (obj == Py_None) {
+                *out = NULL;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)SimpleArg_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                identifier arg;
+                expr_ty annotation;
+
+                if (PyObject_HasAttrString(obj, "arg")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "arg");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_identifier(tmp, &arg, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"arg\" missing from SimpleArg");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "annotation")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "annotation");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &annotation, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        annotation = NULL;
+                }
+                *out = SimpleArg(arg, annotation, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)NestedArgs_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                asdl_seq* args;
+
+                if (PyObject_HasAttrString(obj, "args")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "args");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "NestedArgs field \"args\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        args = asdl_seq_new(len, arena);
+                        if (args == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                arg_ty value;
+                                res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(args, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"args\" missing from NestedArgs");
+                        return 1;
+                }
+                *out = NestedArgs(args, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+
+        tmp = PyObject_Repr(obj);
+        if (tmp == NULL) goto failed;
+        PyErr_Format(PyExc_TypeError, "expected some sort of arg, but got %.400s", PyString_AS_STRING(tmp));
 failed:
         Py_XDECREF(tmp);
         return 1;
@@ -7421,6 +7683,11 @@ init_ast(void)
         if (PyDict_SetItemString(d, "ExceptHandler",
             (PyObject*)ExceptHandler_type) < 0) return;
         if (PyDict_SetItemString(d, "arguments", (PyObject*)arguments_type) <
+            0) return;
+        if (PyDict_SetItemString(d, "arg", (PyObject*)arg_type) < 0) return;
+        if (PyDict_SetItemString(d, "SimpleArg", (PyObject*)SimpleArg_type) <
+            0) return;
+        if (PyDict_SetItemString(d, "NestedArgs", (PyObject*)NestedArgs_type) <
             0) return;
         if (PyDict_SetItemString(d, "keyword", (PyObject*)keyword_type) < 0)
             return;

@@ -173,9 +173,12 @@ static int symtable_visit_alias(struct symtable *st, alias_ty);
 static int symtable_visit_comprehension(struct symtable *st, comprehension_ty);
 static int symtable_visit_keyword(struct symtable *st, keyword_ty);
 static int symtable_visit_slice(struct symtable *st, slice_ty);
-static int symtable_visit_params(struct symtable *st, asdl_seq *args, int top);
-static int symtable_visit_params_nested(struct symtable *st, asdl_seq *args);
+static int symtable_visit_params(struct symtable *st, asdl_seq *args, int top,
+                                 int annotations);
+static int symtable_visit_params_nested(struct symtable *st, asdl_seq *args,
+                                        int annotations);
 static int symtable_implicit_arg(struct symtable *st, int pos);
+static int symtable_visit_annotations(struct symtable *st, stmt_ty s);
 static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
@@ -1016,6 +1019,8 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             VISIT_SEQ(st, expr, s->v.FunctionDef.args->defaults);
         if (s->v.FunctionDef.args->kw_defaults)
             VISIT_KWONLYDEFAULTS(st, s->v.FunctionDef.args->kw_defaults);
+        if (!symtable_visit_annotations(st, s))
+	    return 0;
         if (s->v.FunctionDef.decorator_list)
             VISIT_SEQ(st, expr, s->v.FunctionDef.decorator_list);
         if (!symtable_enter_block(st, s->v.FunctionDef.name,
@@ -1336,22 +1341,29 @@ symtable_implicit_arg(struct symtable *st, int pos)
 }
 
 static int
-symtable_visit_params(struct symtable *st, asdl_seq *args, int toplevel)
+symtable_visit_params(struct symtable *st, asdl_seq *args, int toplevel,
+                      int annotations)
 {
     int i;
 
+    if (!args)
+        return -1;
+
     /* go through all the toplevel arguments first */
     for (i = 0; i < asdl_seq_LEN(args); i++) {
-        expr_ty arg = (expr_ty)asdl_seq_GET(args, i);
-        if (arg->kind == Name_kind) {
-            assert(arg->v.Name.ctx == Param ||
-                   (arg->v.Name.ctx == Store && !toplevel));
-            if (!symtable_add_def(st, arg->v.Name.id, DEF_PARAM))
-                return 0;
+        arg_ty arg = (arg_ty)asdl_seq_GET(args, i);
+        if (arg->kind == SimpleArg_kind) {
+            if (!annotations) {
+                if (!symtable_add_def(st,
+                                      arg->v.SimpleArg.arg,
+                                      DEF_PARAM))
+                    return 0;
+            }
+            else if (arg->v.SimpleArg.annotation)
+                VISIT(st, expr, arg->v.SimpleArg.annotation);
         }
-        else if (arg->kind == Tuple_kind) {
-            assert(arg->v.Tuple.ctx == Store);
-            if (toplevel) {
+        else if (arg->kind == NestedArgs_kind) {
+            if (toplevel && !annotations) {
                 if (!symtable_implicit_arg(st, i))
                     return 0;
             }
@@ -1366,7 +1378,7 @@ symtable_visit_params(struct symtable *st, asdl_seq *args, int toplevel)
     }
 
     if (!toplevel) {
-        if (!symtable_visit_params_nested(st, args))
+        if (!symtable_visit_params_nested(st, args, annotations))
             return 0;
     }
 
@@ -1374,16 +1386,36 @@ symtable_visit_params(struct symtable *st, asdl_seq *args, int toplevel)
 }
 
 static int
-symtable_visit_params_nested(struct symtable *st, asdl_seq *args)
+symtable_visit_params_nested(struct symtable *st, asdl_seq *args,
+                             int annotations)
 {
     int i;
     for (i = 0; i < asdl_seq_LEN(args); i++) {
-        expr_ty arg = (expr_ty)asdl_seq_GET(args, i);
-        if (arg->kind == Tuple_kind &&
-            !symtable_visit_params(st, arg->v.Tuple.elts, 0))
+        arg_ty arg = (arg_ty)asdl_seq_GET(args, i);
+        if (arg->kind == NestedArgs_kind &&
+            !symtable_visit_params(st, arg->v.NestedArgs.args, 0,
+                                    annotations))
             return 0;
     }
 
+    return 1;
+}
+
+static int
+symtable_visit_annotations(struct symtable *st, stmt_ty s)
+{
+    arguments_ty a = s->v.FunctionDef.args;
+
+    if (a->args && !symtable_visit_params(st, a->args, 1, 1))
+        return 0;
+    if (a->varargannotation)
+        VISIT(st, expr, a->varargannotation);
+    if (a->kwargannotation)
+        VISIT(st, expr, a->kwargannotation);
+    if (a->kwonlyargs && !symtable_visit_params(st, a->kwonlyargs, 1, 1))
+        return 0;
+    if (s->v.FunctionDef.returns)
+        VISIT(st, expr, s->v.FunctionDef.returns);
     return 1;
 }
 
@@ -1393,9 +1425,9 @@ symtable_visit_arguments(struct symtable *st, arguments_ty a)
     /* skip default arguments inside function block
        XXX should ast be different?
     */
-    if (a->args && !symtable_visit_params(st, a->args, 1))
+    if (a->args && !symtable_visit_params(st, a->args, 1, 0))
         return 0;
-    if (a->kwonlyargs && !symtable_visit_params(st, a->kwonlyargs, 1))
+    if (a->kwonlyargs && !symtable_visit_params(st, a->kwonlyargs, 1, 0))
         return 0;
     if (a->vararg) {
         if (!symtable_add_def(st, a->vararg, DEF_PARAM))
@@ -1407,7 +1439,7 @@ symtable_visit_arguments(struct symtable *st, arguments_ty a)
             return 0;
         st->st_cur->ste_varkeywords = 1;
     }
-    if (a->args && !symtable_visit_params_nested(st, a->args))
+    if (a->args && !symtable_visit_params_nested(st, a->args, 0))
         return 0;
     return 1;
 }

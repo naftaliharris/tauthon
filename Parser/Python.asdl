@@ -10,9 +10,9 @@ module Python version "$Revision$"
 	    | Suite(stmt* body)
 
 	stmt = FunctionDef(identifier name, arguments args,
-	                   stmt* body, expr* decorator_list)
+	                   stmt* body, expr* decorator_list, expr? returns)
 	      | AsyncFunctionDef(identifier name, arguments args,
-	                         stmt* body, expr* decorator_list)
+	                         stmt* body, expr* decorator_list, expr? returns)
 
 	      | ClassDef(identifier name, expr* bases, stmt* body, expr* decorator_list)
 	      | Return(expr? value)
@@ -111,8 +111,12 @@ module Python version "$Revision$"
 	excepthandler = ExceptHandler(expr? type, expr? name, stmt* body)
 	                attributes (int lineno, int col_offset)
 
-        arguments = (expr* args, identifier? vararg, expr* kwonlyargs,
-                         identifier? kwarg, expr* defaults, expr* kw_defaults)
+        arguments = (arg* args, identifier? vararg, expr? varargannotation,
+                      arg* kwonlyargs, identifier? kwarg,
+                      expr? kwargannotation, expr* defaults,
+                      expr* kw_defaults)
+        arg = SimpleArg(identifier arg, expr? annotation)
+             | NestedArgs(arg* args)
 
         -- keyword arguments supplied to call
         keyword = (identifier arg, expr value)

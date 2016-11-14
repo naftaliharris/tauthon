@@ -24,14 +24,20 @@ decorators: decorator+
 decorated: decorators (classdef | funcdef | async_funcdef)
 
 async_funcdef: ASYNC funcdef
-funcdef: 'def' NAME parameters ':' suite
-
-parameters: '(' [varargslist] ')'
-varargslist: ((fpdef ['=' test] ',')*
-              ('*' [NAME] (',' NAME ['=' test])*  [',' '**' NAME] | '**' NAME) |
-              fpdef ['=' test] (',' fpdef ['=' test])* [','])
-fpdef: NAME | '(' fplist ')'
-fplist: fpdef (',' fpdef)* [',']
+funcdef: 'def' NAME parameters ['->' test] ':' suite
+parameters: '(' [typedargslist] ')'
+typedargslist: ((tfpdef ['=' test] ',')*
+                ('*' [tname] (',' tname ['=' test])* [',' '**' tname] | '**' tname)
+                | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
+tname: NAME [':' test]
+tfpdef: tname | '(' tfplist ')'
+tfplist: tfpdef (',' tfpdef)* [',']
+varargslist: ((vfpdef ['=' test] ',')*
+              ('*' [vname] (',' vname ['=' test])*  [',' '**' vname] | '**' vname)
+              | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
+vname: NAME
+vfpdef: vname | '(' vfplist ')'
+vfplist: vfpdef (',' vfpdef)* [',']
 
 stmt: simple_stmt | compound_stmt
 simple_stmt: small_stmt (';' small_stmt)* [';'] NEWLINE
