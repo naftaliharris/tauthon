@@ -439,6 +439,14 @@ def foo():
         baz = bar()
         self.assertEquals(baz.__annotations__, {'a': int, 'return': bar})
 
+        # Check for issue #20625 -- annotations mangling
+        class Spam:
+            def f(self, *, __kw:1):
+                pass
+        class Ham(Spam): pass
+        self.assertEquals(Spam.f.__annotations__, {'_Spam__kw': 1})
+        self.assertEquals(Ham.f.__annotations__, {'_Spam__kw': 1})
+
         # Check for SF Bug #1697248 - mixing decorators and a return annotation
         def null(x): return x
         @null
