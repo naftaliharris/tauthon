@@ -403,6 +403,26 @@ class TestUpdateWrapper(unittest.TestCase):
         self.assertEqual(wrapper.attr, 'This is a different test')
         self.assertEqual(wrapper.dict_attr, f.dict_attr)
 
+    def test_missing_attributes(self):
+        def f():
+            pass
+        def wrapper():
+            pass
+        wrapper.dict_attr = {}
+        assign = ('attr',)
+        update = ('dict_attr',)
+        # Missing attributes on wrapped object are ignored
+        functools.update_wrapper(wrapper, f, assign, update)
+        self.assertNotIn('attr', wrapper.__dict__)
+        self.assertEqual(wrapper.dict_attr, {})
+        # Wrapper must have expected attributes for updating
+        del wrapper.dict_attr
+        with self.assertRaises(AttributeError):
+            functools.update_wrapper(wrapper, f, assign, update)
+        wrapper.dict_attr = 1
+        with self.assertRaises(AttributeError):
+            functools.update_wrapper(wrapper, f, assign, update)
+
     @test_support.requires_docstrings
     def test_builtin_update(self):
         # Test for bug #1576241
