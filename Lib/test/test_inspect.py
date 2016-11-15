@@ -1172,9 +1172,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertTrue('(po, pk' in repr(sig))
 
     def test_signature_object_pickle(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
-        def foo(a, b, *, c={}, **kw): pass
+        def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
         foo_partial = functools.partial(foo, a=1)
 
         sig = inspect.signature(foo_partial)
@@ -1216,37 +1214,31 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(test), ((), Ellipsis))
 
     def test_signature_on_wargs(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def test(a, b:'foo') -> 123:
-        def test(a, b):
+        def test(a, b:'foo') -> 123:
             pass
         self.assertEqual(self.signature(test),
                          ((('a', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('b', Ellipsis, Ellipsis, "positional_or_keyword")),
-                          Ellipsis))
+                           ('b', Ellipsis, 'foo', "positional_or_keyword")),
+                          123))
 
     def test_signature_on_wkwonly(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def test(*, a:float, b:str) -> int:
-        def test(*, a, b):
+        def test(*, a:float, b:str) -> int:
             pass
         self.assertEqual(self.signature(test),
-                         ((('a', Ellipsis, Ellipsis, "keyword_only"),
-                           ('b', Ellipsis, Ellipsis, "keyword_only")),
-                           Ellipsis))
+                         ((('a', Ellipsis, float, "keyword_only"),
+                           ('b', Ellipsis, str, "keyword_only")),
+                           int))
 
     def test_signature_on_complex_args(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def test(a, b:'foo'=10, *args:'bar', spam:'baz', ham=123, **kwargs:int):
-        def test(a, b=10, *args, spam, ham=123, **kwargs):
+        def test(a, b:'foo'=10, *args:'bar', spam:'baz', ham=123, **kwargs:int):
             pass
         self.assertEqual(self.signature(test),
                          ((('a', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('b', 10, Ellipsis, "positional_or_keyword"),
-                           ('args', Ellipsis, Ellipsis, "var_positional"),
-                           ('spam', Ellipsis, Ellipsis, "keyword_only"),
+                           ('b', 10, 'foo', "positional_or_keyword"),
+                           ('args', Ellipsis, 'bar', "var_positional"),
+                           ('spam', Ellipsis, 'baz', "keyword_only"),
                            ('ham', 123, Ellipsis, "keyword_only"),
-                           ('kwargs', Ellipsis, Ellipsis, "var_keyword")),
+                           ('kwargs', Ellipsis, int, "var_keyword")),
                           Ellipsis))
 
     @cpython_only
@@ -1331,9 +1323,7 @@ class TestSignatureObject(unittest.TestCase):
 
         def decorator(func):
             @functools.wraps(func)
-            # TODO/RSI: Use annotations when they are supported.
-            #def wrapper(*args, **kwargs) -> int:
-            def wrapper(*args, **kwargs):
+            def wrapper(*args, **kwargs) -> int:
                 return func(*args, **kwargs)
             return wrapper
 
@@ -1342,9 +1332,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(inspect.signature(func),
                          inspect.signature(decorated_func))
 
-        # TODO/RSI: Use annotations when they are supported.
-        #def wrapper_like(*args, **kwargs) -> int: pass
-        def wrapper_like(*args, **kwargs): pass
+        def wrapper_like(*args, **kwargs) -> int: pass
         self.assertEqual(inspect.signature(decorated_func,
                                            follow_wrapped=False),
                          inspect.signature(wrapper_like))
@@ -1371,7 +1359,7 @@ class TestSignatureObject(unittest.TestCase):
             def __init__(self, func):
                 self.__name__ = func.__name__
                 self.__code__ = func.__code__
-                #self.__annotations__ = func.__annotations__
+                self.__annotations__ = func.__annotations__
                 self.__defaults__ = func.__defaults__
                 self.__kwdefaults__ = func.__kwdefaults__
                 self.func = func
@@ -1426,8 +1414,7 @@ class TestSignatureObject(unittest.TestCase):
 
             __name__ = func.__name__
             __code__ = func.__code__
-            # TODO/RSI for when we have annotations
-            #__annotations__ = func.__annotations__
+            __annotations__ = func.__annotations__
             __defaults__ = func.__defaults__
             __kwdefaults__ = func.__kwdefaults__
 
@@ -1437,9 +1424,7 @@ class TestSignatureObject(unittest.TestCase):
         class Test:
             def __init__(*args):
                 pass
-            # TODO/RSI: Use annotations when they are supported.
-            #def m1(self, arg1, arg2=1) -> int:
-            def m1(self, arg1, arg2=1):
+            def m1(self, arg1, arg2=1) -> int:
                 pass
             def m2(*args):
                 pass
@@ -1449,7 +1434,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(Test().m1),
                          ((('arg1', Ellipsis, Ellipsis, "positional_or_keyword"),
                            ('arg2', 1, Ellipsis, "positional_or_keyword")),
-                          Ellipsis))
+                          int))
 
         self.assertEqual(self.signature(Test().m2),
                          ((('args', Ellipsis, Ellipsis, "var_positional"),),
@@ -1465,9 +1450,7 @@ class TestSignatureObject(unittest.TestCase):
     def test_signature_wrapped_bound_method(self):
         # Issue 24298
         class Test:
-            # TODO/RSI: Use annotations when they are supported.
-            #def m1(self, arg1, arg2=1) -> int:
-            def m1(self, arg1, arg2=1):
+            def m1(self, arg1, arg2=1) -> int:
                 pass
         @functools.wraps(Test().m1)
         def m1d(*args, **kwargs):
@@ -1475,7 +1458,7 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(m1d),
                          ((('arg1', Ellipsis, Ellipsis, "positional_or_keyword"),
                            ('arg2', 1, Ellipsis, "positional_or_keyword")),
-                          Ellipsis))
+                          int))
 
     def test_signature_on_classmethod(self):
         class Test:
@@ -1618,21 +1601,19 @@ class TestSignatureObject(unittest.TestCase):
                            ('kwargs', Ellipsis, Ellipsis, "var_keyword")),
                           Ellipsis))
 
-        # TODO/RSI: Use annotations when they are supported.
-        #def test(a, b, c:int) -> 42:
-        def test(a, b, c):
+        def test(a, b, c:int) -> 42:
             pass
 
         sig = test.__signature__ = inspect.signature(test)
 
         self.assertEqual(self.signature(partial(partial(test, 1))),
                          ((('b', Ellipsis, Ellipsis, "positional_or_keyword"),
-                           ('c', Ellipsis, Ellipsis, "positional_or_keyword")),
-                          Ellipsis))
+                           ('c', Ellipsis, int, "positional_or_keyword")),
+                          42))
 
         self.assertEqual(self.signature(partial(partial(test, 1), 2)),
-                         ((('c', Ellipsis, Ellipsis, "positional_or_keyword"),),
-                          Ellipsis))
+                         ((('c', Ellipsis, int, "positional_or_keyword"),),
+                          42))
 
         psig = inspect.signature(partial(partial(test, 1), 2))
 
@@ -1736,9 +1717,7 @@ class TestSignatureObject(unittest.TestCase):
 
         def decorator(func):
             @functools.wraps(func)
-            # TODO/RSI: Use annotations when they are supported.
-            #def wrapper(*args, **kwargs) -> int:
-            def wrapper(*args, **kwargs):
+            def wrapper(*args, **kwargs) -> int:
                 return func(*args, **kwargs)
             return wrapper
 
@@ -1768,9 +1747,7 @@ class TestSignatureObject(unittest.TestCase):
         # Test that we handle method wrappers correctly
         def decorator(func):
             @functools.wraps(func)
-            # TODO/RSI: Use annotations when they are supported.
-            #def wrapper(*args, **kwargs) -> int:
-            def wrapper(*args, **kwargs):
+            def wrapper(*args, **kwargs) -> int:
                 return func(42, *args, **kwargs)
             sig = inspect.signature(func)
             new_params = tuple(sig.parameters.values())[1:]
@@ -1970,53 +1947,52 @@ class TestSignatureObject(unittest.TestCase):
                           Ellipsis))
 
     def test_signature_equality(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, *, b:int) -> float: pass
-        #self.assertFalse(inspect.signature(foo) == 42)
-        #self.assertTrue(inspect.signature(foo) != 42)
-        #self.assertTrue(inspect.signature(foo) == EqualsToAll())
-        #self.assertFalse(inspect.signature(foo) != EqualsToAll())
+        def foo(a, *, b:int) -> float: pass
+        self.assertFalse(inspect.signature(foo) == 42)
+        self.assertTrue(inspect.signature(foo) != 42)
+        self.assertTrue(inspect.signature(foo) == EqualsToAll())
+        self.assertFalse(inspect.signature(foo) != EqualsToAll())
 
-        #def bar(a, *, b:int) -> float: pass
-        #self.assertTrue(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertFalse(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def bar(a, *, b:int) -> float: pass
+        self.assertTrue(inspect.signature(foo) == inspect.signature(bar))
+        self.assertFalse(inspect.signature(foo) != inspect.signature(bar))
+        self.assertEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        #def bar(a, *, b:int) -> int: pass
-        #self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def bar(a, *, b:int) -> int: pass
+        self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        #def bar(a, *, b:int): pass
-        #self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def bar(a, *, b:int): pass
+        self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        #def bar(a, *, b:int=42) -> float: pass
-        #self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def bar(a, *, b:int=42) -> float: pass
+        self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        #def bar(a, *, c) -> float: pass
-        #self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def bar(a, *, c) -> float: pass
+        self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        #def bar(a, b:int) -> float: pass
-        #self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
-        #def spam(b:int, a) -> float: pass
-        #self.assertFalse(inspect.signature(spam) == inspect.signature(bar))
-        #self.assertTrue(inspect.signature(spam) != inspect.signature(bar))
-        #self.assertNotEqual(
-        #    hash(inspect.signature(spam)), hash(inspect.signature(bar)))
+        def bar(a, b:int) -> float: pass
+        self.assertFalse(inspect.signature(foo) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(foo) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def spam(b:int, a) -> float: pass
+        self.assertFalse(inspect.signature(spam) == inspect.signature(bar))
+        self.assertTrue(inspect.signature(spam) != inspect.signature(bar))
+        self.assertNotEqual(
+            hash(inspect.signature(spam)), hash(inspect.signature(bar)))
 
         def foo(*, a, b, c): pass
         def bar(*, c, b, a): pass
@@ -2046,13 +2022,12 @@ class TestSignatureObject(unittest.TestCase):
         self.assertNotEqual(
             hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(pos, *args, a=42, b, c, **kwargs:int): pass
-        #def bar(pos, *args, c, b, a=42, **kwargs:int): pass
-        #self.assertTrue(inspect.signature(foo) == inspect.signature(bar))
-        #self.assertFalse(inspect.signature(foo) != inspect.signature(bar))
-        #self.assertEqual(
-        #    hash(inspect.signature(foo)), hash(inspect.signature(bar)))
+        def foo(pos, *args, a=42, b, c, **kwargs:int): pass
+        def bar(pos, *args, c, b, a=42, **kwargs:int): pass
+        self.assertTrue(inspect.signature(foo) == inspect.signature(bar))
+        self.assertFalse(inspect.signature(foo) != inspect.signature(bar))
+        self.assertEqual(
+            hash(inspect.signature(foo)), hash(inspect.signature(bar)))
 
     def test_signature_hashable(self):
         S = inspect.Signature
@@ -2067,30 +2042,27 @@ class TestSignatureObject(unittest.TestCase):
         self.assertNotEqual(hash(foo_sig),
                             hash(manual_sig.replace(return_annotation='spam')))
 
-        # TODO/RSI: Use annotations when they are supported.
-        #def bar(a) -> 1: pass
-        #self.assertNotEqual(hash(foo_sig), hash(inspect.signature(bar)))
+        def bar(a) -> 1: pass
+        self.assertNotEqual(hash(foo_sig), hash(inspect.signature(bar)))
 
         def foo(a={}): pass
         with self.assertRaisesRegexp(TypeError, 'unhashable type'):
             hash(inspect.signature(foo))
 
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a) -> {}: pass
-        #with self.assertRaisesRegexp(TypeError, 'unhashable type'):
-        #    hash(inspect.signature(foo))
+        def foo(a) -> {}: pass
+        with self.assertRaisesRegexp(TypeError, 'unhashable type'):
+            hash(inspect.signature(foo))
 
     def test_signature_str(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a:int=1, *, b, c=None, **kwargs) -> 42:
-        #    pass
-        #self.assertEqual(str(inspect.signature(foo)),
-        #                 '(a:int=1, *, b, c=None, **kwargs) -> 42')
+        def foo(a:int=1, *, b, c=None, **kwargs) -> 42:
+            pass
+        self.assertEqual(str(inspect.signature(foo)),
+                         '(a:int=1, *, b, c=None, **kwargs) -> 42')
 
-        #def foo(a:int=1, *args, b, c=None, **kwargs) -> 42:
-        #    pass
-        #self.assertEqual(str(inspect.signature(foo)),
-        #                 '(a:int=1, *args, b, c=None, **kwargs) -> 42')
+        def foo(a:int=1, *args, b, c=None, **kwargs) -> 42:
+            pass
+        self.assertEqual(str(inspect.signature(foo)),
+                         '(a:int=1, *args, b, c=None, **kwargs) -> 42')
 
         def foo():
             pass
@@ -2124,42 +2096,38 @@ class TestSignatureObject(unittest.TestCase):
                                 P('bar', P.VAR_POSITIONAL)])),
                          '(foo, /, *bar)')
 
-    # TODO/RSI: Use annotations when they are supported.
-    #def test_signature_replace_anno(self):
-    #    def test() -> 42:
-    #        pass
+    def test_signature_replace_anno(self):
+        def test() -> 42:
+            pass
 
-    #    sig = inspect.signature(test)
-    #    sig = sig.replace(return_annotation=None)
-    #    self.assertIs(sig.return_annotation, None)
-    #    sig = sig.replace(return_annotation=sig.empty)
-    #    self.assertIs(sig.return_annotation, sig.empty)
-    #    sig = sig.replace(return_annotation=42)
-    #    self.assertEqual(sig.return_annotation, 42)
-    #    self.assertEqual(sig, inspect.signature(test))
+        sig = inspect.signature(test)
+        sig = sig.replace(return_annotation=None)
+        self.assertIs(sig.return_annotation, None)
+        sig = sig.replace(return_annotation=sig.empty)
+        self.assertIs(sig.return_annotation, sig.empty)
+        sig = sig.replace(return_annotation=42)
+        self.assertEqual(sig.return_annotation, 42)
+        self.assertEqual(sig, inspect.signature(test))
 
-    # TODO/RSI: Use annotations when they are supported.
-    #def test_signature_on_mangled_parameters(self):
-    #    class Spam:
-    #        def foo(self, __p1:1=2, *, __p2:2=3):
-    #            pass
-    #    class Ham(Spam):
-    #        pass
+    def test_signature_on_mangled_parameters(self):
+        class Spam:
+            def foo(self, __p1:1=2, *, __p2:2=3):
+                pass
+        class Ham(Spam):
+            pass
 
-    #    self.assertEqual(self.signature(Spam.foo),
-    #                     ((('self', Ellipsis, Ellipsis, "positional_or_keyword"),
-    #                       ('_Spam__p1', 2, 1, "positional_or_keyword"),
-    #                       ('_Spam__p2', 3, 2, "keyword_only")),
-    #                      Ellipsis))
+        self.assertEqual(self.signature(Spam.foo),
+                         ((('self', Ellipsis, Ellipsis, "positional_or_keyword"),
+                           ('_Spam__p1', 2, 1, "positional_or_keyword"),
+                           ('_Spam__p2', 3, 2, "keyword_only")),
+                          Ellipsis))
 
-    #    self.assertEqual(self.signature(Spam.foo),
-    #                     self.signature(Ham.foo))
+        self.assertEqual(self.signature(Spam.foo),
+                         self.signature(Ham.foo))
 
     def test_signature_from_callable_python_obj(self):
         class MySignature(inspect.Signature): pass
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, *, b:1): pass
-        def foo(a, *, b): pass
+        def foo(a, *, b:1): pass
         foo_sig = MySignature.from_callable(foo)
         self.assertTrue(isinstance(foo_sig, MySignature))
 
@@ -2599,9 +2567,7 @@ class TestBoundArguments(unittest.TestCase):
         self.assertFalse(ba1 != ba2)
 
     def test_signature_bound_arguments_pickle(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
-        def foo(a, b, *, c={}, **kw): pass
+        def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
         sig = inspect.signature(foo)
         ba = sig.bind(20, 30, z={})
 
@@ -2610,17 +2576,13 @@ class TestBoundArguments(unittest.TestCase):
             self.assertEqual(ba, ba_pickled)
 
     def test_signature_bound_arguments_repr(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
-        def foo(a, b, *, c={}, **kw): pass
+        def foo(a, b, *, c:1={}, **kw) -> {42:'ham'}: pass
         sig = inspect.signature(foo)
         ba = sig.bind(20, 30, z={})
         self.assertRegexpMatches(repr(ba), r'<BoundArguments \(a=20,.*\}\}\)>')
 
     def test_signature_bound_arguments_apply_defaults(self):
-        # TODO/RSI: Use annotations when they are supported.
-        #def foo(a, b=1, *args, c:1={}, **kw): pass
-        def foo(a, b=1, *args, c={}, **kw): pass
+        def foo(a, b=1, *args, c:1={}, **kw): pass
         sig = inspect.signature(foo)
 
         ba = sig.bind(20)

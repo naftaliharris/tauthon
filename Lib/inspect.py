@@ -902,6 +902,13 @@ def strseq(object, convert, join=joinseq):
     else:
         return convert(object)
 
+def formatannotation(annotation, base_module=None):
+    if isinstance(annotation, type):
+        if annotation.__module__ in ('__builtin__', base_module):
+            return annotation.__name__
+        return annotation.__module__+'.'+annotation.__name__
+    return repr(annotation)
+
 def formatargspec(args, varargs=None, varkw=None, defaults=None,
                   formatarg=str,
                   formatvarargs=lambda name: '*' + name,
@@ -1375,9 +1382,7 @@ def _signature_is_functionlike(obj):
     code = getattr(obj, '__code__', None)
     defaults = getattr(obj, '__defaults__', _void) # Important to use _void ...
     kwdefaults = getattr(obj, '__kwdefaults__', _void) # ... and not None here
-    # TODO/RSI Fix when you have annotations
-    #annotations = getattr(obj, '__annotations__', None)
-    annotations = getattr(obj, '__annotations__', {})
+    annotations = getattr(obj, '__annotations__', None)
 
     return (isinstance(code, types.CodeType) and
             isinstance(name, str) and
@@ -1655,9 +1660,7 @@ def _signature_from_function(cls, func):
     positional = tuple(arg_names[:pos_count])
     keyword_only_count = func_code.co_kwonlyargcount
     keyword_only = arg_names[pos_count:(pos_count + keyword_only_count)]
-    # TODO/RSI Fix when you have annotations
-    #annotations = func.__annotations__
-    annotations = {}
+    annotations = func.__annotations__
     defaults = func.__defaults__
     kwdefaults = func.__kwdefaults__
 
