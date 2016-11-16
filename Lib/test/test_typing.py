@@ -6,6 +6,7 @@ import re
 import sys
 from unittest import TestCase, main, SkipTest
 from copy import copy, deepcopy
+from test.test_support import run_unittest
 
 from typing import Any
 from typing import TypeVar, AnyStr
@@ -1574,5 +1575,12 @@ class AllTests(BaseTestCase):
         self.assertIsNone(typing.get_type_hints(foo))
 
 
+def test_main():
+    run_unittest(AnyTests, TypeVarTests, UnionTests, TupleTests, CallableTests,
+                 ProtocolTests, GenericTests, ClassVarTests, CastTests,
+                 ForwardRefTests, OverloadTests, CollectionsAbcTests,
+                 TypeTests, NewTypeTests, NamedTupleTests, IOTests, RETests,
+                 AllTests)
+
 if __name__ == '__main__':
-    main()
+    test_main()
