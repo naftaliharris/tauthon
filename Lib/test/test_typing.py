@@ -1,9 +1,10 @@
-import contextlib
+from __future__ import absolute_import, unicode_literals
+
 import collections
 import pickle
 import re
 import sys
-from unittest import TestCase, main, skipUnless, SkipTest
+from unittest import TestCase, main, SkipTest
 from copy import copy, deepcopy
 
 from typing import Any
@@ -14,8 +15,6 @@ from typing import Tuple, List, MutableMapping
 from typing import Callable
 from typing import Generic, ClassVar
 from typing import cast
-from typing import get_type_hints
-from typing import no_type_check, no_type_check_decorator
 from typing import Type
 from typing import NewType
 from typing import NamedTuple
@@ -46,7 +45,7 @@ class BaseTestCase(TestCase):
             raise self.failureException(message)
 
 
-class Employee:
+class Employee(object):
     pass
 
 
@@ -101,7 +100,7 @@ class AnyTests(BaseTestCase):
         with self.assertRaises(TypeError):
             Any[int]
 
-    def test_any_works_with_alias(self):
+    def test_any_is_subclass(self):
         # These expressions must simply not fail.
         typing.Match[Any]
         typing.Pattern[Any]
@@ -264,8 +263,6 @@ class UnionTests(BaseTestCase):
     def test_cannot_instantiate(self):
         with self.assertRaises(TypeError):
             Union()
-        with self.assertRaises(TypeError):
-            type(Union)()
         u = Union[int, float]
         with self.assertRaises(TypeError):
             u()
@@ -318,7 +315,7 @@ class TupleTests(BaseTestCase):
         with self.assertRaises(TypeError):
             issubclass(tuple, Tuple[int, str])
 
-        class TP(tuple): ...
+        class TP(tuple): pass
         self.assertTrue(issubclass(tuple, Tuple))
         self.assertTrue(issubclass(TP, Tuple))
 
@@ -336,7 +333,7 @@ class TupleTests(BaseTestCase):
     def test_tuple_instance_type_error(self):
         with self.assertRaises(TypeError):
             isinstance((0, 0), Tuple[int, int])
-        self.assertIsInstance((0, 0), Tuple)
+        isinstance((0, 0), Tuple)
 
     def test_repr(self):
         self.assertEqual(repr(Tuple), 'typing.Tuple')
@@ -378,6 +375,14 @@ class CallableTests(BaseTestCase):
         with self.assertRaises(TypeError):
             type(c)()
 
+    def test_callable_wrong_forms(self):
+        with self.assertRaises(TypeError):
+            Callable[(), int]
+        with self.assertRaises(TypeError):
+            Callable[[()], int]
+        with self.assertRaises(TypeError):
+            Callable[[int, 1], 2]
+
     def test_callable_instance_works(self):
         def f():
             pass
@@ -404,33 +409,25 @@ class CallableTests(BaseTestCase):
         ctv = Callable[..., str]
         self.assertEqual(repr(ctv), 'typing.Callable[..., str]')
 
-    def test_callable_with_ellipsis(self):
-
-        def foo(a: Callable[..., T]):
-            pass
-
-        self.assertEqual(get_type_hints(foo, globals(), locals()),
-                         {'a': Callable[..., T]})
-
     def test_ellipsis_in_generic(self):
         # Shouldn't crash; see https://github.com/python/typing/issues/259
         typing.List[Callable[..., str]]
 
 
-XK = TypeVar('XK', str, bytes)
+XK = TypeVar('XK', unicode, bytes)
 XV = TypeVar('XV')
 
 
 class SimpleMapping(Generic[XK, XV]):
 
-    def __getitem__(self, key: XK) -> XV:
-        ...
+    def __getitem__(self, key):
+        pass
 
-    def __setitem__(self, key: XK, value: XV):
-        ...
+    def __setitem__(self, key, value):
+        pass
 
-    def get(self, key: XK, default: XV = None) -> XV:
-        ...
+    def get(self, key, default=None):
+        pass
 
 
 class MySimpleMapping(SimpleMapping[XK, XV]):
@@ -438,13 +435,13 @@ class MySimpleMapping(SimpleMapping[XK, XV]):
     def __init__(self):
         self.store = {}
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key):
         return self.store[key]
 
-    def __setitem__(self, key: str, value):
+    def __setitem__(self, key, value):
         self.store[key] = value
 
-    def get(self, key: str, default=None):
+    def get(self, key, default=None):
         try:
             return self.store[key]
         except KeyError:
@@ -464,33 +461,17 @@ class ProtocolTests(BaseTestCase):
     def test_supports_complex(self):
 
         # Note: complex itself doesn't have __complex__.
-        class C:
+        class C(object):
             def __complex__(self):
                 return 0j
 
         self.assertIsSubclass(C, typing.SupportsComplex)
         self.assertNotIsSubclass(str, typing.SupportsComplex)
 
-    def test_supports_bytes(self):
-
-        # Note: bytes itself doesn't have __bytes__.
-        class B:
-            def __bytes__(self):
-                return b''
-
-        self.assertIsSubclass(B, typing.SupportsBytes)
-        self.assertNotIsSubclass(str, typing.SupportsBytes)
-
     def test_supports_abs(self):
         self.assertIsSubclass(float, typing.SupportsAbs)
         self.assertIsSubclass(int, typing.SupportsAbs)
         self.assertNotIsSubclass(str, typing.SupportsAbs)
-
-    def test_supports_round(self):
-        issubclass(float, typing.SupportsRound)
-        self.assertIsSubclass(float, typing.SupportsRound)
-        self.assertIsSubclass(int, typing.SupportsRound)
-        self.assertNotIsSubclass(str, typing.SupportsRound)
 
     def test_reversible(self):
         self.assertIsSubclass(list, typing.Reversible)
@@ -507,14 +488,14 @@ class GenericTests(BaseTestCase):
         X = SimpleMapping[str, Any]
         self.assertEqual(X.__parameters__, ())
         with self.assertRaises(TypeError):
-            X[str]
+            X[unicode]
         with self.assertRaises(TypeError):
-            X[str, str]
-        Y = SimpleMapping[XK, str]
+            X[unicode, unicode]
+        Y = SimpleMapping[XK, unicode]
         self.assertEqual(Y.__parameters__, (XK,))
-        Y[str]
+        Y[unicode]
         with self.assertRaises(TypeError):
-            Y[str, str]
+            Y[unicode, unicode]
 
     def test_generic_errors(self):
         T = TypeVar('T')
@@ -588,7 +569,7 @@ class GenericTests(BaseTestCase):
         T = TypeVar('T')
         self.assertEqual(repr(Generic[T]), 'typing.Generic[~T]')
         self.assertEqual(repr(typing._Protocol[T]), 'typing.Protocol[~T]')
-        class C(typing.Dict[Any, Any]): ...
+        class C(typing.Dict[Any, Any]): pass
         # this line should just work
         repr(C.__mro__)
 
@@ -643,7 +624,7 @@ class GenericTests(BaseTestCase):
 
     def test_orig_bases(self):
         T = TypeVar('T')
-        class C(typing.Dict[str, T]): ...
+        class C(typing.Dict[str, T]): pass
         self.assertEqual(C.__orig_bases__, (typing.Dict[str, T],))
 
     def test_naive_runtime_checks(self):
@@ -655,17 +636,17 @@ class GenericTests(BaseTestCase):
                 KT, VT = tp.__args__
                 return all(isinstance(k, KT) and isinstance(v, VT)
                    for k, v in obj.items())
-        self.assertTrue(naive_dict_check({'x': 1}, typing.Dict[str, int]))
-        self.assertFalse(naive_dict_check({1: 'x'}, typing.Dict[str, int]))
+        self.assertTrue(naive_dict_check({'x': 1}, typing.Dict[typing.Text, int]))
+        self.assertFalse(naive_dict_check({1: 'x'}, typing.Dict[typing.Text, int]))
         with self.assertRaises(NotImplementedError):
-            naive_dict_check({1: 'x'}, typing.Dict[str, T])
+            naive_dict_check({1: 'x'}, typing.Dict[typing.Text, T])
 
         def naive_generic_check(obj, tp):
             # Check if an instance conforms to the generic class
             if not hasattr(obj, '__orig_class__'):
                 raise NotImplementedError
             return obj.__orig_class__ == tp
-        class Node(Generic[T]): ...
+        class Node(Generic[T]): pass
         self.assertTrue(naive_generic_check(Node[int](), Node[int]))
         self.assertFalse(naive_generic_check(Node[str](), Node[int]))
         self.assertFalse(naive_generic_check(Node[str](), List))
@@ -676,7 +657,7 @@ class GenericTests(BaseTestCase):
             # Check if list conforms to a List subclass
             return all(isinstance(x, tp.__orig_bases__[0].__args__[0])
                        for x in obj)
-        class C(List[int]): ...
+        class C(List[int]): pass
         self.assertTrue(naive_list_base_check([1, 2, 3], C))
         self.assertFalse(naive_list_base_check(['a', 'b'], C))
 
@@ -684,8 +665,8 @@ class GenericTests(BaseTestCase):
         T = TypeVar('T')
         U = TypeVar('U')
         V = TypeVar('V')
-        class C(List[T][U][V]): ...
-        class D(C, List[T][U][V]): ...
+        class C(List[T][U][V]): pass
+        class D(C, List[T][U][V]): pass
         self.assertEqual(C.__parameters__, (V,))
         self.assertEqual(D.__parameters__, (V,))
         self.assertEqual(C[int].__parameters__, ())
@@ -709,8 +690,8 @@ class GenericTests(BaseTestCase):
 
         self.assertEqual(Union[T, int][int], int)
         self.assertEqual(Union[T, U][int, Union[int, str]], Union[int, str])
-        class Base: ...
-        class Derived(Base): ...
+        class Base(object): pass
+        class Derived(Base): pass
         self.assertEqual(Union[T, Base][Derived], Base)
         with self.assertRaises(TypeError):
             Union[T, int][1]
@@ -734,16 +715,17 @@ class GenericTests(BaseTestCase):
                          'Callable[[], List[int]]')
 
     def test_generic_forvard_ref(self):
-        def foobar(x: List[List['T']]): ...
+        LLT = List[List['CC']]
+        class CC: pass
+        self.assertEqual(typing._eval_type(LLT, globals(), locals()), List[List[CC]])
         T = TypeVar('T')
-        self.assertEqual(get_type_hints(foobar, globals(), locals()), {'x': List[List[T]]})
-        def barfoo(x: Tuple[T, ...]): ...
-        self.assertIs(get_type_hints(barfoo, globals(), locals())['x'], Tuple[T, ...])
+        TTE = Tuple[T, ...]
+        self.assertIs(typing._eval_type(TTE, globals(), locals()), Tuple[T, ...])
 
     def test_extended_generic_rules_subclassing(self):
-        class T1(Tuple[T, KT]): ...
-        class T2(Tuple[T, ...]): ...
-        class C1(Callable[[T], T]): ...
+        class T1(Tuple[T, KT]): pass
+        class T2(Tuple[T, ...]): pass
+        class C1(Callable[[T], T]): pass
         class C2(Callable[..., int]):
             def __call__(self):
                 return None
@@ -789,17 +771,17 @@ class GenericTests(BaseTestCase):
 
     def test_type_erasure_special(self):
         T = TypeVar('T')
-        class MyTup(Tuple[T, T]): ...
+        class MyTup(Tuple[T, T]): pass
         self.assertIs(MyTup[int]().__class__, MyTup)
         self.assertIs(MyTup[int]().__orig_class__, MyTup[int])
         class MyCall(Callable[..., T]):
             def __call__(self): return None
         self.assertIs(MyCall[T]().__class__, MyCall)
         self.assertIs(MyCall[T]().__orig_class__, MyCall[T])
-        class MyDict(typing.Dict[T, T]): ...
+        class MyDict(typing.Dict[T, T]): pass
         self.assertIs(MyDict[int]().__class__, MyDict)
         self.assertIs(MyDict[int]().__orig_class__, MyDict[int])
-        class MyDef(typing.DefaultDict[str, T]): ...
+        class MyDef(typing.DefaultDict[str, T]): pass
         self.assertIs(MyDef[int]().__class__, MyDef)
         self.assertIs(MyDef[int]().__orig_class__, MyDef[int])
 
@@ -814,21 +796,6 @@ class GenericTests(BaseTestCase):
                 for base in obj.__mro__:
                     self.assertNotEqual(repr(base), '')
                     self.assertEqual(base, base)
-
-    def test_substitution_helper(self):
-        T = TypeVar('T')
-        KT = TypeVar('KT')
-        VT = TypeVar('VT')
-        class Map(Generic[KT, VT]):
-            def meth(self, k: KT, v: VT): ...
-        StrMap = Map[str, T]
-        obj = StrMap[int]()
-
-        new_args = typing._subs_tree(obj.__orig_class__)
-        new_annots = {k: typing._replace_arg(v, type(obj).__parameters__, new_args)
-                      for k, v in obj.meth.__annotations__.items()}
-
-        self.assertEqual(new_annots, {'k': str, 'v': int})
 
     def test_pickle(self):
         global C  # pickle wants to reference the class by name
@@ -858,15 +825,15 @@ class GenericTests(BaseTestCase):
 
     def test_copy_and_deepcopy(self):
         T = TypeVar('T')
-        class Node(Generic[T]): ...
-        things = [Union[T, int], Tuple[T, int], Callable[..., T], Callable[[int], int],
+        class Node(Generic[T]): pass
+        things = [Any, Union[T, int], Tuple[T, int], Callable[..., T], Callable[[int], int],
                   Tuple[Any, Any], Node[T], Node[int], Node[Any], typing.Iterable[T],
                   typing.Iterable[Any], typing.Iterable[int], typing.Dict[int, str],
                   typing.Dict[T, Any], ClassVar[int], ClassVar[List[T]], Tuple['T', 'T'],
                   Union['T', int], List['T'], typing.Mapping['T', int]]
-        for t in things + [Any]:
-            self.assertEqual(t, copy(t))
+        for t in things:
             self.assertEqual(t, deepcopy(t))
+            self.assertEqual(t, copy(t))
 
     def test_errors(self):
         with self.assertRaises(TypeError):
@@ -940,20 +907,20 @@ class GenericTests(BaseTestCase):
 
             a = None
 
-            def set(self, a: T):
+            def set(self, a):
                 self.a = a
 
             def get(self):
                 return self.a
 
-            def visit(self) -> T:
+            def visit(self):
                 return self.a
 
         V = Visitor[typing.List[int]]
 
         class IntListVisitor(V):
 
-            def append(self, x: int):
+            def append(self, x):
                 self.a.append(x)
 
         a = IntListVisitor()
@@ -966,14 +933,14 @@ class GenericTests(BaseTestCase):
         T = TypeVar('T')
 
         class Node(Generic[T]):
-            def __init__(self, label: T,
-                         left: 'Node[T]' = None,
-                         right: 'Node[T]' = None):
+            def __init__(self, label,
+                         left = None,
+                         right = None):
                 self.label = label  # type: T
                 self.left = left  # type: Optional[Node[T]]
                 self.right = right  # type: Optional[Node[T]]
 
-        def foo(x: T):
+        def foo(x):
             a = Node(x)
             b = Node[T](x)
             c = Node[Any](x)
@@ -1064,164 +1031,15 @@ class CastTests(BaseTestCase):
 
 class ForwardRefTests(BaseTestCase):
 
-    def test_basics(self):
-
-        class Node(Generic[T]):
-
-            def __init__(self, label: T):
-                self.label = label
-                self.left = self.right = None
-
-            def add_both(self,
-                         left: 'Optional[Node[T]]',
-                         right: 'Node[T]' = None,
-                         stuff: int = None,
-                         blah=None):
-                self.left = left
-                self.right = right
-
-            def add_left(self, node: Optional['Node[T]']):
-                self.add_both(node, None)
-
-            def add_right(self, node: 'Node[T]' = None):
-                self.add_both(None, node)
-
-        t = Node[int]
-        both_hints = get_type_hints(t.add_both, globals(), locals())
-        self.assertEqual(both_hints['left'], Optional[Node[T]])
-        self.assertEqual(both_hints['right'], Optional[Node[T]])
-        self.assertEqual(both_hints['left'], both_hints['right'])
-        self.assertEqual(both_hints['stuff'], Optional[int])
-        self.assertNotIn('blah', both_hints)
-
-        left_hints = get_type_hints(t.add_left, globals(), locals())
-        self.assertEqual(left_hints['node'], Optional[Node[T]])
-
-        right_hints = get_type_hints(t.add_right, globals(), locals())
-        self.assertEqual(right_hints['node'], Optional[Node[T]])
-
     def test_forwardref_instance_type_error(self):
         fr = typing._ForwardRef('int')
         with self.assertRaises(TypeError):
             isinstance(42, fr)
 
-    def test_union_forward(self):
-
-        def foo(a: Union['T']):
-            pass
-
-        self.assertEqual(get_type_hints(foo, globals(), locals()),
-                         {'a': Union[T]})
-
-    def test_tuple_forward(self):
-
-        def foo(a: Tuple['T']):
-            pass
-
-        self.assertEqual(get_type_hints(foo, globals(), locals()),
-                         {'a': Tuple[T]})
-
-    def test_callable_forward(self):
-
-        def foo(a: Callable[['T'], 'T']):
-            pass
-
-        self.assertEqual(get_type_hints(foo, globals(), locals()),
-                         {'a': Callable[[T], T]})
-
-    def test_callable_with_ellipsis_forward(self):
-
-        def foo(a: 'Callable[..., T]'):
-            pass
-
-        self.assertEqual(get_type_hints(foo, globals(), locals()),
-                         {'a': Callable[..., T]})
-
     def test_syntax_error(self):
 
         with self.assertRaises(SyntaxError):
             Generic['/T']
-
-    def test_delayed_syntax_error(self):
-
-        def foo(a: 'Node[T'):
-            pass
-
-        with self.assertRaises(SyntaxError):
-            get_type_hints(foo)
-
-    def test_type_error(self):
-
-        def foo(a: Tuple['42']):
-            pass
-
-        with self.assertRaises(TypeError):
-            get_type_hints(foo)
-
-    def test_name_error(self):
-
-        def foo(a: 'Noode[T]'):
-            pass
-
-        with self.assertRaises(NameError):
-            get_type_hints(foo, locals())
-
-    def test_no_type_check(self):
-
-        @no_type_check
-        def foo(a: 'whatevers') -> {}:
-            pass
-
-        th = get_type_hints(foo)
-        self.assertEqual(th, {})
-
-    def test_no_type_check_class(self):
-
-        @no_type_check
-        class C:
-            def foo(a: 'whatevers') -> {}:
-                pass
-
-        cth = get_type_hints(C.foo)
-        self.assertEqual(cth, {})
-        ith = get_type_hints(C().foo)
-        self.assertEqual(ith, {})
-
-    def test_meta_no_type_check(self):
-
-        @no_type_check_decorator
-        def magic_decorator(deco):
-            return deco
-
-        self.assertEqual(magic_decorator.__name__, 'magic_decorator')
-
-        @magic_decorator
-        def foo(a: 'whatevers') -> {}:
-            pass
-
-        @magic_decorator
-        class C:
-            def foo(a: 'whatevers') -> {}:
-                pass
-
-        self.assertEqual(foo.__name__, 'foo')
-        th = get_type_hints(foo)
-        self.assertEqual(th, {})
-        cth = get_type_hints(C.foo)
-        self.assertEqual(cth, {})
-        ith = get_type_hints(C().foo)
-        self.assertEqual(ith, {})
-
-    def test_default_globals(self):
-        code = ("class C:\n"
-                "    def foo(self, a: 'C') -> 'D': pass\n"
-                "class D:\n"
-                "    def bar(self, b: 'D') -> C: pass\n"
-                )
-        ns = {}
-        exec(code, ns)
-        hints = get_type_hints(ns['C'].foo)
-        self.assertEqual(hints, {'a': ns['C'], 'return': ns['D']})
 
 
 class OverloadTests(BaseTestCase):
@@ -1253,124 +1071,6 @@ class OverloadTests(BaseTestCase):
         blah()
 
 
-ASYNCIO = sys.version_info[:2] >= (3, 5)
-
-ASYNCIO_TESTS = """
-import asyncio
-
-T_a = TypeVar('T_a')
-
-class AwaitableWrapper(typing.Awaitable[T_a]):
-
-    def __init__(self, value):
-        self.value = value
-
-    def __await__(self) -> typing.Iterator[T_a]:
-        yield
-        return self.value
-
-class AsyncIteratorWrapper(typing.AsyncIterator[T_a]):
-
-    def __init__(self, value: typing.Iterable[T_a]):
-        self.value = value
-
-    def __aiter__(self) -> typing.AsyncIterator[T_a]:
-        return self
-
-    @asyncio.coroutine
-    def __anext__(self) -> T_a:
-        data = yield from self.value
-        if data:
-            return data
-        else:
-            raise StopAsyncIteration
-"""
-
-if ASYNCIO:
-    try:
-        exec(ASYNCIO_TESTS)
-    except ImportError:
-        ASYNCIO = False
-
-PY36 = sys.version_info[:2] >= (3, 6)
-
-PY36_TESTS = """
-from test import ann_module, ann_module2, ann_module3
-from collections import ChainMap
-
-class B:
-    x: ClassVar[Optional['B']] = None
-    y: int
-class CSub(B):
-    z: ClassVar['CSub'] = B()
-class G(Generic[T]):
-    lst: ClassVar[List[T]] = []
-
-class CoolEmployee(NamedTuple):
-    name: str
-    cool: int
-"""
-
-if PY36:
-    exec(PY36_TESTS)
-
-gth = get_type_hints
-
-class GetTypeHintTests(BaseTestCase):
-    @skipUnless(PY36, 'Python 3.6 required')
-    def test_get_type_hints_modules(self):
-        self.assertEqual(gth(ann_module), {1: 2, 'f': Tuple[int, int], 'x': int, 'y': str})
-        self.assertEqual(gth(ann_module2), {})
-        self.assertEqual(gth(ann_module3), {})
-
-    @skipUnless(PY36, 'Python 3.6 required')
-    def test_get_type_hints_classes(self):
-        self.assertEqual(gth(ann_module.C, ann_module.__dict__),
-                         ChainMap({'y': Optional[ann_module.C]}, {}))
-        self.assertEqual(repr(gth(ann_module.j_class)), 'ChainMap({}, {})')
-        self.assertEqual(gth(ann_module.M), ChainMap({'123': 123, 'o': type},
-                                                     {}, {}))
-        self.assertEqual(gth(ann_module.D),
-                         ChainMap({'j': str, 'k': str,
-                                   'y': Optional[ann_module.C]}, {}))
-        self.assertEqual(gth(ann_module.Y), ChainMap({'z': int}, {}))
-        self.assertEqual(gth(ann_module.h_class),
-                         ChainMap({}, {'y': Optional[ann_module.C]}, {}))
-        self.assertEqual(gth(ann_module.S), ChainMap({'x': str, 'y': str},
-                                                     {}))
-        self.assertEqual(gth(ann_module.foo), {'x': int})
-
-    @skipUnless(PY36, 'Python 3.6 required')
-    def test_respect_no_type_check(self):
-        @no_type_check
-        class NoTpCheck:
-            class Inn:
-                def __init__(self, x: 'not a type'): ...
-        self.assertTrue(NoTpCheck.__no_type_check__)
-        self.assertTrue(NoTpCheck.Inn.__init__.__no_type_check__)
-        self.assertEqual(gth(ann_module2.NTC.meth), {})
-        class ABase(Generic[T]):
-            def meth(x: int): ...
-        @no_type_check
-        class Der(ABase): ...
-        self.assertEqual(gth(ABase.meth), {'x': int})
-
-
-    def test_previous_behavior(self):
-        def testf(x, y): ...
-        testf.__annotations__['x'] = 'int'
-        self.assertEqual(gth(testf), {'x': int})
-
-    @skipUnless(PY36, 'Python 3.6 required')
-    def test_get_type_hints_ClassVar(self):
-        self.assertEqual(gth(B, globals()),
-                         ChainMap({'y': int, 'x': ClassVar[Optional[B]]}, {}))
-        self.assertEqual(gth(CSub, globals()),
-                         ChainMap({'z': ClassVar[CSub]},
-                                  {'y': int, 'x': ClassVar[Optional[B]]}, {}))
-        self.assertEqual(gth(G), ChainMap({'lst': ClassVar[List[T]]},{},{}))
-
-
 class CollectionsAbcTests(BaseTestCase):
 
     def test_hashable(self):
@@ -1393,52 +1093,6 @@ class CollectionsAbcTests(BaseTestCase):
         self.assertIsInstance(it, typing.Iterator)
         self.assertNotIsInstance(42, typing.Iterator)
 
-    @skipUnless(ASYNCIO, 'Python 3.5 and multithreading required')
-    def test_awaitable(self):
-        ns = {}
-        exec(
-            "async def foo() -> typing.Awaitable[int]:\n"
-            "    return await AwaitableWrapper(42)\n",
-            globals(), ns)
-        foo = ns['foo']
-        g = foo()
-        self.assertIsInstance(g, typing.Awaitable)
-        self.assertNotIsInstance(foo, typing.Awaitable)
-        g.send(None)  # Run foo() till completion, to avoid warning.
-
-    @skipUnless(ASYNCIO, 'Python 3.5 and multithreading required')
-    def test_coroutine(self):
-        ns = {}
-        exec(
-            "async def foo():\n"
-            "    return\n",
-            globals(), ns)
-        foo = ns['foo']
-        g = foo()
-        self.assertIsInstance(g, typing.Coroutine)
-        with self.assertRaises(TypeError):
-            isinstance(g, typing.Coroutine[int])
-        self.assertNotIsInstance(foo, typing.Coroutine)
-        try:
-            g.send(None)
-        except StopIteration:
-            pass
-
-    @skipUnless(ASYNCIO, 'Python 3.5 and multithreading required')
-    def test_async_iterable(self):
-        base_it = range(10)  # type: Iterator[int]
-        it = AsyncIteratorWrapper(base_it)
-        self.assertIsInstance(it, typing.AsyncIterable)
-        self.assertIsInstance(it, typing.AsyncIterable)
-        self.assertNotIsInstance(42, typing.AsyncIterable)
-
-    @skipUnless(ASYNCIO, 'Python 3.5 and multithreading required')
-    def test_async_iterator(self):
-        base_it = range(10)  # type: Iterator[int]
-        it = AsyncIteratorWrapper(base_it)
-        self.assertIsInstance(it, typing.AsyncIterator)
-        self.assertNotIsInstance(42, typing.AsyncIterator)
-
     def test_sized(self):
         self.assertIsInstance([], typing.Sized)
         self.assertNotIsInstance(42, typing.Sized)
@@ -1446,13 +1100,6 @@ class CollectionsAbcTests(BaseTestCase):
     def test_container(self):
         self.assertIsInstance([], typing.Container)
         self.assertNotIsInstance(42, typing.Container)
-
-    def test_collection(self):
-        if hasattr(typing, 'Collection'):
-            self.assertIsInstance(tuple(), typing.Collection)
-            self.assertIsInstance(frozenset(), typing.Collection)
-            self.assertIsSubclass(dict, typing.Collection)
-            self.assertNotIsInstance(42, typing.Collection)
 
     def test_abstractset(self):
         self.assertIsInstance(set(), typing.AbstractSet)
@@ -1666,10 +1313,10 @@ class CollectionsAbcTests(BaseTestCase):
         self.assertIsSubclass(MMB[str, str], typing.Mapping)
         self.assertIsSubclass(MMC, MMA)
 
-        class I(typing.Iterable): ...
+        class I(typing.Iterable): pass
         self.assertNotIsSubclass(list, I)
 
-        class G(typing.Generator[int, int, int]): ...
+        class G(typing.Generator[int, int, int]): pass
         def g(): yield 0
         self.assertIsSubclass(G, typing.Generator)
         self.assertIsSubclass(G, typing.Iterable)
@@ -1688,87 +1335,75 @@ class CollectionsAbcTests(BaseTestCase):
                 else:
                     return False
 
-        class C(Base): ...
-        class Foo: ...
-        class Bar: ...
+        class C(Base): pass
+        class Foo: pass
+        class Bar: pass
         self.assertIsSubclass(Foo, Base)
         self.assertIsSubclass(Foo, C)
         self.assertNotIsSubclass(Bar, C)
 
     def test_subclassing_register(self):
 
-        class A(typing.Container): ...
-        class B(A): ...
+        class A(typing.Container): pass
+        class B(A): pass
 
-        class C: ...
+        class C: pass
         A.register(C)
         self.assertIsSubclass(C, A)
         self.assertNotIsSubclass(C, B)
 
-        class D: ...
+        class D: pass
         B.register(D)
         self.assertIsSubclass(D, A)
         self.assertIsSubclass(D, B)
 
-        class M(): ...
+        class M(): pass
         collections.MutableMapping.register(M)
         self.assertIsSubclass(M, typing.Mapping)
 
     def test_collections_as_base(self):
 
-        class M(collections.Mapping): ...
+        class M(collections.Mapping): pass
         self.assertIsSubclass(M, typing.Mapping)
         self.assertIsSubclass(M, typing.Iterable)
 
-        class S(collections.MutableSequence): ...
+        class S(collections.MutableSequence): pass
         self.assertIsSubclass(S, typing.MutableSequence)
         self.assertIsSubclass(S, typing.Iterable)
 
-        class I(collections.Iterable): ...
+        class I(collections.Iterable): pass
         self.assertIsSubclass(I, typing.Iterable)
 
-        class A(collections.Mapping, metaclass=abc.ABCMeta): ...
-        class B: ...
+        class A(collections.Mapping): pass
+        class B: pass
         A.register(B)
         self.assertIsSubclass(B, typing.Mapping)
-
-
-class OtherABCTests(BaseTestCase):
-
-    @skipUnless(hasattr(typing, 'ContextManager'),
-                'requires typing.ContextManager')
-    def test_contextmanager(self):
-        @contextlib.contextmanager
-        def manager():
-            yield 42
-
-        cm = manager()
-        self.assertIsInstance(cm, typing.ContextManager)
-        self.assertNotIsInstance(42, typing.ContextManager)
-
 
 class TypeTests(BaseTestCase):
 
     def test_type_basic(self):
 
-        class User: pass
+        class User(object): pass
         class BasicUser(User): pass
         class ProUser(User): pass
 
-        def new_user(user_class: Type[User]) -> User:
+        def new_user(user_class):
+            # type: (Type[User]) -> User
             return user_class()
 
         joe = new_user(BasicUser)
 
     def test_type_typevar(self):
 
-        class User: pass
+        class User(object): pass
         class BasicUser(User): pass
         class ProUser(User): pass
 
+        global U
         U = TypeVar('U', bound=User)
 
-        def new_user(user_class: Type[U]) -> U:
+        def new_user(user_class):
+            # type: (Type[U]) -> U
             return user_class()
 
         joe = new_user(BasicUser)
@@ -1776,7 +1411,8 @@ class TypeTests(BaseTestCase):
     def test_type_optional(self):
         A = Optional[Type[BaseException]]
 
-        def foo(a: A) -> Optional[BaseException]:
+        def foo(a):
+            # type: (A) -> Optional[BaseException]
             if a is None:
                 return None
             else:
@@ -1792,7 +1428,7 @@ class NewTypeTests(BaseTestCase):
         UserId = NewType('UserId', int)
         UserName = NewType('UserName', str)
         self.assertIsInstance(UserId(5), int)
-        self.assertIsInstance(UserName('Joe'), str)
+        self.assertIsInstance(UserName('Joe'), type('Joe'))
         self.assertEqual(UserId(5) + 1, 6)
 
     def test_errors(self):
@@ -1822,17 +1458,6 @@ class NamedTupleTests(BaseTestCase):
         self.assertEqual(Emp._fields, ('name', 'id'))
         self.assertEqual(Emp._field_types, dict(name=str, id=int))
 
-    @skipUnless(PY36, 'Python 3.6 required')
-    def test_annotation_usage(self):
-        tim = CoolEmployee('Tim', 9000)
-        self.assertIsInstance(tim, CoolEmployee)
-        self.assertIsInstance(tim, tuple)
-        self.assertEqual(tim.name, 'Tim')
-        self.assertEqual(tim.cool, 9000)
-        self.assertEqual(CoolEmployee.__name__, 'CoolEmployee')
-        self.assertEqual(CoolEmployee._fields, ('name', 'cool'))
-        self.assertEqual(CoolEmployee._field_types, dict(name=str, cool=int))
-
     def test_pickle(self):
         global Emp  # pickle wants to reference the class by name
         Emp = NamedTuple('Emp', [('name', str), ('id', int)])
@@ -1844,30 +1469,6 @@ class NamedTupleTests(BaseTestCase):
 
 
 class IOTests(BaseTestCase):
-
-    def test_io(self):
-
-        def stuff(a: IO) -> AnyStr:
-            return a.readline()
-
-        a = stuff.__annotations__['a']
-        self.assertEqual(a.__parameters__, (AnyStr,))
-
-    def test_textio(self):
-
-        def stuff(a: TextIO) -> str:
-            return a.readline()
-
-        a = stuff.__annotations__['a']
-        self.assertEqual(a.__parameters__, ())
-
-    def test_binaryio(self):
-
-        def stuff(a: BinaryIO) -> bytes:
-            return a.readline()
-
-        a = stuff.__annotations__['a']
-        self.assertEqual(a.__parameters__, ())
 
     def test_io_submodule(self):
         from typing.io import IO, TextIO, BinaryIO, __all__, __name__
@@ -1913,11 +1514,11 @@ class RETests(BaseTestCase):
 
     def test_repr(self):
         self.assertEqual(repr(Pattern), 'Pattern[~AnyStr]')
+        self.assertEqual(repr(Pattern[unicode]), 'Pattern[unicode]')
         self.assertEqual(repr(Pattern[str]), 'Pattern[str]')
-        self.assertEqual(repr(Pattern[bytes]), 'Pattern[bytes]')
         self.assertEqual(repr(Match), 'Match[~AnyStr]')
+        self.assertEqual(repr(Match[unicode]), 'Match[unicode]')
         self.assertEqual(repr(Match[str]), 'Match[str]')
-        self.assertEqual(repr(Match[bytes]), 'Match[bytes]')
 
     def test_re_submodule(self):
         from typing.re import Match, Pattern, __all__, __name__
@@ -1946,8 +1547,6 @@ class AllTests(BaseTestCase):
         self.assertIn('ValuesView', a)
         self.assertIn('cast', a)
         self.assertIn('overload', a)
-        if hasattr(contextlib, 'AbstractContextManager'):
-            self.assertIn('ContextManager', a)
         # Check that io and re are not exported.
         self.assertNotIn('io', a)
         self.assertNotIn('re', a)
@@ -1956,6 +1555,23 @@ class AllTests(BaseTestCase):
         self.assertNotIn('sys', a)
         # Check that Text is defined.
         self.assertIn('Text', a)
+
+    def test_respect_no_type_check(self):
+        @typing.no_type_check
+        class NoTpCheck(object):
+            class Inn(object):
+                def __init__(self, x): pass
+                    # type: (this is not actualy a type) -> None
+        self.assertTrue(NoTpCheck.__no_type_check__)
+        self.assertTrue(NoTpCheck.Inn.__init__.__no_type_check__)
+
+    def test_get_type_hints_dummy(self):
+
+        def foo(x):
+            # type: (int) -> int
+            return x + 1
+
+        self.assertIsNone(typing.get_type_hints(foo))
 
 
 if __name__ == '__main__':
