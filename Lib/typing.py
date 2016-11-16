@@ -116,11 +116,11 @@ class TypingMeta(type):
 
     _is_protocol = False
 
-    def __new__(cls, name, bases, namespace, *, _root=False):
-        if not _root:
+    def __new__(cls, name, bases, namespace):
+        if not namespace.get('_root', False):
             raise TypeError("Cannot subclass %s" %
                             (', '.join(map(_type_repr, bases)) or '()'))
-        return super().__new__(cls, name, bases, namespace)
+        return super(TypingMeta, cls).__new__(cls, name, bases, namespace)
 
     def __init__(self, *args, **kwds):
         pass
@@ -143,8 +143,10 @@ class TypingMeta(type):
         return '%s.%s' % (self.__module__, qname)
 
 
-class _TypingBase(metaclass=TypingMeta, _root=True):
+class _TypingBase(object):
     """Indicator of special typing constructs."""
+    __metaclass__ = TypingMeta
+    _root = True
 
     __slots__ = ()
 
@@ -162,7 +164,7 @@ class _TypingBase(metaclass=TypingMeta, _root=True):
                 isinstance(args[1], tuple)):
             # Close enough.
             raise TypeError("Cannot subclass %r" % cls)
-        return super().__new__(cls)
+        return super(_TypingBase, cls).__new__(cls)
 
     # Things that are not classes also need these.
     def _eval_type(self, globalns, localns):
@@ -180,17 +182,18 @@ class _TypingBase(metaclass=TypingMeta, _root=True):
         raise TypeError("Cannot instantiate %r" % type(self))
 
 
-class _FinalTypingBase(_TypingBase, _root=True):
+class _FinalTypingBase(_TypingBase):
     """Mix-in class to prevent instantiation.
 
     Prevents instantiation unless _root=True is given in class call.
     It is used to create pseudo-singleton instances Any, Union, Tuple, etc.
     """
 
+    _root = True
     __slots__ = ()
 
     def __new__(cls, *args, _root=False, **kwds):
-        self = super().__new__(cls, *args, **kwds)
+        self = super(_FinalTypingBase, cls).__new__(cls, *args, **kwds)
         if _root is True:
             return self
         raise TypeError("Cannot instantiate %r" % cls)
@@ -199,15 +202,16 @@ class _FinalTypingBase(_TypingBase, _root=True):
         return _trim_name(type(self).__name__)
 
 
-class _ForwardRef(_TypingBase, _root=True):
+class _ForwardRef(_TypingBase):
     """Wrapper to hold a forward reference."""
+    _root = True
 
     __slots__ = ('__forward_arg__', '__forward_code__',
                  '__forward_evaluated__', '__forward_value__',
                  '__forward_frame__')
 
     def __init__(self, arg):
-        super().__init__(arg)
+        super(_ForwardRef, self).__init__(arg)
         if not isinstance(arg, str):
             raise TypeError('ForwardRef must be a string -- got %r' % (arg,))
         try:
@@ -259,7 +263,7 @@ class _ForwardRef(_TypingBase, _root=True):
         return '_ForwardRef(%r)' % (self.__forward_arg__,)
 
 
-class _TypeAlias(_TypingBase, _root=True):
+class _TypeAlias(_TypingBase):
     """Internal helper class for defining generic variants of concrete types.
 
     Note that this is not a type; let's call it a pseudo-type.  It cannot
@@ -268,6 +272,7 @@ class _TypeAlias(_TypingBase, _root=True):
     ``False``.
     """
 
+    _root = True
     __slots__ = ('name', 'type_var', 'impl_type', 'type_checker')
 
     def __init__(self, name, type_var, impl_type, type_checker):
@@ -383,14 +388,14 @@ def _type_repr(obj):
         if obj.__module__ == 'builtins':
             return _qualname(obj)
         return '%s.%s' % (obj.__module__, _qualname(obj))
-    if obj is ...:
+    if obj is Ellipsis:
         return('...')
     if isinstance(obj, types.FunctionType):
         return obj.__name__
     return repr(obj)
 
 
-class _Any(_FinalTypingBase, _root=True):
+class _Any(_FinalTypingBase):
     """Special type indicating an unconstrained type.
 
     - Any is compatible with every type.
@@ -402,6 +407,7 @@ class _Any(_FinalTypingBase, _root=True):
     or class checks.
     """
 
+    _root = True
     __slots__ = ()
 
     def __instancecheck__(self, obj):
@@ -414,7 +420,7 @@ class _Any(_FinalTypingBase, _root=True):
 Any = _Any(_root=True)
 
 
-class TypeVar(_TypingBase, _root=True):
+class TypeVar(_TypingBase):
     """Type variable.
 
     Usage::
@@ -459,12 +465,13 @@ class TypeVar(_TypingBase, _root=True):
       A.__constraints__ == (str, bytes)
     """
 
+    _root = True
     __slots__ = ('__name__', '__bound__', '__constraints__',
                  '__covariant__', '__contravariant__')
 
     def __init__(self, name, *constraints, bound=None,
                 covariant=False, contravariant=False):
-        super().__init__(name, *constraints, bound=bound,
+        super(TypeVar, self).__init__(name, *constraints, bound=bound,
                          covariant=covariant, contravariant=contravariant)
         self.__name__ = name
         if covariant and contravariant:
@@ -618,18 +625,24 @@ def _tp_cache(func):
     original function for non-hashable arguments.
     """
 
-    cached = functools.lru_cache()(func)
+    # TODO/RSI for LRU: get functools.lru_cache
     @functools.wraps(func)
     def inner(*args, **kwds):
-        try:
-            return cached(*args, **kwds)
-        except TypeError:
-            pass  # All real errors (not unhashable args) are raised below.
         return func(*args, **kwds)
     return inner
 
+    #cached = functools.lru_cache()(func)
+    #@functools.wraps(func)
+    #def inner(*args, **kwds):
+    #    try:
+    #        return cached(*args, **kwds)
+    #    except TypeError:
+    #        pass  # All real errors (not unhashable args) are raised below.
+    #    return func(*args, **kwds)
+    #return inner
 
-class _Union(_FinalTypingBase, _root=True):
+
+class _Union(_FinalTypingBase):
     """Union type; Union[X, Y] means either X or Y.
 
     To define a union, use e.g. Union[int, str].  Details:
@@ -673,10 +686,11 @@ class _Union(_FinalTypingBase, _root=True):
     - You can use Optional[X] as a shorthand for Union[X, None].
     """
 
+    _root = True
     __slots__ = ('__parameters__', '__args__', '__origin__', '__tree_hash__')
 
     def __new__(cls, parameters=None, origin=None, *args, _root=False):
-        self = super().__new__(cls, parameters, origin, *args, _root=_root)
+        self = super(_Union, cls).__new__(cls, parameters, origin, *args, _root=_root)
         if origin is None:
             self.__parameters__ = None
             self.__args__ = None
@@ -775,12 +789,13 @@ class _Union(_FinalTypingBase, _root=True):
 Union = _Union(_root=True)
 
 
-class _Optional(_FinalTypingBase, _root=True):
+class _Optional(_FinalTypingBase):
     """Optional type.
 
     Optional[X] is equivalent to Union[X, None].
     """
 
+    _root = True
     __slots__ = ()
 
     @_tp_cache
@@ -874,8 +889,12 @@ def _make_subclasshook(cls):
 class GenericMeta(TypingMeta, abc.ABCMeta):
     """Metaclass for generic types."""
 
-    def __new__(cls, name, bases, namespace,
-                tvars=None, args=None, origin=None, extra=None, orig_bases=None):
+    def __new__(cls, name, bases, namespace):
+        tvars = namespace.get('tvars')
+        args = namespace.get('args')
+        origin = namespace.get('origin')
+        extra = namespace.get('extra')
+        orig_bases = namespace.get('orig_bases')
         if tvars is not None:
             # Called from __getitem__() below.
             assert origin is not None
@@ -924,12 +943,13 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
         # remove bare Generic from bases if there are other generic bases
         if any(isinstance(b, GenericMeta) and b is not Generic for b in bases):
             bases = tuple(b for b in bases if b is not Generic)
-        self = super().__new__(cls, name, bases, namespace, _root=True)
+        namespace['_root'] = True
+        self = super(GenericMeta, cls).__new__(cls, name, bases, namespace)
 
         self.__parameters__ = tvars
         # Be prepared that GenericMeta will be subclassed by TupleMeta
         # and CallableMeta, those two allow ..., (), or [] in __args___.
-        self.__args__ = tuple(... if a is _TypingEllipsis else
+        self.__args__ = tuple(Ellipsis if a is _TypingEllipsis else
                               () if a is _TypingEmpty else
                               a for a in args) if args else None
         self.__origin__ = origin
@@ -1042,14 +1062,16 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
             _check_generic(self, params)
             tvars = _type_vars(params)
             args = params
+
+        d = dict(self.__dict__)
+        d['tvars'] = tvars
+        d['args'] = args
+        d['origin'] = self
+        d['extra'] = self.__extra__
+        d['orig_bases'] = self.__orig_bases__
         return self.__class__(self.__name__,
                               self.__bases__,
-                              dict(self.__dict__),
-                              tvars=tvars,
-                              args=args,
-                              origin=self,
-                              extra=self.__extra__,
-                              orig_bases=self.__orig_bases__)
+                              d)
 
     def __instancecheck__(self, instance):
         # Since we extend ABC.__subclasscheck__ and
@@ -1085,7 +1107,7 @@ def _generic_new(base_cls, cls, *args, **kwds):
         return obj
 
 
-class Generic(metaclass=GenericMeta):
+class Generic(object):
     """Abstract base class for generic types.
 
     A generic type is typically declared by inheriting from an
@@ -1105,6 +1127,7 @@ class Generic(metaclass=GenericMeta):
           except KeyError:
               return default
     """
+    __metaclass__ = GenericMeta
 
     __slots__ = ()
 
@@ -1115,14 +1138,14 @@ class Generic(metaclass=GenericMeta):
         return _generic_new(cls.__next_in_mro__, cls, *args, **kwds)
 
 
-class _TypingEmpty:
+class _TypingEmpty(object):
     """Placeholder for () or []. Used by TupleMeta and CallableMeta
     to allow empy list/tuple in specific places, without allowing them
     to sneak in where prohibited.
     """
 
 
-class _TypingEllipsis:
+class _TypingEllipsis(object):
     """Ditto for ..."""
 
 
@@ -1139,7 +1162,7 @@ class TupleMeta(GenericMeta):
             return super().__getitem__((_TypingEmpty,))
         if not isinstance(parameters, tuple):
             parameters = (parameters,)
-        if len(parameters) == 2 and parameters[1] is ...:
+        if len(parameters) == 2 and parameters[1] is Ellipsis:
             msg = "Tuple[t, ...]: t must be a type."
             p = _type_check(parameters[0], msg)
             return super().__getitem__((p, _TypingEllipsis))
@@ -1160,7 +1183,7 @@ class TupleMeta(GenericMeta):
                         "with issubclass().")
 
 
-class Tuple(tuple, extra=tuple, metaclass=TupleMeta):
+class Tuple(tuple):
     """Tuple type; Tuple[X, Y] is the cross-product type of X and Y.
 
     Example: Tuple[T1, T2] is a tuple of two elements corresponding
@@ -1169,6 +1192,8 @@ class Tuple(tuple, extra=tuple, metaclass=TupleMeta):
 
     To specify a variable-length tuple of homogeneous type, use Tuple[T, ...].
     """
+    __metaclass__ = TupleMeta
+    extra = tuple
 
     __slots__ = ()
 
@@ -1184,7 +1209,7 @@ class CallableMeta(GenericMeta):
 
     def __repr__(self):
         if self.__origin__ is None:
-            return super().__repr__()
+            return super(CallableMeta, self).__repr__()
         return self._tree_repr(self._subs_tree())
 
     def _tree_repr(self, tree):
@@ -1216,8 +1241,8 @@ class CallableMeta(GenericMeta):
             raise TypeError("Callable must be used as "
                             "Callable[[arg, ...], result].")
         args, result = parameters
-        if args is ...:
-            parameters = (..., result)
+        if args is Ellipsis:
+            parameters = (Ellipsis, result)
         elif args == []:
             parameters = ((), result)
         else:
@@ -1229,10 +1254,10 @@ class CallableMeta(GenericMeta):
 
     @_tp_cache
     def __getitem_inner__(self, parameters):
-        *args, result = parameters
+        args, result = parameters[:-1], parameters[-1]
         msg = "Callable[args, result]: result must be a type."
         result = _type_check(result, msg)
-        if args == [...,]:
+        if args == [Ellipsis,]:
             return super().__getitem__((_TypingEllipsis, result))
         if args == [(),]:
             return super().__getitem__((_TypingEmpty, result))
@@ -1242,7 +1267,7 @@ class CallableMeta(GenericMeta):
         return super().__getitem__(parameters)
 
 
-class Callable(extra=collections_abc.Callable, metaclass = CallableMeta):
+class Callable(object):
     """Callable type; Callable[[int], str] is a function of (int) -> str.
 
     The subscription syntax must always be used with exactly two
@@ -1252,6 +1277,8 @@ class Callable(extra=collections_abc.Callable, metaclass = CallableMeta):
     There is no syntax to indicate optional or keyword arguments,
     such function types are rarely used as callback types.
     """
+    __metaclass__ = CallableMeta
+    extra = collections_abc.Callable
 
     __slots__ = ()
 
@@ -1262,7 +1289,7 @@ class Callable(extra=collections_abc.Callable, metaclass = CallableMeta):
         return _generic_new(cls.__next_in_mro__, cls, *args, **kwds)
 
 
-class _ClassVar(_FinalTypingBase, _root=True):
+class _ClassVar(_FinalTypingBase):
     """Special type construct to mark class variables.
 
     An annotation wrapped in ClassVar indicates that a given
@@ -1279,6 +1306,7 @@ class _ClassVar(_FinalTypingBase, _root=True):
     be used with isinstance() or issubclass().
     """
 
+    _root = True
     __slots__ = ('__type__',)
 
     def __init__(self, tp=None, **kwds):
@@ -1316,7 +1344,7 @@ class _ClassVar(_FinalTypingBase, _root=True):
         return self is other
 
 
-ClassVar = _ClassVar(_root=True)
+ClassVar = _ClassVar(_root=True)   # TODO/RSI
 
 
 def cast(typ, val):
@@ -1625,13 +1653,14 @@ class _ProtocolMeta(GenericMeta):
         return attrs
 
 
-class _Protocol(metaclass=_ProtocolMeta):
+class _Protocol(object):
     """Internal base class for protocol classes.
 
     This implements a simple-minded structural isinstance check
     (similar but more general than the one-offs in collections.abc
     such as Hashable).
     """
+    __metaclass__ = _ProtocolMeta
 
     __slots__ = ()
 
@@ -1644,39 +1673,42 @@ class _Protocol(metaclass=_ProtocolMeta):
 Hashable = collections_abc.Hashable  # Not generic.
 
 
-if hasattr(collections_abc, 'Awaitable'):
-    class Awaitable(Generic[T_co], extra=collections_abc.Awaitable):
-        __slots__ = ()
+# TODO/RSI uncomment
+#if hasattr(collections_abc, 'Awaitable'):
+#    class Awaitable(Generic[T_co], extra=collections_abc.Awaitable):
+#        __slots__ = ()
+#
+#    __all__.append('Awaitable')
+#
+#
+#if hasattr(collections_abc, 'Coroutine'):
+#    class Coroutine(Awaitable[V_co], Generic[T_co, T_contra, V_co],
+#                    extra=collections_abc.Coroutine):
+#        __slots__ = ()
+#
+#    __all__.append('Coroutine')
+#
+#
+#if hasattr(collections_abc, 'AsyncIterable'):
+#
+#    class AsyncIterable(Generic[T_co], extra=collections_abc.AsyncIterable):
+#        __slots__ = ()
+#
+#    class AsyncIterator(AsyncIterable[T_co],
+#                        extra=collections_abc.AsyncIterator):
+#        __slots__ = ()
+#
+#    __all__.append('AsyncIterable')
+#    __all__.append('AsyncIterator')
 
-    __all__.append('Awaitable')
 
-
-if hasattr(collections_abc, 'Coroutine'):
-    class Coroutine(Awaitable[V_co], Generic[T_co, T_contra, V_co],
-                    extra=collections_abc.Coroutine):
-        __slots__ = ()
-
-    __all__.append('Coroutine')
-
-
-if hasattr(collections_abc, 'AsyncIterable'):
-
-    class AsyncIterable(Generic[T_co], extra=collections_abc.AsyncIterable):
-        __slots__ = ()
-
-    class AsyncIterator(AsyncIterable[T_co],
-                        extra=collections_abc.AsyncIterator):
-        __slots__ = ()
-
-    __all__.append('AsyncIterable')
-    __all__.append('AsyncIterator')
-
-
-class Iterable(Generic[T_co], extra=collections_abc.Iterable):
+class Iterable(Generic[T_co]):
+    extra = collections_abc.Iterable
     __slots__ = ()
 
 
-class Iterator(Iterable[T_co], extra=collections_abc.Iterator):
+class Iterator(Iterable[T_co]):
+    extra = collections_abc.Iterator
     __slots__ = ()
 
 
@@ -1729,7 +1761,8 @@ class SupportsRound(_Protocol[T_co]):
 
 
 if hasattr(collections_abc, 'Reversible'):
-    class Reversible(Iterable[T_co], extra=collections_abc.Reversible):
+    class Reversible(Iterable[T_co]):
+        extra = collections_abc.Reversible
         __slots__ = ()
 else:
     class Reversible(_Protocol[T_co]):
@@ -1743,13 +1776,14 @@ else:
 Sized = collections_abc.Sized  # Not generic.
 
 
-class Container(Generic[T_co], extra=collections_abc.Container):
+class Container(Generic[T_co]):
+    extra = collections_abc.Container
     __slots__ = ()
 
 
 if hasattr(collections_abc, 'Collection'):
-    class Collection(Sized, Iterable[T_co], Container[T_co],
-                     extra=collections_abc.Collection):
+    class Collection(Sized, Iterable[T_co], Container[T_co]):
+        extra = collections_abc.Collection
         __slots__ = ()
 
     __all__.append('Collection')
@@ -1758,434 +1792,440 @@ if hasattr(collections_abc, 'Collection'):
 # Callable was defined earlier.
 
 if hasattr(collections_abc, 'Collection'):
-    class AbstractSet(Collection[T_co],
-                      extra=collections_abc.Set):
+    class AbstractSet(Collection[T_co]):
+        extra = collections_abc.Set
         __slots__ = ()
 else:
-    class AbstractSet(Sized, Iterable[T_co], Container[T_co],
-                      extra=collections_abc.Set):
+    class AbstractSet(Sized, Iterable[T_co], Container[T_co]):
+                      
+        extra = collections_abc.Set
         __slots__ = ()
 
 
-class MutableSet(AbstractSet[T], extra=collections_abc.MutableSet):
+class MutableSet(AbstractSet[T]):
+    extra = collections_abc.MutableSet
     __slots__ = ()
 
 
-# NOTE: It is only covariant in the value type.
-if hasattr(collections_abc, 'Collection'):
-    class Mapping(Collection[KT], Generic[KT, VT_co],
-                  extra=collections_abc.Mapping):
-        __slots__ = ()
-else:
-    class Mapping(Sized, Iterable[KT], Container[KT], Generic[KT, VT_co],
-                  extra=collections_abc.Mapping):
-        __slots__ = ()
-
-
-class MutableMapping(Mapping[KT, VT], extra=collections_abc.MutableMapping):
-    __slots__ = ()
-
-if hasattr(collections_abc, 'Reversible'):
-    if hasattr(collections_abc, 'Collection'):
-        class Sequence(Reversible[T_co], Collection[T_co],
-                   extra=collections_abc.Sequence):
-            __slots__ = ()
-    else:
-        class Sequence(Sized, Reversible[T_co], Container[T_co],
-                   extra=collections_abc.Sequence):
-            __slots__ = ()
-else:
-    class Sequence(Sized, Iterable[T_co], Container[T_co],
-                   extra=collections_abc.Sequence):
-        __slots__ = ()
-
-
-class MutableSequence(Sequence[T], extra=collections_abc.MutableSequence):
-    __slots__ = ()
-
-
-class ByteString(Sequence[int], extra=collections_abc.ByteString):
-    __slots__ = ()
-
-
-class List(list, MutableSequence[T], extra=list):
-
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, List):
-            raise TypeError("Type List cannot be instantiated; "
-                            "use list() instead")
-        return _generic_new(list, cls, *args, **kwds)
-
-
-class Set(set, MutableSet[T], extra=set):
-
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, Set):
-            raise TypeError("Type Set cannot be instantiated; "
-                            "use set() instead")
-        return _generic_new(set, cls, *args, **kwds)
-
-
-class FrozenSet(frozenset, AbstractSet[T_co], extra=frozenset):
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, FrozenSet):
-            raise TypeError("Type FrozenSet cannot be instantiated; "
-                            "use frozenset() instead")
-        return _generic_new(frozenset, cls, *args, **kwds)
-
-
-class MappingView(Sized, Iterable[T_co], extra=collections_abc.MappingView):
-    __slots__ = ()
-
-
-class KeysView(MappingView[KT], AbstractSet[KT],
-               extra=collections_abc.KeysView):
-    __slots__ = ()
-
-
-class ItemsView(MappingView[Tuple[KT, VT_co]],
-                AbstractSet[Tuple[KT, VT_co]],
-                Generic[KT, VT_co],
-                extra=collections_abc.ItemsView):
-    __slots__ = ()
-
-
-class ValuesView(MappingView[VT_co], extra=collections_abc.ValuesView):
-    __slots__ = ()
-
-
-if hasattr(contextlib, 'AbstractContextManager'):
-    class ContextManager(Generic[T_co], extra=contextlib.AbstractContextManager):
-        __slots__ = ()
-    __all__.append('ContextManager')
-
-
-class Dict(dict, MutableMapping[KT, VT], extra=dict):
-
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, Dict):
-            raise TypeError("Type Dict cannot be instantiated; "
-                            "use dict() instead")
-        return _generic_new(dict, cls, *args, **kwds)
-
-class DefaultDict(collections.defaultdict, MutableMapping[KT, VT],
-                  extra=collections.defaultdict):
-
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, DefaultDict):
-            raise TypeError("Type DefaultDict cannot be instantiated; "
-                            "use collections.defaultdict() instead")
-        return _generic_new(collections.defaultdict, cls, *args, **kwds)
-
-# Determine what base class to use for Generator.
-if hasattr(collections_abc, 'Generator'):
-    # Sufficiently recent versions of 3.5 have a Generator ABC.
-    _G_base = collections_abc.Generator
-else:
-    # Fall back on the exact type.
-    _G_base = types.GeneratorType
-
-
-class Generator(Iterator[T_co], Generic[T_co, T_contra, V_co],
-                extra=_G_base):
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwds):
-        if _geqv(cls, Generator):
-            raise TypeError("Type Generator cannot be instantiated; "
-                            "create a subclass instead")
-        return _generic_new(_G_base, cls, *args, **kwds)
-
-
-# Internal type variable used for Type[].
-CT_co = TypeVar('CT_co', covariant=True, bound=type)
-
-
-# This is not a real generic class.  Don't use outside annotations.
-class Type(Generic[CT_co], extra=type):
-    """A special construct usable to annotate class objects.
-
-    For example, suppose we have the following classes::
-
-      class User: ...  # Abstract base for User classes
-      class BasicUser(User): ...
-      class ProUser(User): ...
-      class TeamUser(User): ...
-
-    And a function that takes a class argument that's a subclass of
-    User and returns an instance of the corresponding class::
-
-      U = TypeVar('U', bound=User)
-      def new_user(user_class: Type[U]) -> U:
-          user = user_class()
-          # (Here we could write the user object to a database)
-          return user
-
-      joe = new_user(BasicUser)
-
-    At this point the type checker knows that joe has type BasicUser.
-    """
-
-    __slots__ = ()
-
-
-def _make_nmtuple(name, types):
-    nm_tpl = collections.namedtuple(name, [n for n, t in types])
-    nm_tpl._field_types = dict(types)
-    try:
-        nm_tpl.__module__ = sys._getframe(2).f_globals.get('__name__', '__main__')
-    except (AttributeError, ValueError):
-        pass
-    return nm_tpl
-
-
-if sys.version_info[:2] >= (3, 6):
-    class NamedTupleMeta(type):
-
-        def __new__(cls, typename, bases, ns, *, _root=False):
-            if _root:
-                return super().__new__(cls, typename, bases, ns)
-            types = ns.get('__annotations__', {})
-            return _make_nmtuple(typename, types.items())
-
-    class NamedTuple(metaclass=NamedTupleMeta, _root=True):
-        """Typed version of namedtuple.
-
-        Usage::
-
-            class Employee(NamedTuple):
-                name: str
-                id: int
-
-        This is equivalent to::
-
-            Employee = collections.namedtuple('Employee', ['name', 'id'])
-
-        The resulting class has one extra attribute: _field_types,
-        giving a dict mapping field names to types.  (The field names
-        are in the _fields attribute, which is part of the namedtuple
-        API.) Backward-compatible usage::
-
-            Employee = NamedTuple('Employee', [('name', str), ('id', int)])
-        """
-
-        def __new__(self, typename, fields):
-            return _make_nmtuple(typename, fields)
-else:
-    def NamedTuple(typename, fields):
-        """Typed version of namedtuple.
-
-        Usage::
-
-            Employee = typing.NamedTuple('Employee', [('name', str), 'id', int)])
-
-        This is equivalent to::
-
-            Employee = collections.namedtuple('Employee', ['name', 'id'])
-
-        The resulting class has one extra attribute: _field_types,
-        giving a dict mapping field names to types.  (The field names
-        are in the _fields attribute, which is part of the namedtuple
-        API.)
-        """
-        return _make_nmtuple(typename, fields)
-
-
-def NewType(name, tp):
-    """NewType creates simple unique types with almost zero
-    runtime overhead. NewType(name, tp) is considered a subtype of tp
-    by static type checkers. At runtime, NewType(name, tp) returns
-    a dummy function that simply returns its argument. Usage::
-
-        UserId = NewType('UserId', int)
-
-        def name_by_id(user_id: UserId) -> str:
-            ...
-
-        UserId('user')          # Fails type check
-
-        name_by_id(42)          # Fails type check
-        name_by_id(UserId(42))  # OK
-
-        num = UserId(5) + 1     # type: int
-    """
-
-    def new_type(x):
-        return x
-
-    new_type.__name__ = name
-    new_type.__supertype__ = tp
-    return new_type
-
-
-# Python-version-specific alias (Python 2: unicode; Python 3: str)
-Text = str
-
-
-# Constant that's True when type checking, but False here.
-TYPE_CHECKING = False
-
-
-class IO(Generic[AnyStr]):
-    """Generic base class for TextIO and BinaryIO.
-
-    This is an abstract, generic version of the return of open().
-
-    NOTE: This does not distinguish between the different possible
-    classes (text vs. binary, read vs. write vs. read/write,
-    append-only, unbuffered).  The TextIO and BinaryIO subclasses
-    below capture the distinctions between text vs. binary, which is
-    pervasive in the interface; however we currently do not offer a
-    way to track the other distinctions in the type system.
-    """
-
-    __slots__ = ()
-
-    @abstractproperty
-    def mode(self) -> str:
-        pass
-
-    @abstractproperty
-    def name(self) -> str:
-        pass
-
-    @abstractmethod
-    def close(self) -> None:
-        pass
-
-    @abstractmethod
-    def closed(self) -> bool:
-        pass
-
-    @abstractmethod
-    def fileno(self) -> int:
-        pass
-
-    @abstractmethod
-    def flush(self) -> None:
-        pass
-
-    @abstractmethod
-    def isatty(self) -> bool:
-        pass
-
-    @abstractmethod
-    def read(self, n: int = -1) -> AnyStr:
-        pass
-
-    @abstractmethod
-    def readable(self) -> bool:
-        pass
-
-    @abstractmethod
-    def readline(self, limit: int = -1) -> AnyStr:
-        pass
-
-    @abstractmethod
-    def readlines(self, hint: int = -1) -> List[AnyStr]:
-        pass
-
-    @abstractmethod
-    def seek(self, offset: int, whence: int = 0) -> int:
-        pass
-
-    @abstractmethod
-    def seekable(self) -> bool:
-        pass
-
-    @abstractmethod
-    def tell(self) -> int:
-        pass
-
-    @abstractmethod
-    def truncate(self, size: int = None) -> int:
-        pass
-
-    @abstractmethod
-    def writable(self) -> bool:
-        pass
-
-    @abstractmethod
-    def write(self, s: AnyStr) -> int:
-        pass
-
-    @abstractmethod
-    def writelines(self, lines: List[AnyStr]) -> None:
-        pass
-
-    @abstractmethod
-    def __enter__(self) -> 'IO[AnyStr]':
-        pass
-
-    @abstractmethod
-    def __exit__(self, type, value, traceback) -> None:
-        pass
-
-
-class BinaryIO(IO[bytes]):
-    """Typed version of the return of open() in binary mode."""
-
-    __slots__ = ()
-
-    @abstractmethod
-    def write(self, s: Union[bytes, bytearray]) -> int:
-        pass
-
-    @abstractmethod
-    def __enter__(self) -> 'BinaryIO':
-        pass
-
-
-class TextIO(IO[str]):
-    """Typed version of the return of open() in text mode."""
-
-    __slots__ = ()
-
-    @abstractproperty
-    def buffer(self) -> BinaryIO:
-        pass
-
-    @abstractproperty
-    def encoding(self) -> str:
-        pass
-
-    @abstractproperty
-    def errors(self) -> str:
-        pass
-
-    @abstractproperty
-    def line_buffering(self) -> bool:
-        pass
-
-    @abstractproperty
-    def newlines(self) -> Any:
-        pass
-
-    @abstractmethod
-    def __enter__(self) -> 'TextIO':
-        pass
-
-
-class io:
-    """Wrapper namespace for IO generic classes."""
-
-    __all__ = ['IO', 'TextIO', 'BinaryIO']
-    IO = IO
-    TextIO = TextIO
-    BinaryIO = BinaryIO
-
-io.__name__ = __name__ + '.io'
-sys.modules[io.__name__] = io
+# TODO/RSI fix and uncomment
+## NOTE: It is only covariant in the value type.
+#if hasattr(collections_abc, 'Collection'):
+#    class Mapping(Collection[KT], Generic[KT, VT_co],
+#                  extra=collections_abc.Mapping):
+#        __slots__ = ()
+#else:
+#    class Mapping(Sized, Iterable[KT], Container[KT], Generic[KT, VT_co],
+#                  extra=collections_abc.Mapping):
+#        __slots__ = ()
+#
+#
+#class MutableMapping(Mapping[KT, VT], extra=collections_abc.MutableMapping):
+#    __slots__ = ()
+#
+#if hasattr(collections_abc, 'Reversible'):
+#    if hasattr(collections_abc, 'Collection'):
+#        class Sequence(Reversible[T_co], Collection[T_co],
+#                   extra=collections_abc.Sequence):
+#            __slots__ = ()
+#    else:
+#        class Sequence(Sized, Reversible[T_co], Container[T_co],
+#                   extra=collections_abc.Sequence):
+#            __slots__ = ()
+#else:
+#    class Sequence(Sized, Iterable[T_co], Container[T_co],
+#                   extra=collections_abc.Sequence):
+#        __slots__ = ()
+#
+#
+#class MutableSequence(Sequence[T], extra=collections_abc.MutableSequence):
+#    __slots__ = ()
+#
+#
+#class ByteString(Sequence[int], extra=collections_abc.ByteString):
+#    __slots__ = ()
+#
+#
+#class List(list, MutableSequence[T], extra=list):
+#
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, List):
+#            raise TypeError("Type List cannot be instantiated; "
+#                            "use list() instead")
+#        return _generic_new(list, cls, *args, **kwds)
+#
+#
+#class Set(set, MutableSet[T], extra=set):
+#
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, Set):
+#            raise TypeError("Type Set cannot be instantiated; "
+#                            "use set() instead")
+#        return _generic_new(set, cls, *args, **kwds)
+#
+#
+#class FrozenSet(frozenset, AbstractSet[T_co], extra=frozenset):
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, FrozenSet):
+#            raise TypeError("Type FrozenSet cannot be instantiated; "
+#                            "use frozenset() instead")
+#        return _generic_new(frozenset, cls, *args, **kwds)
+#
+#
+#class MappingView(Sized, Iterable[T_co], extra=collections_abc.MappingView):
+#    __slots__ = ()
+#
+#
+#class KeysView(MappingView[KT], AbstractSet[KT],
+#               extra=collections_abc.KeysView):
+#    __slots__ = ()
+#
+#
+#class ItemsView(MappingView[Tuple[KT, VT_co]],
+#                AbstractSet[Tuple[KT, VT_co]],
+#                Generic[KT, VT_co],
+#                extra=collections_abc.ItemsView):
+#    __slots__ = ()
+#
+#
+#class ValuesView(MappingView[VT_co], extra=collections_abc.ValuesView):
+#    __slots__ = ()
+#
+#
+#if hasattr(contextlib, 'AbstractContextManager'):
+#    class ContextManager(Generic[T_co], extra=contextlib.AbstractContextManager):
+#        __slots__ = ()
+#    __all__.append('ContextManager')
+#
+#
+#class Dict(dict, MutableMapping[KT, VT], extra=dict):
+#
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, Dict):
+#            raise TypeError("Type Dict cannot be instantiated; "
+#                            "use dict() instead")
+#        return _generic_new(dict, cls, *args, **kwds)
+#
+#class DefaultDict(collections.defaultdict, MutableMapping[KT, VT],
+#                  extra=collections.defaultdict):
+#
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, DefaultDict):
+#            raise TypeError("Type DefaultDict cannot be instantiated; "
+#                            "use collections.defaultdict() instead")
+#        return _generic_new(collections.defaultdict, cls, *args, **kwds)
+#
+## Determine what base class to use for Generator.
+#if hasattr(collections_abc, 'Generator'):
+#    # Sufficiently recent versions of 3.5 have a Generator ABC.
+#    _G_base = collections_abc.Generator
+#else:
+#    # Fall back on the exact type.
+#    _G_base = types.GeneratorType
+#
+#
+#class Generator(Iterator[T_co], Generic[T_co, T_contra, V_co],
+#                extra=_G_base):
+#    __slots__ = ()
+#
+#    def __new__(cls, *args, **kwds):
+#        if _geqv(cls, Generator):
+#            raise TypeError("Type Generator cannot be instantiated; "
+#                            "create a subclass instead")
+#        return _generic_new(_G_base, cls, *args, **kwds)
+#
+#
+## Internal type variable used for Type[].
+#CT_co = TypeVar('CT_co', covariant=True, bound=type)
+#
+#
+## This is not a real generic class.  Don't use outside annotations.
+#class Type(Generic[CT_co], extra=type):
+#    """A special construct usable to annotate class objects.
+#
+#    For example, suppose we have the following classes::
+#
+#      class User: ...  # Abstract base for User classes
+#      class BasicUser(User): ...
+#      class ProUser(User): ...
+#      class TeamUser(User): ...
+#
+#    And a function that takes a class argument that's a subclass of
+#    User and returns an instance of the corresponding class::
+#
+#      U = TypeVar('U', bound=User)
+#      def new_user(user_class: Type[U]) -> U:
+#          user = user_class()
+#          # (Here we could write the user object to a database)
+#          return user
+#
+#      joe = new_user(BasicUser)
+#
+#    At this point the type checker knows that joe has type BasicUser.
+#    """
+#
+#    __slots__ = ()
+#
+#
+#def _make_nmtuple(name, types):
+#    nm_tpl = collections.namedtuple(name, [n for n, t in types])
+#    nm_tpl._field_types = dict(types)
+#    try:
+#        nm_tpl.__module__ = sys._getframe(2).f_globals.get('__name__', '__main__')
+#    except (AttributeError, ValueError):
+#        pass
+#    return nm_tpl
+#
+#
+#if sys.version_info[:2] >= (3, 6):
+#    class NamedTupleMeta(type):
+#
+#        def __new__(cls, typename, bases, ns):
+#            _root = ns.get('_root', False)
+#            if _root:
+#                return super().__new__(cls, typename, bases, ns)
+#            types = ns.get('__annotations__', {})
+#            return _make_nmtuple(typename, types.items())
+#
+#    class NamedTuple(object):
+#        """Typed version of namedtuple.
+#
+#        Usage::
+#
+#            class Employee(NamedTuple):
+#                name: str
+#                id: int
+#
+#        This is equivalent to::
+#
+#            Employee = collections.namedtuple('Employee', ['name', 'id'])
+#
+#        The resulting class has one extra attribute: _field_types,
+#        giving a dict mapping field names to types.  (The field names
+#        are in the _fields attribute, which is part of the namedtuple
+#        API.) Backward-compatible usage::
+#
+#            Employee = NamedTuple('Employee', [('name', str), ('id', int)])
+#        """
+#        __metaclass__ = NamedTupleMeta
+#        _root = True
+#
+#        def __new__(self, typename, fields):
+#            return _make_nmtuple(typename, fields)
+#else:
+#    def NamedTuple(typename, fields):
+#        """Typed version of namedtuple.
+#
+#        Usage::
+#
+#            Employee = typing.NamedTuple('Employee', [('name', str), 'id', int)])
+#
+#        This is equivalent to::
+#
+#            Employee = collections.namedtuple('Employee', ['name', 'id'])
+#
+#        The resulting class has one extra attribute: _field_types,
+#        giving a dict mapping field names to types.  (The field names
+#        are in the _fields attribute, which is part of the namedtuple
+#        API.)
+#        """
+#        return _make_nmtuple(typename, fields)
+#
+#
+#def NewType(name, tp):
+#    """NewType creates simple unique types with almost zero
+#    runtime overhead. NewType(name, tp) is considered a subtype of tp
+#    by static type checkers. At runtime, NewType(name, tp) returns
+#    a dummy function that simply returns its argument. Usage::
+#
+#        UserId = NewType('UserId', int)
+#
+#        def name_by_id(user_id: UserId) -> str:
+#            ...
+#
+#        UserId('user')          # Fails type check
+#
+#        name_by_id(42)          # Fails type check
+#        name_by_id(UserId(42))  # OK
+#
+#        num = UserId(5) + 1     # type: int
+#    """
+#
+#    def new_type(x):
+#        return x
+#
+#    new_type.__name__ = name
+#    new_type.__supertype__ = tp
+#    return new_type
+#
+#
+## Python-version-specific alias (Python 2: unicode; Python 3: str)
+#Text = str
+#
+#
+## Constant that's True when type checking, but False here.
+#TYPE_CHECKING = False
+#
+#
+#class IO(Generic[AnyStr]):
+#    """Generic base class for TextIO and BinaryIO.
+#
+#    This is an abstract, generic version of the return of open().
+#
+#    NOTE: This does not distinguish between the different possible
+#    classes (text vs. binary, read vs. write vs. read/write,
+#    append-only, unbuffered).  The TextIO and BinaryIO subclasses
+#    below capture the distinctions between text vs. binary, which is
+#    pervasive in the interface; however we currently do not offer a
+#    way to track the other distinctions in the type system.
+#    """
+#
+#    __slots__ = ()
+#
+#    @abstractproperty
+#    def mode(self) -> str:
+#        pass
+#
+#    @abstractproperty
+#    def name(self) -> str:
+#        pass
+#
+#    @abstractmethod
+#    def close(self) -> None:
+#        pass
+#
+#    @abstractmethod
+#    def closed(self) -> bool:
+#        pass
+#
+#    @abstractmethod
+#    def fileno(self) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def flush(self) -> None:
+#        pass
+#
+#    @abstractmethod
+#    def isatty(self) -> bool:
+#        pass
+#
+#    @abstractmethod
+#    def read(self, n: int = -1) -> AnyStr:
+#        pass
+#
+#    @abstractmethod
+#    def readable(self) -> bool:
+#        pass
+#
+#    @abstractmethod
+#    def readline(self, limit: int = -1) -> AnyStr:
+#        pass
+#
+#    @abstractmethod
+#    def readlines(self, hint: int = -1) -> List[AnyStr]:
+#        pass
+#
+#    @abstractmethod
+#    def seek(self, offset: int, whence: int = 0) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def seekable(self) -> bool:
+#        pass
+#
+#    @abstractmethod
+#    def tell(self) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def truncate(self, size: int = None) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def writable(self) -> bool:
+#        pass
+#
+#    @abstractmethod
+#    def write(self, s: AnyStr) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def writelines(self, lines: List[AnyStr]) -> None:
+#        pass
+#
+#    @abstractmethod
+#    def __enter__(self) -> 'IO[AnyStr]':
+#        pass
+#
+#    @abstractmethod
+#    def __exit__(self, type, value, traceback) -> None:
+#        pass
+#
+#
+#class BinaryIO(IO[bytes]):
+#    """Typed version of the return of open() in binary mode."""
+#
+#    __slots__ = ()
+#
+#    @abstractmethod
+#    def write(self, s: Union[bytes, bytearray]) -> int:
+#        pass
+#
+#    @abstractmethod
+#    def __enter__(self) -> 'BinaryIO':
+#        pass
+#
+#
+#class TextIO(IO[str]):
+#    """Typed version of the return of open() in text mode."""
+#
+#    __slots__ = ()
+#
+#    @abstractproperty
+#    def buffer(self) -> BinaryIO:
+#        pass
+#
+#    @abstractproperty
+#    def encoding(self) -> str:
+#        pass
+#
+#    @abstractproperty
+#    def errors(self) -> str:
+#        pass
+#
+#    @abstractproperty
+#    def line_buffering(self) -> bool:
+#        pass
+#
+#    @abstractproperty
+#    def newlines(self) -> Any:
+#        pass
+#
+#    @abstractmethod
+#    def __enter__(self) -> 'TextIO':
+#        pass
+#
+#
+#class io:
+#    """Wrapper namespace for IO generic classes."""
+#
+#    __all__ = ['IO', 'TextIO', 'BinaryIO']
+#    IO = IO
+#    TextIO = TextIO
+#    BinaryIO = BinaryIO
+#
+#io.__name__ = __name__ + '.io'
+#sys.modules[io.__name__] = io
 
 
 Pattern = _TypeAlias('Pattern', AnyStr, type(stdlib_re.compile('')),
