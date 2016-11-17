@@ -1,0 +1,247 @@
+Python 2.8
+==========
+
+Python 2.8 is a backwards-compatible Python interpreter with new features from
+Python 3.x. It was produced by forking Python 2.7.12 and backporting some of the
+new syntax, builtins, and libraries from Python 3. Python code and C-extensions
+targeting Python 2.7 or below are expected to run unmodified on Python 2.8 and
+produce the same output. But with Python 2.8, that code can now use some of the
+new features from Python 3.x.
+
+```
+$ python
+Python 2.8.0a0 (default, Nov 15 2016, 10:13:31)
+[GCC 4.2.1 Compatible Apple LLVM 7.3.0 (clang-703.0.31)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import sys; print sys.version_info
+sys.version_info(major=2, minor=8, micro=0, releaselevel='alpha', serial=0)
+```
+
+What's new in Python 2.8?
+-------------------------
+
+* ###Function Annotations
+
+    ```python
+    >>> def f(a:int, b:str) -> list:
+    ...     pass
+    ...
+    >>> f.__annotations__
+    {'a': <type 'int'>, 'b': <type 'str'>, 'return': <type 'list'>}
+    ```
+
+    *More info: [PEP 3107](https://www.python.org/dev/peps/pep-3107/)*
+
+
+* ###Keyword-Only Arguments
+
+    ```python
+    >>> def f(a, *, b):
+    ...     pass
+    ...
+    >>> f(1, 2)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    TypeError: f() takes exactly 1 positional argument (2 given)
+    >>> f(1, b=2)
+    >>>
+    ```
+
+    *More info: [PEP 3102](https://www.python.org/dev/peps/pep-3102/)*
+
+
+* ###`async` and `await` Syntax
+
+    ```python
+    >>> import types
+    >>> @types.coroutine
+    ... def delayed_print():
+    ...     printme = yield
+    ...     print printme
+    ...
+    >>> async def main():
+    ...     while True:
+    ...         await delayed_print()
+    ...
+    >>> coro = main()
+    >>> coro.send(None)
+    >>> coro.send("hello")
+    hello
+    >>> coro.send("there")
+    there
+    >>> coro.send("friend")
+    friend
+    ```
+
+    *More info: [PEP 492](https://www.python.org/dev/peps/pep-0492/),
+                [Tutorial](http://www.snarky.ca/how-the-heck-does-async-await-work-in-python-3-5)*
+
+
+* ###`yield from` Syntax
+
+    ```python
+    >>> def generator():
+    ...     yield from range(3)
+    ...     yield from ['a', 'b', 'c']
+    ...
+    >>> [x for x in generator()]
+    [0, 1, 2, 'a', 'b', 'c']
+    ```
+
+    *More info: [PEP 380](https://www.python.org/dev/peps/pep-0380/)*
+
+
+* ###`typing` Module
+
+    ```python
+    >>> from typing import List, Dict
+    >>> List[Dict[str, int]]
+    typing.List[typing.Dict[str, int]]
+    >>> def wordcount(words:List[str]) -> Dict[str, int]:
+    ...     return collections.Counter(words)
+    ```
+
+    *More info: [PEP 483](https://www.python.org/dev/peps/pep-0483/),
+                [PEP 484](https://www.python.org/dev/peps/pep-0484/),
+                [API Docs](https://docs.python.org/3/library/typing.html)*
+
+
+* ###Function Signatures in `inspect`
+
+    ```python
+    >>> import inspect
+    >>> def f(a:int, b, *args, c:str="foo", **kwds) -> list: pass
+    ...
+    >>> inspect.signature(f)
+    <Signature (a:int, b, *args, c:str='foo', **kwds) -> list>
+    >>> inspect.signature(f).parameters['c'].default
+    'foo'
+    ```
+
+    *More info: [PEP 362](https://www.python.org/dev/peps/pep-0362/),
+                [API Docs](https://docs.python.org/3/library/inspect.html#introspecting-callables-with-the-signature-object)*
+
+
+* ###Matrix Multiplication Operator
+
+    *More info: [PEP 465](https://www.python.org/dev/peps/pep-0465/)*
+
+
+* ###Fine-grained OSErrors
+
+    ```python
+    >>> open("not a file")
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    IOError: [Errno 2] No such file or directory: 'not a file'
+    >>> try:
+    ...     open("not a file")
+    ... except FileNotFoundError:
+    ...     pass
+    ...
+    >>>
+    ```
+
+    Caveat: As you can see from the example, to maintain full backwards
+    compatibility Python 2.8 does not raise these new OSErrors. Rather it gives
+    you fine-grained OSErrors that you can catch them with, as an alternative to
+    checking errno.
+
+    *More info: [PEP 3151](https://www.python.org/dev/peps/pep-3151/),
+                [API Docs](https://docs.python.org/3/library/exceptions.html#os-exceptions)*
+
+
+* ###Underscores in Numeric Literals
+
+    ```python
+    >>> 1_234_567
+    1234567
+    >>> 0xBEEF_CAFE
+    3203386110
+    >>> 0b1111_0000
+    240
+    >>>
+    ```
+
+    *More info: [PEP 515](https://www.python.org/dev/peps/pep-0515/)*
+
+
+* ###`concurrent.futures` Module
+
+    ```python
+    >>> from concurrent.futures import ThreadPoolExecutor
+    >>> from datetime import datetime
+    >>> import time
+    >>> def snooze(seconds):
+    ...     print "It's now %s, snoozing for %d seconds." % (datetime.now(), seconds)
+    ...     time.sleep(seconds)
+    ...     print "BEEP BEEP BEEP it's %s, time to get up!" % datetime.now()
+    ...
+    >>> def snooze_again(future):
+    ...     print "Going back to sleep"
+    ...     snooze(3)
+    ...
+    >>> pool = ThreadPoolExecutor()
+    >>> future = pool.submit(snooze, 60)
+    It's now 2016-11-17 12:09:41.822658, snoozing for 60 seconds.
+    >>> print future
+    <Future at 0x1040b7b10 state=running>
+    >>> future.add_done_callback(snooze_again)
+    >>> print datetime.now()
+    2016-11-17 12:10:11.189143
+    >>> BEEP BEEP BEEP it's 2016-11-17 12:10:41.824054, time to get up!
+    Going back to sleep
+    It's now 2016-11-17 12:10:41.824206, snoozing for 3 seconds.
+    BEEP BEEP BEEP it's 2016-11-17 12:10:44.829196, time to get up!
+    ```
+
+    *More info: [PEP 3148](https://www.python.org/dev/peps/pep-3148/),
+                [API Docs](https://docs.python.org/3/library/concurrent.futures.html)*
+
+
+* ###`types.MappingProxyType`
+
+    ```python
+    >>> import types
+    >>> original = {'a': 1}
+    >>> read_only_view = types.MappingProxyType(original)
+    >>> read_only_view['a']
+    1
+    >>> read_only_view['b'] = 2
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    TypeError: 'dict_proxy' object does not support item assignment
+    >>> original['c'] = 3
+    >>> original
+    {'a': 1, 'c': 3}
+    >>> read_only_view['c']
+    3
+    ```
+
+    *More info: [API Docs](https://docs.python.org/3.5/library/types.html#types.MappingProxyType)*
+
+
+* ###`selectors` Module
+
+    ```python
+    >>> import selectors
+    ```
+
+    *More info: [API Docs](https://docs.python.org/3/library/selectors.html)*
+
+
+Backwards-incompatibilities
+---------------------------
+
+There are a small handful of backwards incompatibilities introduced by Python
+2.8. Triggering these involves checking the python version, introspection of
+Python internals (including the AST), or depending on errors being raised from
+nonexistent new features.
+
+
+License
+-------
+
+Python 2.8 is licensed under the Python Software License, (see the LICENSE file
+for details). This is not an official Python release; see [PEP
+404](https://www.python.org/dev/peps/pep-0404/).
