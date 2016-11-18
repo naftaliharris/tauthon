@@ -124,6 +124,29 @@ What's new in Python 2.8?
 
 * ###Matrix Multiplication Operator
 
+    ```python
+    >>> import numpy as np
+    >>> class Matrix(np.matrix):
+    ...     def __matmul__(self, other):
+    ...         return np.dot(self, other)
+    ...
+    >>> X = Matrix([[1, 2], [3, 4]])
+    >>> Y = Matrix([[4, 3], [2, 1]])
+    >>> print X
+    [[1 2]
+     [3 4]]
+    >>> print Y
+    [[4 3]
+     [2 1]]
+    >>> print X @ Y
+    [[ 8  5]
+     [20 13]]
+    >>> X @= Y
+    >>> X
+    matrix([[ 8,  5],
+            [20, 13]])
+    ```
+
     *More info: [PEP 465](https://www.python.org/dev/peps/pep-0465/)*
 
 
