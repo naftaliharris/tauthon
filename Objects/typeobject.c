@@ -6070,11 +6070,11 @@ static slotdef slotdefs[] = {
     TPSLOT("__del__", tp_del, slot_tp_del, NULL, ""),
 
     AMSLOT("__await__", am_await, slot_am_await, wrap_unaryfunc,
-           "__await__($self, /)\n--\n\nReturn an iterator to be used in await expression."),
+           "x.__await__() -> Return an iterator to be used in await expression."),
     AMSLOT("__aiter__", am_aiter, slot_am_aiter, wrap_unaryfunc,
-           "__aiter__($self, /)\n--\n\nReturn an awaitable, that resolves in asynchronous iterator."),
+           "x.__aiter__() -> Return an awaitable, that resolves in asynchronous iterator."),
     AMSLOT("__anext__", am_anext, slot_am_anext, wrap_unaryfunc,
-           "__anext__($self, /)\n--\n\nReturn a value or raise StopAsyncIteration."),
+           "x.__anext__() -> Return a value or raise StopAsyncIteration."),
 
     BINSLOT("__add__", nb_add, slot_nb_add,
         "+"),
