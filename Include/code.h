@@ -10,7 +10,6 @@ extern "C" {
 typedef struct {
     PyObject_HEAD
     int co_argcount;		/* #arguments, except *args */
-    int co_kwonlyargcount;     /* #keyword only arguments */
     int co_nlocals;		/* #local variables */
     int co_stacksize;		/* #entries needed for evaluation stack */
     int co_flags;		/* CO_..., see below */
@@ -28,6 +27,7 @@ typedef struct {
 				   Objects/lnotab_notes.txt for details. */
     void *co_zombieframe;     /* for optimization only (see frameobject.c) */
     PyObject *co_weakreflist;   /* to support weakrefs to code objects */
+    int co_kwonlyargcount;      /* #keyword only arguments */
 } PyCodeObject;
 
 /* Masks for co_flags above */

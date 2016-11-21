@@ -38,7 +38,7 @@ PyFunction_New(PyObject *code, PyObject *globals)
         op->func_doc = doc;
         op->func_dict = NULL;
         op->func_module = NULL;
-        op->__annotations__ = NULL;
+        op->func_annotations = NULL;
 
         /* __module__: If module name is in globals, use it.
            Otherwise, use None.
@@ -193,7 +193,7 @@ PyFunction_GetAnnotations(PyObject *op)
 	PyErr_BadInternalCall();
 	return NULL;
     }
-    return ((PyFunctionObject *) op) -> __annotations__;
+    return ((PyFunctionObject *) op) -> func_annotations;
 }
 
 int
@@ -213,8 +213,8 @@ PyFunction_SetAnnotations(PyObject *op, PyObject *annotations)
 			"non-dict annotations");
 	return -1;
     }
-    Py_XDECREF(((PyFunctionObject *)op) -> __annotations__);
-    ((PyFunctionObject *) op) -> __annotations__ = annotations;
+    Py_XDECREF(((PyFunctionObject *)op) -> func_annotations);
+    ((PyFunctionObject *) op) -> func_annotations = annotations;
     return 0;
 }
 
@@ -433,13 +433,13 @@ func_set_kwdefaults(PyFunctionObject *op, PyObject *value)
 static PyObject *
 func_get_annotations(PyFunctionObject *op)
 {
-    if (op->__annotations__ == NULL) {
-	op->__annotations__ = PyDict_New();
-	if (op->__annotations__ == NULL)
+    if (op->func_annotations == NULL) {
+	op->func_annotations = PyDict_New();
+	if (op->func_annotations == NULL)
 	    return NULL;
     }
-    Py_INCREF(op->__annotations__);
-    return op->__annotations__;
+    Py_INCREF(op->func_annotations);
+    return op->func_annotations;
 }
 
 static int
@@ -457,9 +457,9 @@ func_set_annotations(PyFunctionObject *op, PyObject *value)
 		"__annotations__ must be set to a dict object");
 	return -1;
     }
-    tmp = op->__annotations__;
+    tmp = op->func_annotations;
     Py_XINCREF(value);
-    op->__annotations__ = value;
+    op->func_annotations = value;
     Py_XDECREF(tmp);
     return 0;
 }
@@ -599,7 +599,7 @@ func_dealloc(PyFunctionObject *op)
     Py_XDECREF(op->func_doc);
     Py_XDECREF(op->func_dict);
     Py_XDECREF(op->func_closure);
-    Py_XDECREF(op->__annotations__);
+    Py_XDECREF(op->func_annotations);
     PyObject_GC_Del(op);
 }
 
@@ -622,7 +622,7 @@ func_traverse(PyFunctionObject *f, visitproc visit, void *arg)
     Py_VISIT(f->func_name);
     Py_VISIT(f->func_dict);
     Py_VISIT(f->func_closure);
-    Py_VISIT(f->__annotations__);
+    Py_VISIT(f->func_annotations);
     return 0;
 }
 
