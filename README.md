@@ -253,6 +253,32 @@ What's new in Python 2.8?
     *More info: [API Docs](https://docs.python.org/3/library/selectors.html)*
 
 
+Building and Installation
+-------------------------
+
+Linux:
+
+```
+$ ./configure
+$ make
+```
+
+OSX:
+
+```
+$ brew install openssl xz
+$ CPPFLAGS="-I$(brew --prefix openssl)/include" LDFLAGS="-L$(brew --prefix openssl)/lib" MACOSX_DEPLOYMENT_TARGET=10.6 ./configure
+$ make
+```
+
+You can then run Python 2.8 with `./python` or `./python.exe`.
+
+Install with
+```
+$ make install
+```
+
+
 Backwards-incompatibilities
 ---------------------------
 
