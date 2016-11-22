@@ -3302,16 +3302,67 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
 
 
+        TARGET_WITH_IMPL(MAKE_CLOSURE, _make_function)
         TARGET(MAKE_FUNCTION)
+        _make_function:
         {
             int posdefaults = oparg & 0xff;
             int kwdefaults = (oparg>>8) & 0xff;
+            int num_annotations = (oparg >> 16) & 0x7fff;
 
             v = POP(); /* code object */
             x = PyFunction_New(v, f->f_globals);
             Py_DECREF(v);
+
+            if (x != NULL && opcode == MAKE_CLOSURE) {
+                    v = POP();
+                    err = PyFunction_SetClosure(x, v);
+                    Py_DECREF(v);
+            }
+
+	    if (x != NULL && num_annotations > 0 && !err) {
+		Py_ssize_t name_ix;
+		u = POP(); /* names of args with annotations */
+		v = PyDict_New();
+		if (v == NULL) {
+		    Py_DECREF(x);
+		    x = NULL;
+		    break;
+		}
+		name_ix = PyTuple_Size(u);
+		assert(num_annotations == name_ix+1);
+		while (name_ix > 0) {
+		    --name_ix;
+		    t = PyTuple_GET_ITEM(u, name_ix);
+		    w = POP();
+		    /* XXX(nnorwitz): check for errors */
+		    PyDict_SetItem(v, t, w);
+		    Py_DECREF(w);
+		}
+
+		err = PyFunction_SetAnnotations(x, v);
+		Py_DECREF(v);
+		Py_DECREF(u);
+	    }
+
             /* XXX Maybe this should be a separate opcode? */
-            if (x != NULL && posdefaults > 0) {
+            if (x != NULL && kwdefaults > 0 && !err) {
+                v = PyDict_New();
+                if (v == NULL) {
+                    Py_DECREF(x);
+                    x = NULL;
+                    break;
+                }
+                while (--kwdefaults >= 0) {
+                    w = POP(); /* default value */
+                    u = POP(); /* kw only arg name */
+		    /* XXX(nnorwitz): check for errors */
+                    PyDict_SetItem(v, u, w);
+                }
+                err = PyFunction_SetKwDefaults(x, v);
+                Py_DECREF(v);
+            }
+            if (x != NULL && posdefaults > 0 && !err) {
                 v = PyTuple_New(posdefaults);
                 if (v == NULL) {
                     Py_DECREF(x);
@@ -3323,70 +3374,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     PyTuple_SET_ITEM(v, posdefaults, w);
                 }
                 err = PyFunction_SetDefaults(x, v);
-                Py_DECREF(v);
-            }
-            if (x != NULL && kwdefaults > 0 && !err) {
-                v = PyDict_New();
-                if (v == NULL) {
-                    Py_DECREF(x);
-                    x = NULL;
-                    break;
-                }
-                while (--kwdefaults >= 0) {
-                    w = POP(); /* default value */
-                    u = POP(); /* kw only arg name */
-                    PyDict_SetItem(v, u, w);
-                }
-                err = PyFunction_SetKwDefaults(x, v);
-                Py_DECREF(v);
-            }
-            PUSH(x);
-            break;
-        }
-
-        TARGET(MAKE_CLOSURE)
-        {
-            int posdefaults = oparg & 0xff;
-            int kwdefaults = (oparg>>8) & 0xff;
-
-            v = POP(); /* code object */
-            x = PyFunction_New(v, f->f_globals);
-            Py_DECREF(v);
-            if (x != NULL) {
-                v = POP();
-                if (PyFunction_SetClosure(x, v) != 0) {
-                    /* Can't happen unless bytecode is corrupt. */
-                    why = WHY_EXCEPTION;
-                }
-                Py_DECREF(v);
-            }
-            if (x != NULL && posdefaults > 0) {
-                v = PyTuple_New(posdefaults);
-                if (v == NULL) {
-                    Py_DECREF(x);
-                    x = NULL;
-                    break;
-                }
-                while (--posdefaults >= 0) {
-                    w = POP();
-                    PyTuple_SET_ITEM(v, posdefaults, w);
-                }
-                err = PyFunction_SetDefaults(x, v);
-                Py_DECREF(v);
-            }
-            if (x != NULL && kwdefaults > 0 && !err) {
-                v = PyDict_New();
-                if (v == NULL) {
-                    Py_DECREF(x);
-                    x = NULL;
-                    break;
-                }
-                while (--kwdefaults >= 0) {
-                    w = POP(); /* default value */
-                    u = POP(); /* kw only arg name */
-                    PyDict_SetItem(v, u, w);
-                }
-                err = PyFunction_SetKwDefaults(x, v);
                 Py_DECREF(v);
             }
             PUSH(x);

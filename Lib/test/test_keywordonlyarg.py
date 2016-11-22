@@ -153,6 +153,24 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
         # used to fail with a SystemError.
         lambda *, k1=unittest: None
 
+    def test_mangling(self):
+        class X:
+            def f(self, *, __a=42):
+                return __a
+        self.assertEqual(X().f(), 42)
+
+    def test_default_evaluation_order(self):
+        # See issue 16967
+        a = 42
+        with self.assertRaises(NameError) as err:
+            def f(v=a, x=b, *, y=c, z=d):
+                pass
+        self.assertEqual(str(err.exception), "global name 'b' is not defined")
+        with self.assertRaises(NameError) as err:
+            f = lambda v=a, x=b, *, y=c, z=d: None
+        self.assertEqual(str(err.exception), "global name 'b' is not defined")
+
+
     def test_highly_nested(self):
         compile("""
 def foo():

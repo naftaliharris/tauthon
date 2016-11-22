@@ -225,16 +225,20 @@ class GrammarTests(unittest.TestCase):
         x = eval('1, 0 or 1')
 
     def testFuncdef(self):
-        ### 'def' NAME parameters ':' suite
-        ### parameters: '(' [varargslist] ')'
-        ### varargslist: (fpdef ['=' test] ',')* 
-        ###           ('*' (NAME|',' fpdef ['=' test]) [',' ('**'|'*' '*') NAME]
-        ###            | ('**'|'*' '*') NAME)
-        ###            | fpdef ['=' test] (',' fpdef ['=' test])* [',']
-        ### fpdef: NAME | '(' fplist ')'
-        ### fplist: fpdef (',' fpdef)* [',']
-        ### arglist: (argument ',')* (argument | *' test [',' '**' test] | '**' test)
-        ### argument: [test '='] test   # Really [keyword '='] test
+        ### 'def' NAME parameters ['->' test] ':' suite
+        ### parameters: '(' [typedargslist] ')'
+        ### typedargslist: ((tfpdef ['=' test] ',')*
+        ###                ('*' [tname] (',' tname ['=' test])* [',' '**' tname] | '**' tname)
+        ###                | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
+        ### tname: NAME [':' test]
+        ### tfpdef: tname | '(' tfplist ')'
+        ### tfplist: tfpdef (',' tfpdef)* [',']
+        ### varargslist: ((vfpdef ['=' test] ',')*
+        ###              ('*' [vname] (',' vname ['=' test])*  [',' '**' vname] | '**' vname)
+        ###              | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
+        ### vname: NAME
+        ### vfpdef: vname | '(' vfplist ')'
+        ### vfplist: vfpdef (',' vfpdef)* [',']
         def f1(): pass
         f1()
         f1(*())
@@ -396,6 +400,66 @@ class GrammarTests(unittest.TestCase):
         # Check ast errors in *args and *kwargs
         check_syntax_error(self, "f(*g(1=2))")
         check_syntax_error(self, "f(**g(1=2))")
+
+        # argument annotation tests
+        def f(x) -> list: pass
+        self.assertEquals(f.__annotations__, {'return': list})
+        def f(x:int): pass
+        self.assertEquals(f.__annotations__, {'x': int})
+        def f(*x:str): pass
+        self.assertEquals(f.__annotations__, {'x': str})
+        def f(**x:float): pass
+        self.assertEquals(f.__annotations__, {'x': float})
+        def f(x, y:1+2): pass
+        self.assertEquals(f.__annotations__, {'y': 3})
+        def f(a, (b:1, c:2, d)): pass
+        self.assertEquals(f.__annotations__, {'b': 1, 'c': 2})
+        def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6): pass
+        self.assertEquals(f.__annotations__,
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6})
+        def f(a, (b:1, c:2, d), e:3=4, f=5, *g:6, h:7, i=8, j:9=10,
+              **k:11) -> 12: pass
+        self.assertEquals(f.__annotations__,
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
+                           'k': 11, 'return': 12})
+
+
+        d = {}
+        exec("""
+def foo():
+    def bar():
+        def baz(a:int) -> bar:
+            return bar
+        return baz
+    return bar
+        """, d)
+
+        foo = d['foo']
+        bar = foo()
+        baz = bar()
+        self.assertEquals(baz.__annotations__, {'a': int, 'return': bar})
+
+        # Check for issue #20625 -- annotations mangling
+        class Spam:
+            def f(self, *, __kw:1):
+                pass
+        class Ham(Spam): pass
+        self.assertEquals(Spam.f.__annotations__, {'_Spam__kw': 1})
+        self.assertEquals(Ham.f.__annotations__, {'_Spam__kw': 1})
+
+        # Check for SF Bug #1697248 - mixing decorators and a return annotation
+        def null(x): return x
+        @null
+        def f(x) -> list: pass
+        self.assertEquals(f.__annotations__, {'return': list})
+
+    def testFuncdefClosures(self):
+        # test MAKE_CLOSURE with a variety of oparg's
+        closure = 1
+        def f(): return closure
+        def f(x=1): return closure
+        def f(*, k=1): return closure
+        def f() -> int: return closure
 
     def testLambdef(self):
         ### lambdef: 'lambda' [varargslist] ':' test

@@ -682,6 +682,18 @@ class TestStackSize(unittest.TestCase):
         self.assertEqual(repr(f1()), repr(+0.0j))
         self.assertEqual(repr(f2()), repr(-0.0j))
 
+    def test_annotation_limit(self):
+        # 16 bits are available for # of annotations, and the
+        # tuple of annotations names is counted, hence 65534
+        # is the max. Ensure the result of too many annotations is a
+        # SyntaxError.
+        s = "def f((%s)): pass"
+        s %= ', '.join('a%d:%d' % (i,i) for i in xrange(65535))
+        self.assertRaises(SyntaxError, compile, s, '?', 'exec')
+        # Test that the max # of annotations compiles.
+        s = "def f((%s)): pass"
+        s %= ', '.join('a%d:%d' % (i,i) for i in xrange(65534))
+        compile(s, '?', 'exec')
 
 def test_main():
     test_support.run_unittest(__name__)
