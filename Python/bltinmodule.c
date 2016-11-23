@@ -59,7 +59,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
     name = PyTuple_GET_ITEM(args, 1);
-    if (!PyUnicode_Check(name)) {
+    if (!PyString_Check(name)) {
         PyErr_SetString(PyExc_TypeError,
                         "__build_class__: name is not a string");
         return NULL;
@@ -156,7 +156,8 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         Py_DECREF(bases);
         return NULL;
     }
-    cell = PyEval_EvalCodeEx(PyFunction_GET_CODE(func), PyFunction_GET_GLOBALS(func), ns,
+    cell = PyEval_EvalCodeEx28((PyCodeObject *)PyFunction_GET_CODE(func),
+                             PyFunction_GET_GLOBALS(func), ns,
                              NULL, 0, NULL, 0, NULL, 0, NULL,
                              PyFunction_GET_CLOSURE(func));
     if (cell != NULL) {
