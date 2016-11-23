@@ -884,7 +884,7 @@ ast_for_arguments(struct compiling *c, const node *n)
                            unpacking mixed in. */
                         parenthesized = 1;
                         ch = CHILD(ch, 0);
-                        assert(TYPE(ch) == fpdef);
+                        assert(TYPE(ch) == tfpdef || TYPE(ch) == vfpdef);
                         goto handle_fpdef;
                     }
                 }
