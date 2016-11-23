@@ -1681,28 +1681,8 @@ compiler_class(struct compiler *c, stmt_ty s)
             compiler_exit_scope(c);
             return 0;
         }
-        if (c->u->u_ste->ste_needs_class_closure) {
-            /* return the (empty) __class__ cell */
-            str = PyString_InternFromString("__class__");
-            if (str == NULL) {
-                compiler_exit_scope(c);
-                return 0;
-            }
-            i = compiler_lookup_arg(c->u->u_cellvars, str);
-            Py_DECREF(str);
-            if (i < 0) {
-                compiler_exit_scope(c);
-                return 0;
-            }
-            assert(i == 0);
-            /* Return the cell where to store __class__ */
-            ADDOP_I(c, LOAD_CLOSURE, i);
-        }
-        else {
-            assert(PyDict_Size(c->u->u_cellvars) == 0);
-            /* This happens when nobody references the cell. Return None. */
-            ADDOP_O(c, LOAD_CONST, Py_None, consts);
-        }
+        /* return None */
+        ADDOP_O(c, LOAD_CONST, Py_None, consts);
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
         /* create the code object */
         co = assemble(c, 1);
