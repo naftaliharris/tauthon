@@ -4286,9 +4286,8 @@ compute_code_flags(struct compiler *c)
 {
     PySTEntryObject *ste = c->u->u_ste;
     int flags = 0, n;
-    if (ste->ste_type != ModuleBlock)
-        flags |= CO_NEWLOCALS;
     if (ste->ste_type == FunctionBlock) {
+        flags |= CO_NEWLOCALS;
         if (!ste->ste_unoptimized)
             flags |= CO_OPTIMIZED;
         if (ste->ste_nested)
