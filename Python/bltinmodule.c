@@ -36,9 +36,24 @@ static PyObject *
 builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
 {
     PyObject *func, *name, *bases, *mkw, *meta, *winner, *prep, *ns, *cell;
+    PyObject *meta2 = NULL;  /* The Python2 metaclass */
     PyObject *cls = NULL;
     Py_ssize_t nargs;
     int isclass = 0;   /* initialize to prevent gcc warning */
+    int meta_from_kws = 0;
+
+    /* A metaclass is used in two ways during class creation:
+     *
+     * (1) We call its __prepare__ method, to set up the namespace as the class
+     *     is evaluated. This was introduced in Python 3.0 with PEP 3115.
+     * (2) We call the metaclass itself with (name, bases, namespace) to create
+     *     the new class. This has existed since Python 2.
+     *
+     * We use the logic from Python 3 to select the metaclass ("meta") for (1).
+     * For backwards compatibility, we then use the logic from Python 2 to
+     * select the metaclass ("meta2") for (2), unless the programmer explicitly
+     * specified a metaclass with class MyClass(metaclass=...).
+     */
 
     assert(args != NULL);
     if (!PyTuple_Check(args)) {
@@ -81,6 +96,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         meta = PyDict_GetItemString(mkw, "metaclass");
         if (meta != NULL) {
             Py_INCREF(meta);
+            meta_from_kws = 1;
             if (PyDict_DelItemString(mkw, "metaclass") < 0) {
                 Py_DECREF(meta);
                 Py_DECREF(mkw);
@@ -161,15 +177,41 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
                              NULL, 0, NULL, 0, NULL, 0, NULL,
                              PyFunction_GET_CLOSURE(func));
     if (cell != NULL) {
+        if (meta_from_kws)
+            meta2 = meta;
+        else if (PyDict_Check(ns))
+            meta2 = PyDict_GetItemString(ns, "__metaclass__");
+
+        if (meta2 != NULL)
+            Py_INCREF(meta2);
+        else if (PyTuple_Check(bases) && PyTuple_GET_SIZE(bases) > 0) {
+            PyObject *base0 = PyTuple_GET_ITEM(bases, 0);
+            meta2 = PyObject_GetAttrString(base0, "__class__");
+            if (meta2 == NULL) {
+                PyErr_Clear();
+                meta2 = (PyObject *)base0->ob_type;
+                Py_INCREF(meta2);
+            }
+        }
+        else {
+            PyObject *g = PyEval_GetGlobals();
+            if (g != NULL && PyDict_Check(g))
+                meta2 = PyDict_GetItemString(g, "__metaclass__");
+            if (meta2 == NULL)
+                meta2 = (PyObject *) &PyClass_Type;
+            Py_INCREF(meta2);
+        }
+
         PyObject *margs;
         margs = PyTuple_Pack(3, name, bases, ns);
         if (margs != NULL) {
-            cls = PyEval_CallObjectWithKeywords(meta, margs, mkw);
+            cls = PyEval_CallObjectWithKeywords(meta2, margs, mkw);
             Py_DECREF(margs);
         }
         if (cls != NULL && PyCell_Check(cell))
             PyCell_Set(cell, cls);
         Py_DECREF(cell);
+        Py_DECREF(meta2);
     }
     Py_DECREF(ns);
     Py_DECREF(meta);
