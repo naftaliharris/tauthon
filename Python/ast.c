@@ -2429,28 +2429,6 @@ ast_for_testlist_comp(struct compiling *c, const node* n)
     return ast_for_testlist(c, n);
 }
 
-/* like ast_for_testlist() but returns a sequence */
-static asdl_seq*
-ast_for_class_bases(struct compiling *c, const node* n)
-{
-    /* testlist: test (',' test)* [','] */
-    assert(NCH(n) > 0);
-    REQ(n, testlist);
-    if (NCH(n) == 1) {
-        expr_ty base;
-        asdl_seq *bases = asdl_seq_new(1, c->c_arena);
-        if (!bases)
-            return NULL;
-        base = ast_for_expr(c, CHILD(n, 0));
-        if (!base)
-            return NULL;
-        asdl_seq_SET(bases, 0, base);
-        return bases;
-    }
-
-    return seq_for_testlist(c, n);
-}
-
 static stmt_ty
 ast_for_expr_stmt(struct compiling *c, const node *n)
 {
@@ -3480,50 +3458,61 @@ ast_for_with_stmt(struct compiling *c, const node *n, int is_async)
 static stmt_ty
 ast_for_classdef(struct compiling *c, const node *n, asdl_seq *decorator_seq)
 {
-    /* classdef: 'class' NAME ['(' testlist ')'] ':' suite */
+    /* classdef: 'class' NAME ['(' arglist ')'] ':' suite */
     PyObject *classname;
-    asdl_seq *bases, *s;
+    asdl_seq *s;
+    expr_ty call;
 
     REQ(n, classdef);
 
     if (!forbidden_check(c, n, STR(CHILD(n, 1))))
             return NULL;
 
-    if (NCH(n) == 4) {
+    if (NCH(n) == 4) { /* class NAME ':' suite */
         s = ast_for_suite(c, CHILD(n, 3));
         if (!s)
             return NULL;
         classname = NEW_IDENTIFIER(CHILD(n, 1));
         if (!classname)
             return NULL;
-        return ClassDef(classname, NULL, s, decorator_seq, LINENO(n),
+        return ClassDef(classname, NULL, NULL, NULL, NULL, s, decorator_seq, LINENO(n),
                         n->n_col_offset, c->c_arena);
     }
-    /* check for empty base list */
-    if (TYPE(CHILD(n,3)) == RPAR) {
+
+    if (TYPE(CHILD(n,3)) == RPAR) { /* class NAME '(' ')' ':' suite */
         s = ast_for_suite(c, CHILD(n,5));
         if (!s)
             return NULL;
         classname = NEW_IDENTIFIER(CHILD(n, 1));
         if (!classname)
             return NULL;
-        return ClassDef(classname, NULL, s, decorator_seq, LINENO(n),
+        return ClassDef(classname, NULL, NULL, NULL, NULL, s, decorator_seq, LINENO(n),
                         n->n_col_offset, c->c_arena);
     }
 
-    /* else handle the base class list */
-    bases = ast_for_class_bases(c, CHILD(n, 3));
-    if (!bases)
-        return NULL;
-
+    /* class NAME '(' arglist ')' ':' suite */
+    /* build up a fake Call node so we can extract its pieces */
+    {
+        PyObject *dummy_name;
+        expr_ty dummy;
+        dummy_name = NEW_IDENTIFIER(CHILD(n, 1));
+        if (!dummy_name)
+            return NULL;
+        dummy = Name(dummy_name, Load, LINENO(n), n->n_col_offset, c->c_arena);
+        call = ast_for_call(c, CHILD(n, 3), dummy);
+        if (!call)
+            return NULL;
+    }
     s = ast_for_suite(c, CHILD(n, 6));
     if (!s)
         return NULL;
     classname = NEW_IDENTIFIER(CHILD(n, 1));
     if (!classname)
         return NULL;
-    return ClassDef(classname, bases, s, decorator_seq,
-                    LINENO(n), n->n_col_offset, c->c_arena);
+
+    return ClassDef(classname, call->v.Call.args, call->v.Call.keywords,
+                    call->v.Call.starargs, call->v.Call.kwargs, s,
+                    decorator_seq, LINENO(n), n->n_col_offset, c->c_arena);
 }
 
 static stmt_ty

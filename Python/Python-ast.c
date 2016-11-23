@@ -57,6 +57,9 @@ static PyTypeObject *ClassDef_type;
 static char *ClassDef_fields[]={
         "name",
         "bases",
+        "keywords",
+        "starargs",
+        "kwargs",
         "body",
         "decorator_list",
 };
@@ -743,7 +746,7 @@ static int init_types(void)
         AsyncFunctionDef_type = make_type("AsyncFunctionDef", stmt_type,
                                           AsyncFunctionDef_fields, 5);
         if (!AsyncFunctionDef_type) return 0;
-        ClassDef_type = make_type("ClassDef", stmt_type, ClassDef_fields, 4);
+        ClassDef_type = make_type("ClassDef", stmt_type, ClassDef_fields, 7);
         if (!ClassDef_type) return 0;
         Return_type = make_type("Return", stmt_type, Return_fields, 1);
         if (!Return_type) return 0;
@@ -1175,8 +1178,9 @@ AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq * body, asdl_seq
 }
 
 stmt_ty
-ClassDef(identifier name, asdl_seq * bases, asdl_seq * body, asdl_seq *
-         decorator_list, int lineno, int col_offset, PyArena *arena)
+ClassDef(identifier name, asdl_seq * bases, asdl_seq * keywords, expr_ty
+         starargs, expr_ty kwargs, asdl_seq * body, asdl_seq * decorator_list,
+         int lineno, int col_offset, PyArena *arena)
 {
         stmt_ty p;
         if (!name) {
@@ -1190,6 +1194,9 @@ ClassDef(identifier name, asdl_seq * bases, asdl_seq * body, asdl_seq *
         p->kind = ClassDef_kind;
         p->v.ClassDef.name = name;
         p->v.ClassDef.bases = bases;
+        p->v.ClassDef.keywords = keywords;
+        p->v.ClassDef.starargs = starargs;
+        p->v.ClassDef.kwargs = kwargs;
         p->v.ClassDef.body = body;
         p->v.ClassDef.decorator_list = decorator_list;
         p->lineno = lineno;
@@ -2506,6 +2513,21 @@ ast2obj_stmt(void* _o)
                 value = ast2obj_list(o->v.ClassDef.bases, ast2obj_expr);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "bases", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_list(o->v.ClassDef.keywords, ast2obj_keyword);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "keywords", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.ClassDef.starargs);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "starargs", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.ClassDef.kwargs);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "kwargs", value) == -1)
                         goto failed;
                 Py_DECREF(value);
                 value = ast2obj_list(o->v.ClassDef.body, ast2obj_stmt);
@@ -4130,6 +4152,9 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
         if (isinstance) {
                 identifier name;
                 asdl_seq* bases;
+                asdl_seq* keywords;
+                expr_ty starargs;
+                expr_ty kwargs;
                 asdl_seq* body;
                 asdl_seq* decorator_list;
 
@@ -4169,6 +4194,53 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 } else {
                         PyErr_SetString(PyExc_TypeError, "required field \"bases\" missing from ClassDef");
                         return 1;
+                }
+                if (PyObject_HasAttrString(obj, "keywords")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "keywords");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "ClassDef field \"keywords\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        keywords = asdl_seq_new(len, arena);
+                        if (keywords == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                keyword_ty value;
+                                res = obj2ast_keyword(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                asdl_seq_SET(keywords, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"keywords\" missing from ClassDef");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "starargs")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "starargs");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &starargs, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        starargs = NULL;
+                }
+                if (PyObject_HasAttrString(obj, "kwargs")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "kwargs");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &kwargs, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        kwargs = NULL;
                 }
                 if (PyObject_HasAttrString(obj, "body")) {
                         int res;
@@ -4220,8 +4292,8 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         PyErr_SetString(PyExc_TypeError, "required field \"decorator_list\" missing from ClassDef");
                         return 1;
                 }
-                *out = ClassDef(name, bases, body, decorator_list, lineno,
-                                col_offset, arena);
+                *out = ClassDef(name, bases, keywords, starargs, kwargs, body,
+                                decorator_list, lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }

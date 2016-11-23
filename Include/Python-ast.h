@@ -93,6 +93,9 @@ struct _stmt {
                 struct {
                         identifier name;
                         asdl_seq *bases;
+                        asdl_seq *keywords;
+                        expr_ty starargs;
+                        expr_ty kwargs;
                         asdl_seq *body;
                         asdl_seq *decorator_list;
                 } ClassDef;
@@ -447,8 +450,9 @@ stmt_ty _Py_FunctionDef(identifier name, arguments_ty args, asdl_seq * body,
 stmt_ty _Py_AsyncFunctionDef(identifier name, arguments_ty args, asdl_seq *
                              body, asdl_seq * decorator_list, expr_ty returns,
                              int lineno, int col_offset, PyArena *arena);
-#define ClassDef(a0, a1, a2, a3, a4, a5, a6) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6)
-stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * body,
+#define ClassDef(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * keywords,
+                     expr_ty starargs, expr_ty kwargs, asdl_seq * body,
                      asdl_seq * decorator_list, int lineno, int col_offset,
                      PyArena *arena);
 #define Return(a0, a1, a2, a3) _Py_Return(a0, a1, a2, a3)
