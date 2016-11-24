@@ -124,8 +124,16 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     if (isclass) {
         /* meta is really a class, so check for a more derived
            metaclass, or possible metaclass conflicts: */
-        winner = (PyObject *)_PyType_CalculateMetaclass((PyTypeObject *)meta,
-                                                        bases);
+
+        int is_oldstyle = PyObject_IsSubclass(meta, (PyObject *)&PyClass_Type);
+        if (is_oldstyle == 0)
+            winner = (PyObject *)_PyType_CalculateMetaclass((PyTypeObject *)meta,
+                                                            bases);
+        else if (is_oldstyle == 1)
+            winner = meta;
+        else
+            winner = NULL;
+
         if (winner == NULL) {
             Py_DECREF(meta);
             Py_XDECREF(mkw);
