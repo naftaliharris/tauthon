@@ -730,7 +730,7 @@ class StackDepthTracker:
         'RETURN_VALUE': -1,
         'YIELD_VALUE': -1,
         'EXEC_STMT': -3,
-        'BUILD_CLASS': -2,
+        'LOAD_BUILD_CLASS': 1,
         'STORE_NAME': -1,
         'STORE_ATTR': -2,
         'DELETE_ATTR': -1,
