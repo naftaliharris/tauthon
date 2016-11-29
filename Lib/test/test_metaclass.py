@@ -209,6 +209,43 @@ And again, with a __prepare__ attribute.
     kw: [('other', 'booh')]
     >>>
 
+Mix 2.x-style __metaclass__=... with 3.x-style metaclass=...
+
+    >>> class Meta1(type):
+    ...    @staticmethod
+    ...    def __prepare__(*args):
+    ...        print("Prepare 1 called")
+    ...        return dict()
+    ...    def __new__(cls, name, bases, namespace):
+    ...        print("New 1 called")
+    ...        return type.__new__(cls, name, bases, namespace)
+    ...    def __init__(cls, *args, **kwds):
+    ...        pass
+    ...
+    >>> class Meta2(Meta1):
+    ...    @staticmethod
+    ...    def __prepare__(*args):
+    ...        print("Prepare 2 called")
+    ...        return dict()
+    ...    def __new__(cls, name, bases, namespace):
+    ...        print("New 2 called")
+    ...        return type.__new__(cls, name, bases, namespace)
+    ...
+    >>> class A(object):
+    ...    __metaclass__ = Meta1
+    ...
+    New 1 called
+    >>> class B(A, metaclass=Meta2): pass
+    Prepare 2 called
+    New 2 called
+    >>> B.__metaclass__ is Meta1
+    True
+    >>> class C(B):
+    ...    __metaclass__ = Meta1
+    ...
+    Prepare 2 called
+    New 1 called
+    New 2 called
 """
 
 __test__ = {'doctests' : doctests}
