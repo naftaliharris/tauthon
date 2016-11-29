@@ -1,8 +1,10 @@
+from __future__ import print_function
+
 doctests = """
 
 Basic class construction.
 
-    >>> class C:
+    >>> class C(object):
     ...     def meth(self): print("Hello")
     ...
     >>> C.__class__ is type
@@ -63,6 +65,8 @@ Use a metaclass with a __prepare__ static method.
     ...    def __new__(cls, name, bases, namespace, **kwds):
     ...        print("New called:", kwds)
     ...        return type.__new__(cls, name, bases, namespace)
+    ...    def __init__(cls, *args, **kwds):
+    ...        pass
     ...
     >>> class C(metaclass=M):
     ...     def meth(self): print("Hello")
@@ -108,7 +112,7 @@ Use various combinations of explicit keywords and **kwds.
     True
     >>> C.__bases__ == (object,)
     True
-    >>> class B: pass
+    >>> class B(object): pass
     >>> kwds = {'other': 'haha'}
     >>> class C(B, metaclass=M, *bases, **kwds): pass
     ...
@@ -126,7 +130,7 @@ Check for duplicate keywords.
     ...
     Traceback (most recent call last):
     [...]
-    TypeError: __build_class__() got multiple values for keyword argument 'metaclass'
+    SyntaxError: keyword argument repeated
     >>>
 
 Another way.
