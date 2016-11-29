@@ -442,13 +442,10 @@ class CodeGenerator:
         walk(node.code, gen)
         gen.finish()
         self.set_lineno(node)
-        self.emit('LOAD_CONST', node.name)
-        for base in node.bases:
-            self.visit(base)
-        self.emit('BUILD_TUPLE', len(node.bases))
+        self.emit("LOAD_BUILD_CLASS")
         self._makeClosure(gen, 0)
-        self.emit('CALL_FUNCTION', 0)
-        self.emit('BUILD_CLASS')
+        self.emit("LOAD_CONST", node.name)
+        self.finish_visit_call(node, 2)
         self.storeName(node.name)
 
     # The rest are standard visitor methods
@@ -1122,10 +1119,11 @@ class CodeGenerator:
         self.emit('EXEC_STMT')
 
     def visitCallFunc(self, node):
-        pos = 0
-        kw = 0
         self.set_lineno(node)
         self.visit(node.node)
+        self.finish_visit_call(node)
+
+    def finish_visit_call(self, node, pos=0, kw=0):
         for arg in node.args:
             self.visit(arg)
             if isinstance(arg, ast.Keyword):
@@ -1503,7 +1501,7 @@ class AbstractClassCode:
 
     def finish(self):
         self.graph.startExitBlock()
-        self.emit('LOAD_LOCALS')
+        self.emit("LOAD_CONST", None)
         self.emit('RETURN_VALUE')
 
 class ClassCodeGenerator(NestedScopeMixin, AbstractClassCode, CodeGenerator):

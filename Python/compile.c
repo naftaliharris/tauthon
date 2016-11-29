@@ -190,6 +190,11 @@ static int expr_constant(expr_ty e);
 static int compiler_with(struct compiler *, stmt_ty, int);
 static int compiler_async_with(struct compiler *, stmt_ty, int);
 static int compiler_async_for(struct compiler *, stmt_ty);
+static int compiler_call_helper(struct compiler *c, Py_ssize_t n,
+                                asdl_seq *args,
+                                asdl_seq *keywords,
+                                expr_ty starargs,
+                                expr_ty kwargs);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
 static PyObject *__doc__;
@@ -802,6 +807,8 @@ opcode_stack_effect(int opcode, int oparg)
             return -2;
         case PRINT_NEWLINE_TO:
             return -1;
+        case LOAD_BUILD_CLASS:
+            return 1;
         case INPLACE_LSHIFT:
         case INPLACE_RSHIFT:
         case INPLACE_AND:
@@ -816,8 +823,6 @@ opcode_stack_effect(int opcode, int oparg)
             return 1;
         case WITH_CLEANUP_FINISH:
             return -4;
-        case LOAD_LOCALS:
-            return 1;
         case RETURN_VALUE:
             return -1;
         case IMPORT_STAR:
@@ -832,8 +837,6 @@ opcode_stack_effect(int opcode, int oparg)
             return 0;
         case END_FINALLY:
             return -1; /* or -2 or -3 if exception occurred */
-        case BUILD_CLASS:
-            return -2;
 
         case STORE_NAME:
             return -1;
@@ -1628,63 +1631,91 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
 static int
 compiler_class(struct compiler *c, stmt_ty s)
 {
-    int n, i;
     PyCodeObject *co;
     PyObject *str;
+    int i;
     asdl_seq* decos = s->v.ClassDef.decorator_list;
 
     if (!compiler_decorators(c, decos))
         return 0;
 
-    /* push class name on stack, needed by BUILD_CLASS */
-    ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
-    /* push the tuple of base classes on the stack */
-    n = asdl_seq_LEN(s->v.ClassDef.bases);
-    if (n > 0)
-        VISIT_SEQ(c, expr, s->v.ClassDef.bases);
-    ADDOP_I(c, BUILD_TUPLE, n);
+    /* ultimately generate code for:
+         <name> = __build_class__(<func>, <name>, *<bases>, **<keywords>)
+       where:
+         <func> is a function/closure created from the class body;
+            it has a single argument (__locals__) where the dict
+            (or MutableSequence) representing the locals is passed
+         <name> is the class name
+         <bases> is the positional arguments and *varargs argument
+         <keywords> is the keyword arguments and **kwds argument
+       This borrows from compiler_call.
+    */
+
+    /* 1. compile the class body into a code object */
     if (!compiler_enter_scope(c, s->v.ClassDef.name,
                               COMPILER_SCOPE_CLASS, (void *)s, s->lineno))
         return 0;
-    Py_INCREF(s->v.ClassDef.name);
-    Py_XSETREF(c->u->u_private, s->v.ClassDef.name);
-    str = PyString_InternFromString("__name__");
-    if (!str || !compiler_nameop(c, str, Load)) {
-        Py_XDECREF(str);
-        compiler_exit_scope(c);
-        return 0;
+    /* this block represents what we do in the new scope */
+    {
+        /* use the class name for name mangling */
+        Py_INCREF(s->v.ClassDef.name);
+        Py_XSETREF(c->u->u_private, s->v.ClassDef.name);
+        /* load (global) __name__ ... */
+        str = PyString_InternFromString("__name__");
+        if (!str || !compiler_nameop(c, str, Load)) {
+            Py_XDECREF(str);
+            compiler_exit_scope(c);
+            return 0;
+        }
+        Py_DECREF(str);
+        /* ... and store it as __module__ */
+        str = PyString_InternFromString("__module__");
+        if (!str || !compiler_nameop(c, str, Store)) {
+            Py_XDECREF(str);
+            compiler_exit_scope(c);
+            return 0;
+        }
+        Py_DECREF(str);
+        /* compile the body proper */
+        if (!compiler_body(c, s->v.ClassDef.body)) {
+            compiler_exit_scope(c);
+            return 0;
+        }
+        /* return None */
+        ADDOP_O(c, LOAD_CONST, Py_None, consts);
+        ADDOP_IN_SCOPE(c, RETURN_VALUE);
+        /* create the code object */
+        co = assemble(c, 1);
     }
-
-    Py_DECREF(str);
-    str = PyString_InternFromString("__module__");
-    if (!str || !compiler_nameop(c, str, Store)) {
-        Py_XDECREF(str);
-        compiler_exit_scope(c);
-        return 0;
-    }
-    Py_DECREF(str);
-
-    if (!compiler_body(c, s->v.ClassDef.body)) {
-        compiler_exit_scope(c);
-        return 0;
-    }
-
-    ADDOP_IN_SCOPE(c, LOAD_LOCALS);
-    ADDOP_IN_SCOPE(c, RETURN_VALUE);
-    co = assemble(c, 1);
+    /* leave the new scope */
     compiler_exit_scope(c);
     if (co == NULL)
         return 0;
 
+    /* 2. load the 'build_class' function */
+    ADDOP(c, LOAD_BUILD_CLASS);
+
+    /* 3. load a function (or closure) made from the code object */
     compiler_make_closure(c, co, 0);
     Py_DECREF(co);
 
-    ADDOP_I(c, CALL_FUNCTION, 0);
-    ADDOP(c, BUILD_CLASS);
-    /* apply decorators */
+    /* 4. load class name */
+    ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
+
+    /* 5. generate the rest of the code for the call */
+    if (!compiler_call_helper(c, 2,
+                              s->v.ClassDef.bases,
+                              s->v.ClassDef.keywords,
+                              s->v.ClassDef.starargs,
+                              s->v.ClassDef.kwargs))
+        return 0;
+
+    /* 6. apply decorators */
     for (i = 0; i < asdl_seq_LEN(decos); i++) {
         ADDOP_I(c, CALL_FUNCTION, 1);
     }
+
+    /* 7. store into <name> */
     if (!compiler_nameop(c, s->v.ClassDef.name, Store))
         return 0;
     return 1;
@@ -2875,36 +2906,52 @@ compiler_compare(struct compiler *c, expr_ty e)
 static int
 compiler_call(struct compiler *c, expr_ty e)
 {
-    int n, code = 0;
-
     VISIT(c, expr, e->v.Call.func);
-    n = asdl_seq_LEN(e->v.Call.args);
-    VISIT_SEQ(c, expr, e->v.Call.args);
-    if (e->v.Call.keywords) {
-        VISIT_SEQ(c, keyword, e->v.Call.keywords);
-        n |= asdl_seq_LEN(e->v.Call.keywords) << 8;
+    return compiler_call_helper(c, 0,
+                                e->v.Call.args,
+                                e->v.Call.keywords,
+                                e->v.Call.starargs,
+                                e->v.Call.kwargs);
+}
+
+/* shared code between compiler_call and compiler_class */
+static int
+compiler_call_helper(struct compiler *c,
+                     Py_ssize_t n, /* Args already pushed */
+                     asdl_seq *args,
+                     asdl_seq *keywords,
+                     expr_ty starargs,
+                     expr_ty kwargs)
+{
+    int code = 0;
+
+    n += asdl_seq_LEN(args);
+    VISIT_SEQ(c, expr, args);
+    if (keywords) {
+	VISIT_SEQ(c, keyword, keywords);
+	n |= asdl_seq_LEN(keywords) << 8;
     }
-    if (e->v.Call.starargs) {
-        VISIT(c, expr, e->v.Call.starargs);
-        code |= 1;
+    if (starargs) {
+	VISIT(c, expr, starargs);
+	code |= 1;
     }
-    if (e->v.Call.kwargs) {
-        VISIT(c, expr, e->v.Call.kwargs);
-        code |= 2;
+    if (kwargs) {
+	VISIT(c, expr, kwargs);
+	code |= 2;
     }
     switch (code) {
-    case 0:
-        ADDOP_I(c, CALL_FUNCTION, n);
-        break;
-    case 1:
-        ADDOP_I(c, CALL_FUNCTION_VAR, n);
-        break;
-    case 2:
-        ADDOP_I(c, CALL_FUNCTION_KW, n);
-        break;
-    case 3:
-        ADDOP_I(c, CALL_FUNCTION_VAR_KW, n);
-        break;
+	case 0:
+	    ADDOP_I(c, CALL_FUNCTION, n);
+	    break;
+	case 1:
+	    ADDOP_I(c, CALL_FUNCTION_VAR, n);
+	    break;
+	case 2:
+	    ADDOP_I(c, CALL_FUNCTION_KW, n);
+	    break;
+	case 3:
+	    ADDOP_I(c, CALL_FUNCTION_VAR_KW, n);
+	    break;
     }
     return 1;
 }
@@ -4239,9 +4286,8 @@ compute_code_flags(struct compiler *c)
 {
     PySTEntryObject *ste = c->u->u_ste;
     int flags = 0, n;
-    if (ste->ste_type != ModuleBlock)
-        flags |= CO_NEWLOCALS;
     if (ste->ste_type == FunctionBlock) {
+        flags |= CO_NEWLOCALS;
         if (!ste->ste_unoptimized)
             flags |= CO_OPTIMIZED;
         if (ste->ste_nested)

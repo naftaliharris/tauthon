@@ -299,16 +299,16 @@ class Transformer:
     old_lambdef = lambdef
 
     def classdef(self, nodelist):
-        # classdef: 'class' NAME ['(' [testlist] ')'] ':' suite
+        # classdef: 'class' NAME ['(' [arglist] ')'] ':' suite
 
         name = nodelist[1][1]
         doc = self.get_docstring(nodelist[-1])
         if nodelist[2][0] == token.COLON:
-            bases = []
+            arglist = CallFunc(None, [])
         elif nodelist[3][0] == token.RPAR:
-            bases = []
+            arglist = CallFunc(None, [])
         else:
-            bases = self.com_bases(nodelist[3])
+            arglist = self.com_call_function(None, nodelist[3])
 
         # code for class
         code = self.com_node(nodelist[-1])
@@ -318,7 +318,8 @@ class Transformer:
             assert isinstance(code.nodes[0], Discard)
             del code.nodes[0]
 
-        return Class(name, bases, doc, code, lineno=nodelist[1][2])
+        return Class(name, arglist.args, arglist.star_args, arglist.dstar_args,
+                     doc, code, lineno=nodelist[1][2])
 
     def stmt(self, nodelist):
         return self.com_stmt(nodelist[0])
@@ -1005,12 +1006,6 @@ class Transformer:
         for i in range(2, len(node), 2):
             names.append(self.com_import_as_name(node[i]))
         return names
-
-    def com_bases(self, node):
-        bases = []
-        for i in range(1, len(node), 2):
-            bases.append(self.com_node(node[i]))
-        return bases
 
     def com_try_except_finally(self, nodelist):
         # ('try' ':' suite

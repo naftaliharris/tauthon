@@ -123,14 +123,13 @@ def_op('INPLACE_XOR', 78)
 def_op('INPLACE_OR', 79)
 def_op('BREAK_LOOP', 80)
 def_op('WITH_CLEANUP_START', 81)
-def_op('LOAD_LOCALS', 82)
 def_op('RETURN_VALUE', 83)
 def_op('IMPORT_STAR', 84)
 def_op('EXEC_STMT', 85)
 def_op('YIELD_VALUE', 86)
 def_op('POP_BLOCK', 87)
 def_op('END_FINALLY', 88)
-def_op('BUILD_CLASS', 89)
+def_op('LOAD_BUILD_CLASS', 89)
 
 HAVE_ARGUMENT = 90              # Opcodes from here have an argument:
 
