@@ -50,7 +50,7 @@ What's new in Python 2.8?
     *More info: [PEP 3102](https://www.python.org/dev/peps/pep-3102/)*
 
 
-* ###`async` and `await` Syntax
+* ###"async" and "await" Syntax
 
     ```python
     >>> import types
@@ -77,7 +77,39 @@ What's new in Python 2.8?
                 [Tutorial](http://www.snarky.ca/how-the-heck-does-async-await-work-in-python-3-5)*
 
 
-* ###`yield from` Syntax
+* ###New Metaclass Syntax
+
+    ```python
+    >>> from collections import OrderedDict
+    >>> class Meta(type):
+    ...     @staticmethod
+    ...     def __prepare__(name, bases, **kwds):
+    ...             return OrderedDict()
+    ...     def __new__(cls, name, bases, namespace, **kwds):
+    ...             namespace.update(kwds)
+    ...             res = type.__new__(cls, name, bases, dict(namespace))
+    ...             res._namespace = namespace
+    ...             return res
+    ...     def __init__(*args, **kwds):
+    ...             pass
+    ...
+    >>> class MyClass(metaclass=Meta, foo="bar"):
+    ...     def first(self): pass
+    ...     def second(self): pass
+    ...     def third(self): pass
+    ...
+    >>> MyClass.foo
+    'bar'
+    >>> MyClass._namespace
+    OrderedDict([('__module__', '__main__'), ('first', <function first at 0x1007ef568>), ('second', <function second at 0x10131b060>), ('third', <function third at 0x10131b118>), ('foo', 'bar')])
+    ```
+
+    *More info: [PEP 3115](https://www.python.org/dev/peps/pep-3115/),
+                [Introduction to Metaclasses (in Python 2.x)](http://stackoverflow.com/a/6581949),
+                [API Docs (Python 3.x)](https://docs.python.org/3/reference/datamodel.html#metaclasses)*
+
+
+* ###"yield from" Syntax
 
     ```python
     >>> def generator():
@@ -91,7 +123,7 @@ What's new in Python 2.8?
     *More info: [PEP 380](https://www.python.org/dev/peps/pep-0380/)*
 
 
-* ###`typing` Module
+* ###"typing" Module
 
     ```python
     >>> from typing import List, Dict
@@ -106,7 +138,7 @@ What's new in Python 2.8?
                 [API Docs](https://docs.python.org/3/library/typing.html)*
 
 
-* ###Function Signatures in `inspect`
+* ###Function Signatures in "inspect"
 
     ```python
     >>> import inspect
@@ -189,7 +221,7 @@ What's new in Python 2.8?
     *More info: [PEP 515](https://www.python.org/dev/peps/pep-0515/)*
 
 
-* ###`concurrent.futures` Module
+* ###"concurrent.futures" Module
 
     ```python
     >>> from concurrent.futures import ThreadPoolExecutor
@@ -222,7 +254,7 @@ What's new in Python 2.8?
                 [API Docs](https://docs.python.org/3/library/concurrent.futures.html)*
 
 
-* ###`types.MappingProxyType`
+* ###"types.MappingProxyType"
 
     ```python
     >>> import types
@@ -244,7 +276,7 @@ What's new in Python 2.8?
     *More info: [API Docs](https://docs.python.org/3.5/library/types.html#types.MappingProxyType)*
 
 
-* ###`selectors` Module
+* ###"selectors" Module
 
     ```python
     >>> import selectors
