@@ -1063,6 +1063,10 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             return 0;
         VISIT_SEQ(st, expr, s->v.ClassDef.bases);
         VISIT_SEQ(st, keyword, s->v.ClassDef.keywords);
+        if (s->v.ClassDef.starargs)
+            VISIT(st, expr, s->v.ClassDef.starargs);
+        if (s->v.ClassDef.kwargs)
+            VISIT(st, expr, s->v.ClassDef.kwargs);
         if (s->v.ClassDef.decorator_list)
             VISIT_SEQ(st, expr, s->v.ClassDef.decorator_list);
         if (!symtable_enter_block(st, s->v.ClassDef.name, ClassBlock,
