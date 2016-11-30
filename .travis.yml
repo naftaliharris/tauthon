@@ -1,1 +1,9 @@
 language: c
+sudo: false
+os:
+  - linux
+  - osx
+env:
+  - CONFIGURE_ARGS=--with-debug
+  - CONFIGURE_ARGS=""
+script: "./configure $CONFIGURE_ARGS && make -j2 && make test"
