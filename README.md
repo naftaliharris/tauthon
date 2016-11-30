@@ -5,8 +5,8 @@ Python 2.8 is a backwards-compatible Python interpreter with new features from
 Python 3.x. It was produced by forking Python 2.7.12 and backporting some of the
 new syntax, builtins, and libraries from Python 3. Python code and C-extensions
 targeting Python 2.7 or below are expected to run unmodified on Python 2.8 and
-produce the same output. But with Python 2.8, that code can now use some of the
-new features from Python 3.x.
+produce the same output. [But with Python 2.8, that code can now use some of the
+new features from Python 3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
 
 ```
 $ python
@@ -16,6 +16,8 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> import sys; print sys.version_info
 sys.version_info(major=2, minor=8, micro=0, releaselevel='alpha', serial=0)
 ```
+
+[![Build Status](https://travis-ci.org/naftaliharris/python2.8.svg?branch=master)](https://travis-ci.org/naftaliharris/python2.8)
 
 What's new in Python 2.8?
 -------------------------
