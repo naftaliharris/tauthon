@@ -1,6 +1,7 @@
 import errno
 import os
 import random
+import select
 import selectors
 import signal
 import socket
@@ -14,6 +15,8 @@ try:
     import resource
 except ImportError:
     resource = None
+
+OSError = (EnvironmentError, select.error)
 
 
 if hasattr(socket, 'socketpair'):
