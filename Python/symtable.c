@@ -67,6 +67,7 @@ ste_new(struct symtable *st, identifier name, _Py_block_ty block,
     ste->ste_child_free = 0;
     ste->ste_generator = 0;
     ste->ste_returns_value = 0;
+    ste->ste_needs_class_closure = 0;
 
     if (PyDict_SetItem(st->st_symbols, ste->ste_id, (PyObject *)ste) < 0)
         goto fail;
@@ -477,6 +478,21 @@ analyze_cells(PyObject *scope, PyObject *free)
     return success;
 }
 
+static int
+drop_class_free(PySTEntryObject *ste, PyObject *free)
+{
+    int res;
+    res = PyDict_DelItemString(free, "__class__");
+    if (!res) {
+        if (!PyErr_ExceptionMatches(PyExc_KeyError))
+            return 0;
+        PyErr_Clear();
+    }
+
+    ste->ste_needs_class_closure = 1;
+    return 1;
+}
+
 /* Check for illegal statements in unoptimized namespaces */
 static int
 check_unoptimized(const PySTEntryObject* ste) {
@@ -708,6 +724,8 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
     if (PyDict_Update(newfree, allfree) < 0)
         goto error;
     if (ste->ste_type == FunctionBlock && !analyze_cells(scope, newfree))
+        goto error;
+    else if (ste->ste_type == ClassBlock && !drop_class_free(ste, newfree))
         goto error;
     if (!update_symbols(ste->ste_symbols, scope, bound, newfree,
                         ste->ste_type == ClassBlock))

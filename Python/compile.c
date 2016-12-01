@@ -507,6 +507,42 @@ compiler_enter_scope(struct compiler *c, identifier name,
         compiler_unit_free(u);
         return 0;
     }
+    if (u->u_ste->ste_needs_class_closure) {
+        /* Cook up a implicit __class__ cell. */
+        static PyObject *__class__;
+        if (!__class__) {
+            __class__ = PyString_InternFromString("__class__");
+            if (!__class__)
+                return 0;
+        }
+        PyObject *tuple, *name, *zero;
+        int res;
+        assert(u->u_scope_type == COMPILER_SCOPE_CLASS);
+        assert(PyDict_Size(u->u_cellvars) == 0);
+        name = __class__;
+        if (!name) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        tuple = PyTuple_Pack(2, name, Py_TYPE(name));
+        if (!tuple) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        zero = PyLong_FromLong(0);
+        if (!zero) {
+            Py_DECREF(tuple);
+            compiler_unit_free(u);
+            return 0;
+        }
+        res = PyDict_SetItem(u->u_cellvars, tuple, zero);
+        Py_DECREF(tuple);
+        Py_DECREF(zero);
+        if (res < 0) {
+            compiler_unit_free(u);
+            return 0;
+        }
+    }
 
     u->u_freevars = dictbytype(u->u_ste->ste_symbols, FREE, DEF_FREE_CLASS,
                                PyDict_Size(u->u_cellvars));
@@ -1256,6 +1292,9 @@ compiler_mod(struct compiler *c, mod_ty mod)
 static int
 get_ref_type(struct compiler *c, PyObject *name)
 {
+    if (c->u->u_scope_type == COMPILER_SCOPE_CLASS &&
+        !strcmp(PyString_AS_STRING(name), "__class__"))
+        return CELL;
     int scope = PyST_GetScope(c->u->u_ste, name);
     if (scope == 0) {
         char buf[350];
