@@ -1,6 +1,7 @@
 /* Type object implementation */
 
 #include "Python.h"
+#include "frameobject.h"
 #include "structmember.h"
 
 #include <ctype.h>
@@ -6850,13 +6851,13 @@ static int
 super_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
     superobject *su = (superobject *)self;
-    PyTypeObject *type;
+    PyTypeObject *type = NULL;
     PyObject *obj = NULL;
     PyTypeObject *obj_type = NULL;
 
     if (!_PyArg_NoKeywords("super", kwds))
         return -1;
-    if (!PyArg_ParseTuple(args, "O!|O:super", &PyType_Type, &type, &obj))
+    if (!PyArg_ParseTuple(args, "|O!O:super", &PyType_Type, &type, &obj))
         return -1;
 
     if (type == NULL) {
@@ -6883,18 +6884,18 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
             return -1;
         }
         obj = f->f_localsplus[0];
-        if (obj == NULL && co->co_cell2arg) {
-            /* The first argument might be a cell. */
-            n = PyTuple_GET_SIZE(co->co_cellvars);
-            for (i = 0; i < n; i++) {
-                if (co->co_cell2arg[i] == 0) {
-                    PyObject *cell = f->f_localsplus[co->co_nlocals + i];
-                    assert(PyCell_Check(cell));
-                    obj = PyCell_GET(cell);
-                    break;
-                }
-            }
-        }
+        //if (obj == NULL && co->co_cell2arg) {
+        //    /* The first argument might be a cell. */
+        //    n = PyTuple_GET_SIZE(co->co_cellvars);
+        //    for (i = 0; i < n; i++) {
+        //        if (co->co_cell2arg[i] == 0) {
+        //            PyObject *cell = f->f_localsplus[co->co_nlocals + i];
+        //            assert(PyCell_Check(cell));
+        //            obj = PyCell_GET(cell);
+        //            break;
+        //        }
+        //    }
+        //}
         if (obj == NULL) {
             PyErr_SetString(PyExc_RuntimeError,
                             "super(): arg[0] deleted");
@@ -6908,8 +6909,8 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
         }
         for (i = 0; i < n; i++) {
             PyObject *name = PyTuple_GET_ITEM(co->co_freevars, i);
-            assert(PyUnicode_Check(name));
-            if (!_PyUnicode_CompareWithId(name, &PyId___class__)) {
+            assert(PyString_Check(name));
+            if (!strcmp(PyString_AS_STRING(name), "__class__")) {
                 Py_ssize_t index = co->co_nlocals +
                     PyTuple_GET_SIZE(co->co_cellvars) + i;
                 PyObject *cell = f->f_localsplus[index];
@@ -6956,13 +6957,19 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
 }
 
 PyDoc_STRVAR(super_doc,
+"super() -> same as super(__class__, <first argument>)\n"
 "super(type, obj) -> bound super object; requires isinstance(obj, type)\n"
 "super(type) -> unbound super object\n"
 "super(type, type2) -> bound super object; requires issubclass(type2, type)\n"
 "Typical use to call a cooperative superclass method:\n"
 "class C(B):\n"
 "    def meth(self, arg):\n"
-"        super(C, self).meth(arg)");
+"        super().meth(arg)\n"
+"This works for class methods too:\n"
+"class C(B):\n"
+"    @classmethod\n"
+"    def cmeth(cls, arg):\n"
+"        super().cmeth(arg)\n");
 
 static int
 super_traverse(PyObject *self, visitproc visit, void *arg)
