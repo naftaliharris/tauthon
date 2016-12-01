@@ -483,7 +483,7 @@ drop_class_free(PySTEntryObject *ste, PyObject *free)
 {
     int res;
     res = PyDict_DelItemString(free, "__class__");
-    if (!res) {
+    if (res) {
         if (!PyErr_ExceptionMatches(PyExc_KeyError))
             return 0;
         PyErr_Clear();
