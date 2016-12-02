@@ -3,6 +3,8 @@
 import sys
 import unittest
 
+__metaclass__ = type
+
 
 class A:
     def f(self):
