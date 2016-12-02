@@ -2344,6 +2344,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 if (PyErr_ExceptionMatches(PyExc_KeyError))
                     PyErr_SetString(PyExc_NameError,
                                     "__build_class__ not found");
+                why = WHY_EXCEPTION;
                 break;
             }
             PUSH(bc);
