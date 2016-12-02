@@ -184,7 +184,7 @@ static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
 static identifier top = NULL, lambda = NULL, genexpr = NULL, setcomp = NULL,
-    dictcomp = NULL;
+    dictcomp = NULL, __class__ = NULL;
 
 #define GET_IDENTIFIER(VAR) \
     ((VAR) ? (VAR) : ((VAR) = PyString_InternFromString(# VAR)))
@@ -317,7 +317,7 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
 
 /* Analyze raw symbol information to determine scope of each name.
 
-   The next several functions are helpers for PySymtable_Analyze(),
+   The next several functions are helpers for symtable_analyze(),
    which determines whether a name is local, global, or free.  In addition,
    it determines which local variables are cell variables; they provide
    bindings that are used for free variables in enclosed blocks.
@@ -488,8 +488,9 @@ drop_class_free(PySTEntryObject *ste, PyObject *free)
             return 0;
         PyErr_Clear();
     }
+    else
+        ste->ste_needs_class_closure = 1;
 
-    ste->ste_needs_class_closure = 1;
     return 1;
 }
 

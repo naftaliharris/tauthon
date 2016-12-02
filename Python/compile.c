@@ -403,13 +403,15 @@ dictbytype(PyObject *src, int scope_type, int flag, int offset)
     num_keys = PyList_GET_SIZE(sorted_keys);
 
     for (key_i = 0; key_i < num_keys; key_i++) {
+        /* XXX this should probably be a macro in symtable.h */
+        long vi;
         k = PyList_GET_ITEM(sorted_keys, key_i);
         v = PyDict_GetItem(src, k);
-        /* XXX this should probably be a macro in symtable.h */
         assert(PyInt_Check(v));
-        scope = (PyInt_AS_LONG(v) >> SCOPE_OFF) & SCOPE_MASK;
+        vi = PyInt_AS_LONG(v);
+        scope = (vi >> SCOPE_OFF) & SCOPE_MASK;
 
-        if (scope == scope_type || PyInt_AS_LONG(v) & flag) {
+        if (scope == scope_type || vi & flag) {
             PyObject *tuple, *item = PyInt_FromLong(i);
             if (item == NULL) {
                 Py_DECREF(sorted_keys);
