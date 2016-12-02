@@ -687,7 +687,9 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         class C(A, B):
             pass
         # The most derived metaclass is BMeta:
-        self.assertEqual(['BMeta', 'AMeta'], new_calls)
+        # NB: in Python 3 this is ['BMeta', 'AMeta']. But this is how Python 2
+        # does metaclasses.
+        self.assertEqual(['AMeta', 'BMeta', 'AMeta'], new_calls)
         new_calls[:] = []
         # BMeta.__prepare__ should've been called:
         self.assertIn('BMeta_was_here', C.__dict__)
@@ -730,7 +732,7 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         # The given metaclass is a class,
         # but not a descendant of type.
         prepare_calls = []  # to track __prepare__ calls
-        class ANotMeta:
+        class ANotMeta(object):
             def __new__(mcls, *args, **kwargs):
                 new_calls.append('ANotMeta')
                 return super().__new__(mcls)
@@ -765,8 +767,8 @@ class ClassPropertiesAndMethods(unittest.TestCase):
 
         class C(A, B):
             pass
-        self.assertIs(BNotMeta, type(C))
-        self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
+        self.assertIs(ANotMeta, type(C))  # NB: In Python 3 this is BNotMeta
+        self.assertEqual(['ANotMeta'], new_calls)
         new_calls[:] = []
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
         prepare_calls[:] = []
@@ -782,10 +784,10 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         # This is a TypeError, because of a metaclass conflict:
         # BNotMeta is neither a subclass, nor a superclass of type
         with self.assertRaises(TypeError):
-            class D(C, metaclass=type):
+            class D(C2, metaclass=type):
                 pass
 
-        class E(C, metaclass=ANotMeta):
+        class E(C2, metaclass=ANotMeta):
             pass
         self.assertIs(BNotMeta, type(E))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
@@ -793,7 +795,8 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
         prepare_calls[:] = []
 
-        class F(object(), C):
+        # NB: In Python 3 you wouldn't need to specify the metaclass here.
+        class F(object(), C2, metaclass=BNotMeta):
             pass
         self.assertIs(BNotMeta, type(F))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
@@ -801,7 +804,7 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
         prepare_calls[:] = []
 
-        class F2(C, object()):
+        class F2(C2, object()):
             pass
         self.assertIs(BNotMeta, type(F2))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
@@ -812,7 +815,7 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         # TypeError: BNotMeta is neither a
         # subclass, nor a superclass of int
         with self.assertRaises(TypeError):
-            class X(C, int()):
+            class X(C2, int()):
                 pass
         with self.assertRaises(TypeError):
             class X(int(), C):
