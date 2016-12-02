@@ -700,8 +700,15 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
         if (PyDict_Update(newglobal, global) < 0)
             goto error;
     }
+    else {
+        /* Special-case __class__ */
+        if (!GET_IDENTIFIER(__class__))
+            goto error;
+        if (PyDict_SetItem(newbound, __class__, Py_None) < 0)
+            goto error;
+    }
 
-    /* Recursively call analyze_block() on each child block.
+    /* Recursively call analyze_child_block() on each child block.
 
        newbound, newglobal now contain the names visible in
        nested blocks.  The free variables in the children will
@@ -724,10 +731,12 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
 
     if (PyDict_Update(newfree, allfree) < 0)
         goto error;
+    /* Check if any local variables must be converted to cell variables */
     if (ste->ste_type == FunctionBlock && !analyze_cells(scope, newfree))
         goto error;
     else if (ste->ste_type == ClassBlock && !drop_class_free(ste, newfree))
         goto error;
+    /* Records the results of the analysis in the symbol table entry */
     if (!update_symbols(ste->ste_symbols, scope, bound, newfree,
                         ste->ste_type == ClassBlock))
         goto error;
@@ -1338,6 +1347,14 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         if (!symtable_add_def(st, e->v.Name.id,
                               e->v.Name.ctx == Load ? USE : DEF_LOCAL))
             return 0;
+        /* Special-case super: it counts as a use of __class__ */
+        if (e->v.Name.ctx == Load &&
+            st->st_cur->ste_type == FunctionBlock &&
+            !strcmp(PyString_AS_STRING(e->v.Name.id), "super")) {
+            if (!GET_IDENTIFIER(__class__) ||
+                !symtable_add_def(st, __class__, USE))
+                return 0;
+        }
         break;
     /* child nodes of List and Tuple will have expr_context set */
     case List_kind:

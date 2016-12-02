@@ -526,7 +526,7 @@ compiler_enter_scope(struct compiler *c, identifier name,
             compiler_unit_free(u);
             return 0;
         }
-        tuple = PyTuple_Pack(2, name, Py_TYPE(name));
+        tuple = _PyCode_ConstantKey(name);
         if (!tuple) {
             compiler_unit_free(u);
             return 0;
