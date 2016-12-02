@@ -2756,6 +2756,12 @@ type_subclasses(PyTypeObject *type, PyObject *args_ignored)
     return list;
 }
 
+static PyObject *
+type_prepare(PyObject *self, PyObject *args, PyObject *kwds)
+{
+       return PyDict_New();
+}
+
 static PyMethodDef type_methods[] = {
     {"mro", (PyCFunction)mro_external, METH_NOARGS,
      PyDoc_STR("mro() -> list\nreturn a type's method resolution order")},
@@ -2765,6 +2771,10 @@ static PyMethodDef type_methods[] = {
      PyDoc_STR("__instancecheck__() -> bool\ncheck if an object is an instance")},
     {"__subclasscheck__", type___subclasscheck__, METH_O,
      PyDoc_STR("__subclasscheck__() -> bool\ncheck if a class is a subclass")},
+    {"__prepare__", (PyCFunction)type_prepare,
+     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
+     PyDoc_STR("__prepare__() -> dict\n"
+               "used to create the namespace for the class statement")},
     {0}
 };
 
