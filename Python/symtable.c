@@ -178,7 +178,7 @@ static int symtable_visit_params(struct symtable *st, asdl_seq *args, int top,
 static int symtable_visit_params_nested(struct symtable *st, asdl_seq *args,
                                         int annotations);
 static int symtable_implicit_arg(struct symtable *st, int pos);
-static int symtable_visit_annotations(struct symtable *st, stmt_ty s);
+static int symtable_visit_annotations(struct symtable *st, stmt_ty s, arguments_ty, expr_ty);
 static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
@@ -1019,7 +1019,8 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             VISIT_SEQ(st, expr, s->v.FunctionDef.args->defaults);
         if (s->v.FunctionDef.args->kw_defaults)
             VISIT_KWONLYDEFAULTS(st, s->v.FunctionDef.args->kw_defaults);
-        if (!symtable_visit_annotations(st, s))
+        if (!symtable_visit_annotations(st, s, s->v.FunctionDef.args,
+                                        s->v.FunctionDef.returns))
 	    return 0;
         if (s->v.FunctionDef.decorator_list)
             VISIT_SEQ(st, expr, s->v.FunctionDef.decorator_list);
@@ -1036,6 +1037,11 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             return 0;
         if (s->v.AsyncFunctionDef.args->defaults)
             VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.args->defaults);
+        if (s->v.AsyncFunctionDef.args->kw_defaults)
+            VISIT_KWONLYDEFAULTS(st, s->v.AsyncFunctionDef.args->kw_defaults);
+        if (!symtable_visit_annotations(st, s, s->v.AsyncFunctionDef.args,
+                                        s->v.AsyncFunctionDef.returns))
+	    return 0;
         if (s->v.AsyncFunctionDef.decorator_list)
             VISIT_SEQ(st, expr, s->v.AsyncFunctionDef.decorator_list);
         if (!symtable_enter_block(st, s->v.AsyncFunctionDef.name,
@@ -1407,10 +1413,9 @@ symtable_visit_params_nested(struct symtable *st, asdl_seq *args,
 }
 
 static int
-symtable_visit_annotations(struct symtable *st, stmt_ty s)
+symtable_visit_annotations(struct symtable *st, stmt_ty s,
+                           arguments_ty a, expr_ty returns)
 {
-    arguments_ty a = s->v.FunctionDef.args;
-
     if (a->args && !symtable_visit_params(st, a->args, 1, 1))
         return 0;
     if (a->varargannotation)
@@ -1420,7 +1425,7 @@ symtable_visit_annotations(struct symtable *st, stmt_ty s)
     if (a->kwonlyargs && !symtable_visit_params(st, a->kwonlyargs, 1, 1))
         return 0;
     if (s->v.FunctionDef.returns)
-        VISIT(st, expr, s->v.FunctionDef.returns);
+        VISIT(st, expr, returns);
     return 1;
 }
 

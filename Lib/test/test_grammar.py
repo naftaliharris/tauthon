@@ -439,6 +439,11 @@ def foo():
         baz = bar()
         self.assertEquals(baz.__annotations__, {'a': int, 'return': bar})
 
+        # asnyc and keyword args and annotations
+        d = {}
+        exec("async def f(a:int, *, b) -> str: pass", d)
+        self.assertEquals(d['f'].__annotations__, {'a': int, 'return': str})
+
         # Check for issue #20625 -- annotations mangling
         class Spam:
             def f(self, *, __kw:1):
