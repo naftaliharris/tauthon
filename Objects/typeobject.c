@@ -1,6 +1,7 @@
 /* Type object implementation */
 
 #include "Python.h"
+#include "frameobject.h"
 #include "structmember.h"
 
 #include <ctype.h>
@@ -2102,6 +2103,10 @@ _PyType_CalculateMetaclass(PyTypeObject *metatype, PyObject *bases)
     for (i = 0; i < nbases; i++) {
         tmp = PyTuple_GET_ITEM(bases, i);
         tmptype = Py_TYPE(tmp);
+        if (winner == &PyClass_Type && tmptype != &PyClass_Type) {
+            winner = tmptype;
+            continue;
+        }
         if (tmptype == &PyClass_Type)
             continue; /* Special case classic classes */
         if (PyType_IsSubtype(winner, tmptype))
@@ -6850,14 +6855,84 @@ static int
 super_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
     superobject *su = (superobject *)self;
-    PyTypeObject *type;
+    PyTypeObject *type = NULL;
     PyObject *obj = NULL;
     PyTypeObject *obj_type = NULL;
 
     if (!_PyArg_NoKeywords("super", kwds))
         return -1;
-    if (!PyArg_ParseTuple(args, "O!|O:super", &PyType_Type, &type, &obj))
+    if (!PyArg_ParseTuple(args, "|O!O:super", &PyType_Type, &type, &obj))
         return -1;
+
+    if (type == NULL) {
+        /* Call super(), without args -- fill in from __class__
+           and first local variable on the stack. */
+        PyFrameObject *f;
+        PyCodeObject *co;
+        Py_ssize_t i, n;
+        f = PyThreadState_GET()->frame;
+        if (f == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "super(): no current frame");
+            return -1;
+        }
+        co = f->f_code;
+        if (co == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "super(): no code object");
+            return -1;
+        }
+        if (co->co_argcount == 0) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "super(): no arguments");
+            return -1;
+        }
+        obj = f->f_localsplus[0];
+        if (obj == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "super(): arg[0] deleted");
+            return -1;
+        }
+        if (co->co_freevars == NULL)
+            n = 0;
+        else {
+            assert(PyTuple_Check(co->co_freevars));
+            n = PyTuple_GET_SIZE(co->co_freevars);
+        }
+        for (i = 0; i < n; i++) {
+            PyObject *name = PyTuple_GET_ITEM(co->co_freevars, i);
+            assert(PyString_Check(name));
+            if (!strcmp(PyString_AS_STRING(name), "__class__")) {
+                Py_ssize_t index = co->co_nlocals +
+                    PyTuple_GET_SIZE(co->co_cellvars) + i;
+                PyObject *cell = f->f_localsplus[index];
+                if (cell == NULL || !PyCell_Check(cell)) {
+                    PyErr_SetString(PyExc_RuntimeError,
+                      "super(): bad __class__ cell");
+                    return -1;
+                }
+                type = (PyTypeObject *) PyCell_GET(cell);
+                if (type == NULL) {
+                    PyErr_SetString(PyExc_RuntimeError,
+                      "super(): empty __class__ cell");
+                    return -1;
+                }
+                if (!PyType_Check(type)) {
+                    PyErr_Format(PyExc_RuntimeError,
+                      "super(): __class__ is not a type (%s)",
+                      Py_TYPE(type)->tp_name);
+                    return -1;
+                }
+                break;
+            }
+        }
+        if (type == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "super(): __class__ cell not found");
+            return -1;
+        }
+    }
+
     if (obj == Py_None)
         obj = NULL;
     if (obj != NULL) {
@@ -6874,13 +6949,19 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
 }
 
 PyDoc_STRVAR(super_doc,
+"super() -> same as super(__class__, <first argument>)\n"
 "super(type, obj) -> bound super object; requires isinstance(obj, type)\n"
 "super(type) -> unbound super object\n"
 "super(type, type2) -> bound super object; requires issubclass(type2, type)\n"
 "Typical use to call a cooperative superclass method:\n"
 "class C(B):\n"
 "    def meth(self, arg):\n"
-"        super(C, self).meth(arg)");
+"        super().meth(arg)\n"
+"This works for class methods too:\n"
+"class C(B):\n"
+"    @classmethod\n"
+"    def cmeth(cls, arg):\n"
+"        super().cmeth(arg)\n");
 
 static int
 super_traverse(PyObject *self, visitproc visit, void *arg)

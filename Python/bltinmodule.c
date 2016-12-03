@@ -125,14 +125,8 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         /* meta is really a class, so check for a more derived
            metaclass, or possible metaclass conflicts: */
 
-        int is_newstyle = PyObject_IsSubclass(meta, (PyObject *)&PyType_Type);
-        if (is_newstyle == 1)
-            winner = (PyObject *)_PyType_CalculateMetaclass((PyTypeObject *)meta,
-                                                            bases);
-        else if (is_newstyle == 0)
-            winner = meta;
-        else
-            winner = NULL;
+        winner = (PyObject *)_PyType_CalculateMetaclass((PyTypeObject *)meta,
+                                                        bases);
 
         if (winner == NULL) {
             Py_DECREF(meta);

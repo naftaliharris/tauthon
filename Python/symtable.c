@@ -67,6 +67,7 @@ ste_new(struct symtable *st, identifier name, _Py_block_ty block,
     ste->ste_child_free = 0;
     ste->ste_generator = 0;
     ste->ste_returns_value = 0;
+    ste->ste_needs_class_closure = 0;
 
     if (PyDict_SetItem(st->st_symbols, ste->ste_id, (PyObject *)ste) < 0)
         goto fail;
@@ -183,7 +184,7 @@ static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
 static identifier top = NULL, lambda = NULL, genexpr = NULL, setcomp = NULL,
-    dictcomp = NULL;
+    dictcomp = NULL, __class__ = NULL;
 
 #define GET_IDENTIFIER(VAR) \
     ((VAR) ? (VAR) : ((VAR) = PyString_InternFromString(# VAR)))
@@ -316,7 +317,7 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
 
 /* Analyze raw symbol information to determine scope of each name.
 
-   The next several functions are helpers for PySymtable_Analyze(),
+   The next several functions are helpers for symtable_analyze(),
    which determines whether a name is local, global, or free.  In addition,
    it determines which local variables are cell variables; they provide
    bindings that are used for free variables in enclosed blocks.
@@ -475,6 +476,22 @@ analyze_cells(PyObject *scope, PyObject *free)
  error:
     Py_DECREF(w);
     return success;
+}
+
+static int
+drop_class_free(PySTEntryObject *ste, PyObject *free)
+{
+    int res;
+    res = PyDict_DelItemString(free, "__class__");
+    if (res) {
+        if (!PyErr_ExceptionMatches(PyExc_KeyError))
+            return 0;
+        PyErr_Clear();
+    }
+    else
+        ste->ste_needs_class_closure = 1;
+
+    return 1;
 }
 
 /* Check for illegal statements in unoptimized namespaces */
@@ -683,8 +700,15 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
         if (PyDict_Update(newglobal, global) < 0)
             goto error;
     }
+    else {
+        /* Special-case __class__ */
+        if (!GET_IDENTIFIER(__class__))
+            goto error;
+        if (PyDict_SetItem(newbound, __class__, Py_None) < 0)
+            goto error;
+    }
 
-    /* Recursively call analyze_block() on each child block.
+    /* Recursively call analyze_child_block() on each child block.
 
        newbound, newglobal now contain the names visible in
        nested blocks.  The free variables in the children will
@@ -707,8 +731,12 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
 
     if (PyDict_Update(newfree, allfree) < 0)
         goto error;
+    /* Check if any local variables must be converted to cell variables */
     if (ste->ste_type == FunctionBlock && !analyze_cells(scope, newfree))
         goto error;
+    else if (ste->ste_type == ClassBlock && !drop_class_free(ste, newfree))
+        goto error;
+    /* Records the results of the analysis in the symbol table entry */
     if (!update_symbols(ste->ste_symbols, scope, bound, newfree,
                         ste->ste_type == ClassBlock))
         goto error;
@@ -1325,6 +1353,14 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         if (!symtable_add_def(st, e->v.Name.id,
                               e->v.Name.ctx == Load ? USE : DEF_LOCAL))
             return 0;
+        /* Special-case super: it counts as a use of __class__ */
+        if (e->v.Name.ctx == Load &&
+            st->st_cur->ste_type == FunctionBlock &&
+            !strcmp(PyString_AS_STRING(e->v.Name.id), "super")) {
+            if (!GET_IDENTIFIER(__class__) ||
+                !symtable_add_def(st, __class__, USE))
+                return 0;
+        }
         break;
     /* child nodes of List and Tuple will have expr_context set */
     case List_kind:

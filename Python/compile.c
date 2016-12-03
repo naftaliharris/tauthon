@@ -403,13 +403,15 @@ dictbytype(PyObject *src, int scope_type, int flag, int offset)
     num_keys = PyList_GET_SIZE(sorted_keys);
 
     for (key_i = 0; key_i < num_keys; key_i++) {
+        /* XXX this should probably be a macro in symtable.h */
+        long vi;
         k = PyList_GET_ITEM(sorted_keys, key_i);
         v = PyDict_GetItem(src, k);
-        /* XXX this should probably be a macro in symtable.h */
         assert(PyInt_Check(v));
-        scope = (PyInt_AS_LONG(v) >> SCOPE_OFF) & SCOPE_MASK;
+        vi = PyInt_AS_LONG(v);
+        scope = (vi >> SCOPE_OFF) & SCOPE_MASK;
 
-        if (scope == scope_type || PyInt_AS_LONG(v) & flag) {
+        if (scope == scope_type || vi & flag) {
             PyObject *tuple, *item = PyInt_FromLong(i);
             if (item == NULL) {
                 Py_DECREF(sorted_keys);
@@ -506,6 +508,42 @@ compiler_enter_scope(struct compiler *c, identifier name,
     if (!u->u_varnames || !u->u_cellvars) {
         compiler_unit_free(u);
         return 0;
+    }
+    if (u->u_ste->ste_needs_class_closure) {
+        /* Cook up a implicit __class__ cell. */
+        static PyObject *__class__;
+        if (!__class__) {
+            __class__ = PyString_InternFromString("__class__");
+            if (!__class__)
+                return 0;
+        }
+        PyObject *tuple, *name, *zero;
+        int res;
+        assert(u->u_scope_type == COMPILER_SCOPE_CLASS);
+        assert(PyDict_Size(u->u_cellvars) == 0);
+        name = __class__;
+        if (!name) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        tuple = _PyCode_ConstantKey(name);
+        if (!tuple) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        zero = PyLong_FromLong(0);
+        if (!zero) {
+            Py_DECREF(tuple);
+            compiler_unit_free(u);
+            return 0;
+        }
+        res = PyDict_SetItem(u->u_cellvars, tuple, zero);
+        Py_DECREF(tuple);
+        Py_DECREF(zero);
+        if (res < 0) {
+            compiler_unit_free(u);
+            return 0;
+        }
     }
 
     u->u_freevars = dictbytype(u->u_ste->ste_symbols, FREE, DEF_FREE_CLASS,
@@ -1256,6 +1294,9 @@ compiler_mod(struct compiler *c, mod_ty mod)
 static int
 get_ref_type(struct compiler *c, PyObject *name)
 {
+    if (c->u->u_scope_type == COMPILER_SCOPE_CLASS &&
+        !strcmp(PyString_AS_STRING(name), "__class__"))
+        return CELL;
     int scope = PyST_GetScope(c->u->u_ste, name);
     if (scope == 0) {
         char buf[350];
@@ -1681,8 +1722,28 @@ compiler_class(struct compiler *c, stmt_ty s)
             compiler_exit_scope(c);
             return 0;
         }
-        /* return None */
-        ADDOP_O(c, LOAD_CONST, Py_None, consts);
+        if (c->u->u_ste->ste_needs_class_closure) {
+            /* return the (empty) __class__ cell */
+            str = PyString_InternFromString("__class__");
+            if (str == NULL) {
+                compiler_exit_scope(c);
+                return 0;
+            }
+            i = compiler_lookup_arg(c->u->u_cellvars, str);
+            Py_DECREF(str);
+            if (i < 0) {
+                compiler_exit_scope(c);
+                return 0;
+            }
+            assert(i == 0);
+            /* Return the cell where to store __class__ */
+            ADDOP_I(c, LOAD_CLOSURE, i);
+        }
+        else {
+            assert(PyDict_Size(c->u->u_cellvars) == 0);
+            /* This happens when nobody references the cell. Return None. */
+            ADDOP_O(c, LOAD_CONST, Py_None, consts);
+        }
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
         /* create the code object */
         co = assemble(c, 1);
