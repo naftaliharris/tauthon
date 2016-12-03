@@ -2103,6 +2103,10 @@ _PyType_CalculateMetaclass(PyTypeObject *metatype, PyObject *bases)
     for (i = 0; i < nbases; i++) {
         tmp = PyTuple_GET_ITEM(bases, i);
         tmptype = Py_TYPE(tmp);
+        if (winner == &PyClass_Type && tmptype != &PyClass_Type) {
+            winner = tmptype;
+            continue;
+        }
         if (tmptype == &PyClass_Type)
             continue; /* Special case classic classes */
         if (PyType_IsSubtype(winner, tmptype))
