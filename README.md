@@ -79,6 +79,21 @@ What's new in Python 2.8?
                 [Tutorial](http://www.snarky.ca/how-the-heck-does-async-await-work-in-python-3-5)*
 
 
+* ###Argument-less "super"
+
+    ```python
+    >>> class MyList(list):
+    ...     def __repr__(self):
+    ...             return "MyList" + super().__repr__()
+    ...
+    >>> MyList(range(3))
+    MyList[0, 1, 2]
+    ```
+
+    *More info: [PEP 3135](https://www.python.org/dev/peps/pep-3135/),
+                [API Docs](https://docs.python.org/3/library/functions.html#super)*
+
+
 * ###New Metaclass Syntax
 
     ```python
