@@ -1,25 +1,26 @@
-Python 2.8
-==========
+Placeholder
+===========
 
-Python 2.8 is a backwards-compatible Python interpreter with new features from
-Python 3.x. It was produced by forking Python 2.7.12 and backporting some of the
-new syntax, builtins, and libraries from Python 3. Python code and C-extensions
-targeting Python 2.7 or below are expected to run unmodified on Python 2.8 and
-produce the same output. [But with Python 2.8, that code can now use some of the
-new features from Python 3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
+*Note: the name of this project is [currently an open
+issue](https://github.com/naftaliharris/python2.8/issues/47). Until this issue
+is resolved, the name of this project, and the interpreter it implements, will
+be "Placeholder". Placeholder is not an official Python release, and is neither
+supported by nor affiliated with the Python Software Foundation or the Python
+core development team. Official Python releases can be found
+[here](https://www.python.org/downloads/); please file any issues with CPython
+interpreters [here](https://bugs.python.org/).*
 
-```
-$ python
-Python 2.8.0a0 (default, Nov 15 2016, 10:13:31)
-[GCC 4.2.1 Compatible Apple LLVM 7.3.0 (clang-703.0.31)] on darwin
-Type "help", "copyright", "credits" or "license" for more information.
->>> import sys; print sys.version_info
-sys.version_info(major=2, minor=8, micro=0, releaselevel='alpha', serial=0)
-```
+Placeholder is a backwards-compatible fork of the Python 2.7.12 interpreter with
+new syntax, builtins, and libraries backported from Python 3.x. Python code and
+C-extensions targeting Python 2.7 or below are expected to run unmodified on
+Placeholder and produce the same output. [But with Placeholder, that code can
+now use some of the new features from Python
+3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
+
 
 [![Build Status](https://travis-ci.org/naftaliharris/python2.8.svg?branch=master)](https://travis-ci.org/naftaliharris/python2.8)
 
-What's new in Python 2.8?
+What's new in Placeholder
 -------------------------
 
 * ###Function Annotations
@@ -215,7 +216,7 @@ What's new in Python 2.8?
     ```
 
     Caveat: As you can see from the example, to maintain full backwards
-    compatibility Python 2.8 does not raise these new OSErrors. Rather it gives
+    compatibility Placeholder does not raise these new OSErrors. Rather it gives
     you fine-grained OSErrors that you can catch them with, as an alternative to
     checking errno.
 
@@ -320,7 +321,7 @@ $ CPPFLAGS="-I$(brew --prefix openssl)/include" LDFLAGS="-L$(brew --prefix opens
 $ make
 ```
 
-You can then run Python 2.8 with `./python` or `./python.exe`.
+You can then run Placeholder with `./python` or `./python.exe`.
 
 Install with
 ```
@@ -331,8 +332,8 @@ $ make install
 Backwards-incompatibilities
 ---------------------------
 
-There are a small handful of backwards incompatibilities introduced by Python
-2.8. Triggering these involves checking the python version, introspection of
+There are a small handful of backwards incompatibilities introduced by
+Placeholder. Triggering these involves checking the python version, introspection of
 Python internals (including the AST), or depending on errors being raised from
 nonexistent new features.
 
@@ -340,6 +341,6 @@ nonexistent new features.
 License
 -------
 
-Python 2.8 is licensed under the Python Software License, (see the LICENSE file
+Placeholder is licensed under the Python Software License, (see the LICENSE file
 for details). This is not an official Python release; see [PEP
 404](https://www.python.org/dev/peps/pep-0404/).
