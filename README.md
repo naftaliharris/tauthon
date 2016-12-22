@@ -10,7 +10,7 @@ core development team. Official Python releases can be found
 [here](https://www.python.org/downloads/); please file any issues with CPython
 interpreters [here](https://bugs.python.org/).*
 
-Placeholder is a backwards-compatible fork of the Python 2.7.12 interpreter with
+Placeholder is a backwards-compatible fork of the Python 2.7.13 interpreter with
 new syntax, builtins, and libraries backported from Python 3.x. Python code and
 C-extensions targeting Python 2.7 or below are expected to run unmodified on
 Placeholder and produce the same output. [But with Placeholder, that code can
