@@ -107,7 +107,7 @@ _bsddb
     Wraps Berkeley DB 4.7.25, which is currently built by _bsddb.vcproj.
     project.
 _sqlite3
-    Wraps SQLite 3.6.21, which is currently built by sqlite3.vcproj.
+    Wraps SQLite 3.8.11.0, which is currently built by sqlite3.vcproj.
 _tkinter
     Wraps the Tk windowing system.  Unlike _bsddb and _sqlite3, there's no
     corresponding tcltk.vcproj-type project that builds Tcl/Tk from vcproj's
@@ -132,7 +132,7 @@ _ssl
 
     Get the source code through
 
-    svn export http://svn.python.org/projects/external/openssl-1.0.2h
+    svn export http://svn.python.org/projects/external/openssl-1.0.2j
 
     ** NOTE: if you use the PCbuild\get_externals.bat approach for
     obtaining external sources then you don't need to manually get the source

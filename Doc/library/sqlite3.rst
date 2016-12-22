@@ -256,11 +256,11 @@ Connection Objects
       :ref:`sqlite3-controlling-transactions` for a more detailed explanation.
 
 
-   .. method:: cursor([cursorClass])
+   .. method:: cursor(factory=Cursor)
 
-      The cursor method accepts a single optional parameter *cursorClass*. If
-      supplied, this must be a custom cursor class that extends
-      :class:`sqlite3.Cursor`.
+      The cursor method accepts a single optional parameter *factory*. If
+      supplied, this must be a callable returning an instance of :class:`Cursor`
+      or its subclasses.
 
    .. method:: commit()
 
@@ -308,7 +308,7 @@ Connection Objects
       as the SQL function.
 
       The function can return any of the types supported by SQLite: unicode, str, int,
-      long, float, buffer and None.
+      long, float, buffer and ``None``.
 
       Example:
 
@@ -324,7 +324,7 @@ Connection Objects
       final result of the aggregate.
 
       The ``finalize`` method can return any of the types supported by SQLite:
-      unicode, str, int, long, float, buffer and None.
+      unicode, str, int, long, float, buffer and ``None``.
 
       Example:
 
@@ -346,7 +346,7 @@ Connection Objects
 
       .. literalinclude:: ../includes/sqlite3/collation_reverse.py
 
-      To remove a collation, call ``create_collation`` with None as callable::
+      To remove a collation, call ``create_collation`` with ``None`` as callable::
 
          con.create_collation("reverse", None)
 
@@ -583,7 +583,7 @@ Cursor Objects
    .. attribute:: lastrowid
 
       This read-only attribute provides the rowid of the last modified row. It is
-      only set if you issued a ``INSERT`` statement using the :meth:`execute`
+      only set if you issued an ``INSERT`` statement using the :meth:`execute`
       method. For operations other than ``INSERT`` or when :meth:`executemany` is
       called, :attr:`lastrowid` is set to :const:`None`.
 
@@ -868,7 +868,7 @@ You can control which kind of ``BEGIN`` statements sqlite3 implicitly executes
 (or none at all) via the *isolation_level* parameter to the :func:`connect`
 call, or via the :attr:`isolation_level` property of connections.
 
-If you want **autocommit mode**, then set :attr:`isolation_level` to None.
+If you want **autocommit mode**, then set :attr:`isolation_level` to ``None``.
 
 Otherwise leave it at its default, which will result in a plain "BEGIN"
 statement, or set it to one of SQLite's supported isolation levels: "DEFERRED",

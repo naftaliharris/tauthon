@@ -8,17 +8,20 @@
 /* all_name_chars(s): true iff all chars in s are valid NAME_CHARS */
 
 static int
-all_name_chars(unsigned char *s)
+all_name_chars(PyObject *o)
 {
     static char ok_name_char[256];
-    static unsigned char *name_chars = (unsigned char *)NAME_CHARS;
+    static const unsigned char *name_chars = (unsigned char *)NAME_CHARS;
+    const unsigned char *s, *e;
 
     if (ok_name_char[*name_chars] == 0) {
-        unsigned char *p;
+        const unsigned char *p;
         for (p = name_chars; *p; p++)
             ok_name_char[*p] = 1;
     }
-    while (*s) {
+    s = (unsigned char *)PyString_AS_STRING(o);
+    e = s + PyString_GET_SIZE(o);
+    while (s != e) {
         if (ok_name_char[*s++] == 0)
             return 0;
     }
@@ -39,6 +42,53 @@ intern_strings(PyObject *tuple)
     }
 }
 
+/* Intern selected string constants */
+static int
+intern_string_constants(PyObject *tuple)
+{
+    int modified = 0;
+    Py_ssize_t i;
+
+    for (i = PyTuple_GET_SIZE(tuple); --i >= 0; ) {
+        PyObject *v = PyTuple_GET_ITEM(tuple, i);
+        if (PyString_CheckExact(v)) {
+            if (all_name_chars(v)) {
+                PyObject *w = v;
+                PyString_InternInPlace(&v);
+                if (w != v) {
+                    PyTuple_SET_ITEM(tuple, i, v);
+                    modified = 1;
+                }
+            }
+        }
+        else if (PyTuple_CheckExact(v)) {
+            intern_string_constants(v);
+        }
+        else if (PyFrozenSet_CheckExact(v)) {
+            PyObject *w = v;
+            PyObject *tmp = PySequence_Tuple(v);
+            if (tmp == NULL) {
+                PyErr_Clear();
+                continue;
+            }
+            if (intern_string_constants(tmp)) {
+                v = PyFrozenSet_New(tmp);
+                if (v == NULL) {
+                    PyErr_Clear();
+                }
+                else {
+                    PyTuple_SET_ITEM(tuple, i, v);
+                    Py_DECREF(w);
+                    modified = 1;
+                }
+            }
+            Py_DECREF(tmp);
+        }
+    }
+    return modified;
+}
+
+
 PyCodeObject *
 PyCode_New28(int argcount, int kwonlyargcount,
              int nlocals, int stacksize, int flags,
@@ -48,7 +98,6 @@ PyCode_New28(int argcount, int kwonlyargcount,
              PyObject *lnotab)
 {
     PyCodeObject *co;
-    Py_ssize_t i;
     /* Check argument types */
     if (argcount < 0 || kwonlyargcount < 0 || nlocals < 0 ||
         code == NULL ||
@@ -68,15 +117,7 @@ PyCode_New28(int argcount, int kwonlyargcount,
     intern_strings(varnames);
     intern_strings(freevars);
     intern_strings(cellvars);
-    /* Intern selected string constants */
-    for (i = PyTuple_Size(consts); --i >= 0; ) {
-        PyObject *v = PyTuple_GetItem(consts, i);
-        if (!PyString_Check(v))
-            continue;
-        if (!all_name_chars((unsigned char *)PyString_AS_STRING(v)))
-            continue;
-        PyString_InternInPlace(&PyTuple_GET_ITEM(consts, i));
-    }
+    intern_string_constants(consts);
     co = PyObject_NEW(PyCodeObject, &PyCode_Type);
     if (co != NULL) {
         co->co_argcount = argcount;
@@ -720,7 +761,7 @@ _PyCode_CheckLineNumber(PyCodeObject* co, int lasti, PyAddrPair *bounds)
     /* possible optimization: if f->f_lasti == instr_ub
        (likely to be a common case) then we already know
        instr_lb -- if we stored the matching value of p
-       somwhere we could skip the first while loop. */
+       somewhere we could skip the first while loop. */
 
     /* See lnotab_notes.txt for the description of
        co_lnotab.  A point to remember: increments to p

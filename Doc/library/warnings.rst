@@ -140,14 +140,15 @@ the disposition of the match.  Each entry is a tuple of the form (*action*,
   |               | warnings, regardless of location             |
   +---------------+----------------------------------------------+
 
-* *message* is a string containing a regular expression that the warning message
-  must match (the match is compiled to always be case-insensitive).
+* *message* is a string containing a regular expression that the start of
+  the warning message must match.  The expression is compiled to always be
+  case-insensitive.
 
 * *category* is a class (a subclass of :exc:`Warning`) of which the warning
   category must be a subclass in order to match.
 
 * *module* is a string containing a regular expression that the module name must
-  match (the match is compiled to be case-sensitive).
+  match.  The expression is compiled to be case-sensitive.
 
 * *lineno* is an integer that the line number where the warning occurred must
   match, or ``0`` to match all line numbers.
@@ -257,13 +258,13 @@ Updating Code For New Versions of Python
 Warnings that are only of interest to the developer are ignored by default. As
 such you should make sure to test your code with typically ignored warnings
 made visible. You can do this from the command-line by passing :option:`-Wd <-W>`
-to the interpreter (this is shorthand for :option:`-W default`).  This enables
+to the interpreter (this is shorthand for :option:`!-W default`).  This enables
 default handling for all warnings, including those that are ignored by default.
 To change what action is taken for encountered warnings you simply change what
-argument is passed to :option:`-W`, e.g. :option:`-W error`. See the
+argument is passed to :option:`-W`, e.g. :option:`!-W error`. See the
 :option:`-W` flag for more details on what is possible.
 
-To programmatically do the same as :option:`-Wd`, use::
+To programmatically do the same as :option:`!-Wd`, use::
 
   warnings.simplefilter('default')
 

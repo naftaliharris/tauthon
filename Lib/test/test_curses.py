@@ -63,7 +63,7 @@ class TestCurses(unittest.TestCase):
     def setUp(self):
         if verbose:
             # just to make the test output a little more readable
-            print()
+            print('')
         self.stdscr = curses.initscr()
         curses.savetty()
 
@@ -184,6 +184,11 @@ class TestCurses(unittest.TestCase):
             stdscr.resize()
         if hasattr(curses, 'enclose'):
             stdscr.enclose()
+
+        self.assertRaises(ValueError, stdscr.getstr, -400)
+        self.assertRaises(ValueError, stdscr.getstr, 2, 3, -400)
+        self.assertRaises(ValueError, stdscr.instr, -2)
+        self.assertRaises(ValueError, stdscr.instr, 2, 3, -2)
 
 
     def test_module_funcs(self):

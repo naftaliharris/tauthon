@@ -2,17 +2,15 @@
 /* ========================== Module _Drag ========================== */
 
 #include "Python.h"
-
-#ifndef __LP64__
-
-
 #include "pymactoolbox.h"
+
+#if APPLE_SUPPORTS_QUICKTIME
 
 /* Macro to test whether a weak-loaded CFM function exists */
 #define PyMac_PRECHECK(rtn) do { if ( &rtn == NULL )  {\
-    PyErr_SetString(PyExc_NotImplementedError, \
-    "Not available in this shared library/OS version"); \
-    return NULL; \
+        PyErr_SetString(PyExc_NotImplementedError, \
+            "Not available in this shared library/OS version"); \
+        return NULL; \
     }} while(0)
 
 
@@ -1117,18 +1115,18 @@ static PyMethodDef Drag_methods[] = {
 void init_Drag(void)
 {
     PyObject *m;
-#ifndef __LP64__
+#if APPLE_SUPPORTS_QUICKTIME
     PyObject *d;
 
 
 
         PyMac_INIT_TOOLBOX_OBJECT_NEW(DragRef, DragObj_New);
         PyMac_INIT_TOOLBOX_OBJECT_CONVERT(DragRef, DragObj_Convert);
-#endif /* !__LP64__ */
+#endif /* APPLE_SUPPORTS_QUICKTIME */
 
 
     m = Py_InitModule("_Drag", Drag_methods);
-#ifndef __LP64__
+#if APPLE_SUPPORTS_QUICKTIME
     d = PyModule_GetDict(m);
     Drag_Error = PyMac_GetOSErrException();
     if (Drag_Error == NULL ||
@@ -1150,7 +1148,7 @@ void init_Drag(void)
     dragglue_DrawingUPP = NewDragDrawingUPP(dragglue_Drawing);
 #endif
 
-#endif /* !__LP64__ */
+#endif /* APPLE_SUPPORTS_QUICKTIME */
 
 }
 

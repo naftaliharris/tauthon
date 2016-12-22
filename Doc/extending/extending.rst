@@ -763,7 +763,9 @@ the format string is empty, it returns ``None``; if it contains exactly one
 format unit, it returns whatever object is described by that format unit.  To
 force it to return a tuple of size 0 or one, parenthesize the format string.
 
-Examples (to the left the call, to the right the resulting Python value)::
+Examples (to the left the call, to the right the resulting Python value):
+
+.. code-block:: none
 
    Py_BuildValue("")                        None
    Py_BuildValue("i", 123)                  123
@@ -856,7 +858,7 @@ The :mod:`gc` module also exposes a way to run the detector (the
 :func:`~gc.collect` function), as well as configuration
 interfaces and the ability to disable the detector at runtime.  The cycle
 detector is considered an optional component; though it is included by default,
-it can be disabled at build time using the :option:`--without-cycle-gc` option
+it can be disabled at build time using the :option:`!--without-cycle-gc` option
 to the :program:`configure` script on Unix platforms (including Mac OS X) or by
 removing the definition of ``WITH_CYCLE_GC`` in the :file:`pyconfig.h` header on
 other platforms.  If the cycle detector is disabled in this way, the :mod:`gc`

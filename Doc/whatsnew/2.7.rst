@@ -104,7 +104,7 @@ Some key consequences of the long-term significance of 2.7 are:
   when compared to earlier 2.x versions. Python 2.7 is currently expected to
   remain supported by the core development team (receiving security updates
   and other bug fixes) until at least 2020 (10 years after its initial
-  release, compared to the more typical support period of 18-24 months).
+  release, compared to the more typical support period of 18--24 months).
 
 * As the Python 2.7 standard library ages, making effective use of the
   Python Package Index (either directly or via a redistributor) becomes
@@ -245,8 +245,8 @@ Deleting an entry and reinserting it will move it to the end::
     [('first', 1), ('third', 3), ('second', 5)]
 
 The :meth:`~collections.OrderedDict.popitem` method has an optional *last*
-argument that defaults to True.  If *last* is True, the most recently
-added key is returned and removed; if it's False, the
+argument that defaults to ``True``.  If *last* is true, the most recently
+added key is returned and removed; if it's false, the
 oldest key is selected::
 
     >>> od = OrderedDict([(x,0) for x in range(20)])
@@ -390,7 +390,7 @@ Here's an example::
     args = parser.parse_args()
     print args.__dict__
 
-Unless you override it, :option:`-h` and :option:`--help` switches
+Unless you override it, :option:`!-h` and :option:`!--help` switches
 are automatically added, and produce neatly formatted output::
 
     -> ./python.exe argparse-example.py --help
@@ -532,7 +532,7 @@ implemented by Vinay Sajip, are:
   calling ``log.getChild('network.listen')`` is equivalent to
   ``getLogger('app.network.listen')``.
 
-* The :class:`~logging.LoggerAdapter` class gained a
+* The :class:`~logging.LoggerAdapter` class gained an
   :meth:`~logging.LoggerAdapter.isEnabledFor` method that takes a
   *level* and returns whether the underlying logger would
   process a message of that level of importance.
@@ -945,7 +945,7 @@ Several performance enhancements have been added:
   benchmark results on 32-bit machines have been mixed.  Therefore,
   the default is to use base 2**30 on 64-bit machines and base 2**15
   on 32-bit machines; on Unix, there's a new configure option
-  :option:`--enable-big-digits` that can be used to override this default.
+  :option:`!--enable-big-digits` that can be used to override this default.
 
   Apart from the performance improvements this change should be
   invisible to end users, with one exception: for testing and
@@ -974,7 +974,7 @@ Several performance enhancements have been added:
   Gregory Smith; :issue:`1087418`).
 
 * The implementation of ``%`` checks for the left-side operand being
-  a Python string and special-cases it; this results in a 1-3%
+  a Python string and special-cases it; this results in a 1--3%
   performance increase for applications that frequently use ``%``
   with strings, such as templating libraries.
   (Implemented by Collin Winter; :issue:`5176`.)
@@ -1503,7 +1503,7 @@ changes, or look through the Subversion logs for all the details.
 * The :mod:`SocketServer` module's :class:`~SocketServer.TCPServer` class now
   supports socket timeouts and disabling the Nagle algorithm.
   The :attr:`~SocketServer.TCPServer.disable_nagle_algorithm` class attribute
-  defaults to False; if overridden to be True,
+  defaults to ``False``; if overridden to be true,
   new request connections will have the TCP_NODELAY option set to
   prevent buffering many small sends into a single TCP packet.
   The :attr:`~SocketServer.BaseServer.timeout` class attribute can hold
@@ -1820,12 +1820,12 @@ Consult the :mod:`unittest` module documentation for more details.
 
 The :func:`~unittest.main` function supports some other new options:
 
-* :option:`-b <unittest -b>` or :option:`--buffer` will buffer the standard output
+* :option:`-b <unittest -b>` or :option:`!--buffer` will buffer the standard output
   and standard error streams during each test.  If the test passes,
   any resulting output will be discarded; on failure, the buffered
   output will be displayed.
 
-* :option:`-c <unittest -c>` or :option:`--catch` will cause the control-C interrupt
+* :option:`-c <unittest -c>` or :option:`!--catch` will cause the control-C interrupt
   to be handled more gracefully.  Instead of interrupting the test
   process immediately, the currently running test will be completed
   and then the partial results up to the interruption will be reported.
@@ -1839,7 +1839,7 @@ The :func:`~unittest.main` function supports some other new options:
   :func:`~unittest.removeHandler` decorator that can be used to mark tests that
   should have the control-C handling disabled.
 
-* :option:`-f <unittest -f>` or :option:`--failfast` makes
+* :option:`-f <unittest -f>` or :option:`!--failfast` makes
   test execution stop immediately when a test fails instead of
   continuing to execute further tests.  (Suggested by Cliff Dyer and
   implemented by Michael Foord; :issue:`8074`.)
@@ -1855,7 +1855,7 @@ The error messages for :meth:`~unittest.TestCase.assertEqual`,
 :meth:`~unittest.TestCase.assertTrue`, and :meth:`~unittest.TestCase.assertFalse`
 failures now provide more information.  If you set the
 :attr:`~unittest.TestCase.longMessage` attribute of your :class:`~unittest.TestCase` classes to
-True, both the standard error message and any additional message you
+true, both the standard error message and any additional message you
 provide will be printed for failures.  (Added by Michael Foord; :issue:`5663`.)
 
 The :meth:`~unittest.TestCase.assertRaises` method now
@@ -1962,7 +1962,7 @@ GvR worked on merging them into Python's version of :mod:`unittest`.
   sequence comparison methods do.
 
 :func:`unittest.main` now takes an optional ``exit`` argument.  If
-False, :func:`~unittest.main` doesn't call :func:`sys.exit`, allowing
+false, :func:`~unittest.main` doesn't call :func:`sys.exit`, allowing
 :func:`~unittest.main` to be used from the interactive interpreter.
 (Contributed by J. Pablo Fernández; :issue:`3379`.)
 
@@ -2214,19 +2214,19 @@ Changes to Python's build process and to the C API include:
   with ``Py``, or with ``_ctypes``.  (Implemented by Thomas
   Heller; :issue:`3102`.)
 
-* New configure option: the :option:`--with-system-expat` switch allows
+* New configure option: the :option:`!--with-system-expat` switch allows
   building the :mod:`pyexpat` module to use the system Expat library.
   (Contributed by Arfrever Frehtes Taifersar Arahesis; :issue:`7609`.)
 
 * New configure option: the
-  :option:`--with-valgrind` option will now disable the pymalloc
+  :option:`!--with-valgrind` option will now disable the pymalloc
   allocator, which is difficult for the Valgrind memory-error detector
   to analyze correctly.
   Valgrind will therefore be better at detecting memory leaks and
   overruns. (Contributed by James Henstridge; :issue:`2422`.)
 
 * New configure option: you can now supply an empty string to
-  :option:`--with-dbmliborder=` in order to disable all of the various
+  :option:`!--with-dbmliborder=` in order to disable all of the various
   DBM modules.  (Added by Arfrever Frehtes Taifersar Arahesis;
   :issue:`6491`.)
 
@@ -2266,7 +2266,9 @@ There is an existing data type already used for this,
 written in pure Python could cause a segmentation fault by taking a
 :c:type:`PyCObject` from module A and somehow substituting it for the
 :c:type:`PyCObject` in module B.   Capsules know their own name,
-and getting the pointer requires providing the name::
+and getting the pointer requires providing the name:
+
+.. code-block:: c
 
    void *vtable;
 
@@ -2341,6 +2343,18 @@ Port-Specific Changes: Mac OS X
   installation and a user-installed copy of the same version.
   (Changed by Ronald Oussoren; :issue:`4865`.)
 
+   .. versionchanged:: 2.7.13
+
+     As of 2.7.13, this change was removed.
+     ``/Library/Python/2.7/site-packages``, the site-packages directory
+     used by the Apple-supplied system Python 2.7 is no longer appended to
+     ``sys.path`` for user-installed Pythons such as from the python.org
+     installers.  As of macOS 10.12, Apple changed how the system
+     site-packages directory is configured, which could cause installation
+     of pip components, like setuptools, to fail.  Packages installed for
+     the system Python will no longer be shared with user-installed
+     Pythons. (:issue:`28440`)
+
 Port-Specific Changes: FreeBSD
 -----------------------------------
 
@@ -2371,19 +2385,19 @@ Other Changes and Fixes
   renamed, moved, or is accessed through different paths.  (Patch by
   Ziga Seilnacht and Jean-Paul Calderone; :issue:`1180193`.)
 
-* The :file:`regrtest.py` script now takes a :option:`--randseed=`
+* The :file:`regrtest.py` script now takes a :option:`!--randseed=`
   switch that takes an integer that will be used as the random seed
-  for the :option:`-r` option that executes tests in random order.
-  The :option:`-r` option also reports the seed that was used
+  for the :option:`!-r` option that executes tests in random order.
+  The :option:`!-r` option also reports the seed that was used
   (Added by Collin Winter.)
 
-* Another :file:`regrtest.py` switch is :option:`-j`, which
+* Another :file:`regrtest.py` switch is :option:`!-j`, which
   takes an integer specifying how many tests run in parallel. This
   allows reducing the total runtime on multi-core machines.
   This option is compatible with several other options, including the
   :option:`!-R` switch which is known to produce long runtimes.
   (Added by Antoine Pitrou, :issue:`6152`.)  This can also be used
-  with a new :option:`-F` switch that runs selected tests in a loop
+  with a new :option:`!-F` switch that runs selected tests in a loop
   until they fail.  (Added by Antoine Pitrou; :issue:`7312`.)
 
 * When executed as a script, the :file:`py_compile.py` module now
@@ -2705,4 +2719,3 @@ The author would like to thank the following people for offering
 suggestions, corrections and assistance with various drafts of this
 article: Nick Coghlan, Philip Jenvey, Ryan Lovett, R. David Murray,
 Hugh Secker-Walker.
-

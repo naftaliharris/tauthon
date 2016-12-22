@@ -8,11 +8,10 @@ m4_define(PYTHON_VERSION, 2.8)
 AC_PREREQ(2.65)
 
 AC_REVISION($Revision$)
-AC_INIT(python, PYTHON_VERSION, http://bugs.python.org/)
+AC_INIT(python, PYTHON_VERSION, https://bugs.python.org/)
 AC_CONFIG_SRCDIR([Include/object.h])
 AC_CONFIG_HEADER(pyconfig.h)
 
-AC_SUBST(cross_compiling)
 AC_CANONICAL_HOST
 AC_SUBST(build)
 AC_SUBST(host)
@@ -36,12 +35,16 @@ if test "$cross_compiling" = yes; then
         AC_MSG_RESULT($interp)
 	PYTHON_FOR_BUILD='_PYTHON_PROJECT_BASE=$(abs_builddir) _PYTHON_HOST_PLATFORM=$(_PYTHON_HOST_PLATFORM) PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib:$(srcdir)/Lib/$(PLATDIR) '$interp
     fi
+    # Used to comment out stuff for rebuilding generated files
+    GENERATED_COMMENT='#'
 elif test "$cross_compiling" = maybe; then
     AC_MSG_ERROR([Cross compiling required --host=HOST-TUPLE and --build=ARCH])
 else
     PYTHON_FOR_BUILD='./$(BUILDPYTHON) -E'
+    GENERATED_COMMENT=''
 fi
 AC_SUBST(PYTHON_FOR_BUILD)
+AC_SUBST(GENERATED_COMMENT)
 
 dnl Ensure that if prefix is specified, it does not end in a slash. If
 dnl it does, we get path names containing '//' which is both ugly and
@@ -985,20 +988,6 @@ else
 	SVNVERSION="echo Unversioned directory"
 fi
 
-AC_SUBST(BASECPPFLAGS)
-if test "$abs_srcdir" != "$abs_builddir"; then
-    # If we're building out-of-tree make sure Include (in the current dir)
-    # gets picked up before its $srcdir counterpart in order for Python-ast.h
-    # and graminit.h to get picked up from the correct directory.
-    # (A side effect of this is that these resources will automatically be
-    #  regenerated when building out-of-tree, regardless of whether or not
-    #  the $srcdir counterpart is up-to-date.  This is an acceptable trade
-    #  off.)
-    BASECPPFLAGS="-IInclude"
-else
-    BASECPPFLAGS=""
-fi
-
 AC_SUBST(HGVERSION)
 AC_SUBST(HGTAG)
 AC_SUBST(HGBRANCH)
@@ -1377,6 +1366,38 @@ then
 fi
 
 
+# Enable optimization flags
+AC_SUBST(DEF_MAKE_ALL_RULE)
+AC_SUBST(DEF_MAKE_RULE)
+Py_OPT='false'
+AC_MSG_CHECKING(for --enable-optimizations)
+AC_ARG_ENABLE(optimizations, AS_HELP_STRING([--enable-optimizations], [Enable expensive optimizations (PGO, maybe LTO, etc).  Disabled by default.]),
+[
+if test "$withval" != no
+then
+  Py_OPT='true'
+  AC_MSG_RESULT(yes);
+else
+  Py_OPT='false'
+  AC_MSG_RESULT(no);
+fi],
+[AC_MSG_RESULT(no)])
+if test "$Py_OPT" = 'true' ; then
+  # Intentionally not forcing Py_LTO='true' here.  Too many toolchains do not
+  # compile working code using it and both test_distutils and test_gdb are
+  # broken when you do managed to get a toolchain that works with it.  People
+  # who want LTO need to use --with-lto themselves.
+  Py_LTO='true'
+  DEF_MAKE_ALL_RULE="profile-opt"
+  REQUIRE_PGO="yes"
+  DEF_MAKE_RULE="build_all"
+else
+  DEF_MAKE_ALL_RULE="build_all"
+  REQUIRE_PGO="no"
+  DEF_MAKE_RULE="all"
+fi
+
+
 # Enable LTO flags
 AC_SUBST(LTOFLAGS)
 AC_MSG_CHECKING(for --with-lto)
@@ -1417,19 +1438,60 @@ AC_SUBST(PGO_PROF_USE_FLAG)
 AC_SUBST(LLVM_PROF_MERGER)
 AC_SUBST(LLVM_PROF_FILE)
 AC_SUBST(LLVM_PROF_ERR)
+# Make this work on systems where llvm tools are not installed with their
+# normal names in the default $PATH (ie: Ubuntu).  They exist under the
+# non-suffixed name in their versioned llvm directory.
+llvm_bin_dir=''
+llvm_path="${PATH}"
+if test "${CC}" = "clang"
+then
+  clang_bin=`which clang`
+  # Some systems install clang elsewhere as a symlink to the real path
+  # which is where the related llvm tools are located.
+  if test -L "${clang_bin}"
+  then
+    clang_dir=`dirname "${clang_bin}"`
+    clang_bin=`readlink "${clang_bin}"`
+    llvm_bin_dir="${clang_dir}/"`dirname "${clang_bin}"`
+    llvm_path="${llvm_path}${PATH_SEPARATOR}${llvm_bin_dir}"
+  fi
+fi
+AC_SUBST(LLVM_PROFDATA)
+AC_PATH_TARGET_TOOL(LLVM_PROFDATA, llvm-profdata, '', ${llvm_path})
 AC_SUBST(LLVM_PROF_FOUND)
-AC_CHECK_PROG(LLVM_PROF_FOUND, llvm-profdata, found, not-found)
+if test -n "${LLVM_PROFDATA}" -a -x "${LLVM_PROFDATA}"
+then
+  LLVM_PROF_FOUND="found"
+else
+  LLVM_PROF_FOUND="not-found"
+fi
+if test "$ac_sys_system" = "Darwin" -a "${LLVM_PROF_FOUND}" = "not-found"
+then
+  found_llvm_profdata=`/usr/bin/xcrun -find llvm-profdata 2>/dev/null`
+  if test -n "${found_llvm_profdata}"
+  then
+    # llvm-profdata isn't directly in $PATH in some cases.
+    # https://apple.stackexchange.com/questions/197053/
+    LLVM_PROFDATA='/usr/bin/xcrun llvm-profdata'
+    LLVM_PROF_FOUND=found
+    AC_MSG_NOTICE([llvm-profdata found via xcrun: ${LLVM_PROFDATA}])
+  fi
+fi
 LLVM_PROF_ERR=no
 case $CC in
   *clang*)
     # Any changes made here should be reflected in the GCC+Darwin case below
     PGO_PROF_GEN_FLAG="-fprofile-instr-generate"
     PGO_PROF_USE_FLAG="-fprofile-instr-use=code.profclangd"
-    LLVM_PROF_MERGER="llvm-profdata merge -output=code.profclangd *.profclangr"
+    LLVM_PROF_MERGER="${LLVM_PROFDATA} merge -output=code.profclangd *.profclangr"
     LLVM_PROF_FILE="LLVM_PROFILE_FILE=\"code-%p.profclangr\""
     if test $LLVM_PROF_FOUND = not-found
     then
       LLVM_PROF_ERR=yes
+      if test "${REQUIRE_PGO}" = "yes"
+      then
+        AC_MSG_ERROR([llvm-profdata is required for a --enable-optimizations build but could not be found.])
+      fi
     fi
     ;;
   *gcc*)
@@ -1437,11 +1499,15 @@ case $CC in
       Darwin*)
         PGO_PROF_GEN_FLAG="-fprofile-instr-generate"
         PGO_PROF_USE_FLAG="-fprofile-instr-use=code.profclangd"
-        LLVM_PROF_MERGER="llvm-profdata merge -output=code.profclangd *.profclangr"
+        LLVM_PROF_MERGER="${LLVM_PROFDATA} merge -output=code.profclangd *.profclangr"
         LLVM_PROF_FILE="LLVM_PROFILE_FILE=\"code-%p.profclangr\""
-        if test $LLVM_PROF_FOUND = not-found
+        if test "${LLVM_PROF_FOUND}" = "not-found"
         then
           LLVM_PROF_ERR=yes
+          if test "${REQUIRE_PGO}" = "yes"
+	  then
+	    AC_MSG_ERROR([llvm-profdata is required for a --enable-optimizations build but could not be found.])
+	  fi
         fi
         ;;
       *)
@@ -2058,7 +2124,7 @@ if test -z "$LDSHARED"
 then
 	case $ac_sys_system/$ac_sys_release in
 	AIX*)
-		BLDSHARED="\$(srcdir)/Modules/ld_so_aix \$(CC) -bI:\$(srcdir)/Modules/python.exp"
+		BLDSHARED="Modules/ld_so_aix \$(CC) -bI:Modules/python.exp"
 		LDSHARED="\$(BINLIBDEST)/config/ld_so_aix \$(CC) -bI:\$(BINLIBDEST)/config/python.exp"
 		;;
 	BeOS*)
@@ -2333,9 +2399,6 @@ AC_MSG_RESULT($SHLIBS)
 # checks for libraries
 AC_CHECK_LIB(dl, dlopen)	# Dynamic linking for SunOS/Solaris and SYSV
 AC_CHECK_LIB(dld, shl_load)	# Dynamic linking for HP-UX
-AC_CHECK_LIB(crypto, RAND_egd,
-             AC_DEFINE(HAVE_RAND_EGD, 1,
-             [Define if the libcrypto has RAND_egd]))
 
 # only check for sem_init if thread support is requested
 if test "$with_threads" = "yes" -o -z "$with_threads"; then
@@ -3422,6 +3485,8 @@ int main()
         break;
       }
     }
+    freeaddrinfo(aitop);
+    aitop = NULL;
   }
 
   if (!(inet4 == 0 || inet4 == 2))
@@ -4773,3 +4838,12 @@ BeOS)
 esac
 
 mv config.c Modules
+
+if test "$Py_OPT" = 'false' -a "$Py_DEBUG" != 'true'; then
+    echo "" >&AS_MESSAGE_FD
+    echo "" >&AS_MESSAGE_FD
+    echo "If you want a release build with all optimizations active (LTO, PGO, etc),"
+    echo "please run ./configure --enable-optimizations" >&AS_MESSAGE_FD
+    echo "" >&AS_MESSAGE_FD
+    echo "" >&AS_MESSAGE_FD
+fi

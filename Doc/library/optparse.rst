@@ -680,7 +680,9 @@ automatically adds a ``--version`` option to your parser. If it encounters
 this option on the command line, it expands your ``version`` string (by
 replacing ``%prog``), prints it to stdout, and exits.
 
-For example, if your script is called ``/usr/bin/foo``::
+For example, if your script is called ``/usr/bin/foo``:
+
+.. code-block:: shell-session
 
    $ /usr/bin/foo --version
    foo 1.0
@@ -730,14 +732,18 @@ program's usage message and an error message to standard error and exits with
 error status 2.
 
 Consider the first example above, where the user passes ``4x`` to an option
-that takes an integer::
+that takes an integer:
+
+.. code-block:: shell-session
 
    $ /usr/bin/foo -n 4x
    Usage: foo [options]
 
    foo: error: option -n: invalid integer value: '4x'
 
-Or, where the user fails to pass a value at all::
+Or, where the user fails to pass a value at all:
+
+.. code-block:: shell-session
 
    $ /usr/bin/foo -n
    Usage: foo [options]
@@ -1327,7 +1333,7 @@ where the input parameters are
    the list of arguments to process (default: ``sys.argv[1:]``)
 
 ``values``
-   a :class:`optparse.Values` object to store option arguments in (default: a
+   an :class:`optparse.Values` object to store option arguments in (default: a
    new instance of :class:`Values`) -- if you give an existing object, the
    option defaults will not be initialized on it
 
@@ -2022,12 +2028,12 @@ Features of note:
 
      values.ensure_value(attr, value)
 
-  If the ``attr`` attribute of ``values`` doesn't exist or is None, then
+  If the ``attr`` attribute of ``values`` doesn't exist or is ``None``, then
   ensure_value() first sets it to ``value``, and then returns 'value. This is
   very handy for actions like ``"extend"``, ``"append"``, and ``"count"``, all
   of which accumulate data in a variable and expect that variable to be of a
   certain type (a list for the first two, an integer for the latter).  Using
   :meth:`ensure_value` means that scripts using your action don't have to worry
   about setting a default value for the option destinations in question; they
-  can just leave the default as None and :meth:`ensure_value` will take care of
+  can just leave the default as ``None`` and :meth:`ensure_value` will take care of
   getting it right when it's needed.

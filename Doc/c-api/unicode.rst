@@ -116,52 +116,52 @@ the Python configuration.
 
 .. c:function:: int Py_UNICODE_ISSPACE(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a whitespace character.
+   Return ``1`` or ``0`` depending on whether *ch* is a whitespace character.
 
 
 .. c:function:: int Py_UNICODE_ISLOWER(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a lowercase character.
+   Return ``1`` or ``0`` depending on whether *ch* is a lowercase character.
 
 
 .. c:function:: int Py_UNICODE_ISUPPER(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is an uppercase character.
+   Return ``1`` or ``0`` depending on whether *ch* is an uppercase character.
 
 
 .. c:function:: int Py_UNICODE_ISTITLE(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a titlecase character.
+   Return ``1`` or ``0`` depending on whether *ch* is a titlecase character.
 
 
 .. c:function:: int Py_UNICODE_ISLINEBREAK(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a linebreak character.
+   Return ``1`` or ``0`` depending on whether *ch* is a linebreak character.
 
 
 .. c:function:: int Py_UNICODE_ISDECIMAL(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a decimal character.
+   Return ``1`` or ``0`` depending on whether *ch* is a decimal character.
 
 
 .. c:function:: int Py_UNICODE_ISDIGIT(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a digit character.
+   Return ``1`` or ``0`` depending on whether *ch* is a digit character.
 
 
 .. c:function:: int Py_UNICODE_ISNUMERIC(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is a numeric character.
+   Return ``1`` or ``0`` depending on whether *ch* is a numeric character.
 
 
 .. c:function:: int Py_UNICODE_ISALPHA(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is an alphabetic character.
+   Return ``1`` or ``0`` depending on whether *ch* is an alphabetic character.
 
 
 .. c:function:: int Py_UNICODE_ISALNUM(Py_UNICODE ch)
 
-   Return 1 or 0 depending on whether *ch* is an alphanumeric character.
+   Return ``1`` or ``0`` depending on whether *ch* is an alphanumeric character.
 
 These APIs can be used for fast direct character conversions:
 
@@ -393,7 +393,7 @@ wchar_t Support
    Copy the Unicode object contents into the :c:type:`wchar_t` buffer *w*.  At most
    *size* :c:type:`wchar_t` characters are copied (excluding a possibly trailing
    0-termination character).  Return the number of :c:type:`wchar_t` characters
-   copied or -1 in case of an error.  Note that the resulting :c:type:`wchar_t`
+   copied or ``-1`` in case of an error.  Note that the resulting :c:type:`wchar_t`
    string may or may not be 0-terminated.  It is the responsibility of the caller
    to make sure that the :c:type:`wchar_t` string is 0-terminated in case this is
    required by the application. Also, note that the :c:type:`wchar_t*` string
@@ -856,11 +856,11 @@ included in the :mod:`encodings` package). The codec uses mapping to encode and
 decode characters.
 
 Decoding mappings must map single string characters to single Unicode
-characters, integers (which are then interpreted as Unicode ordinals) or None
+characters, integers (which are then interpreted as Unicode ordinals) or ``None``
 (meaning "undefined mapping" and causing an error).
 
 Encoding mappings must map single Unicode characters to single string
-characters, integers (which are then interpreted as Latin-1 ordinals) or None
+characters, integers (which are then interpreted as Latin-1 ordinals) or ``None``
 (meaning "undefined mapping" and causing an error).
 
 The mapping objects provided must only support the __getitem__ mapping
@@ -917,7 +917,7 @@ The following codec API is special in that maps Unicode to Unicode.
    *NULL* when an exception was raised by the codec.
 
    The *mapping* table must map Unicode ordinal integers to Unicode ordinal
-   integers or None (causing deletion of the character).
+   integers or ``None`` (causing deletion of the character).
 
    Mapping tables need only provide the :meth:`__getitem__` interface; dictionaries
    and sequences work well.  Unmapped character ordinals (ones which cause a
@@ -1009,7 +1009,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
 .. c:function:: PyObject* PyUnicode_Splitlines(PyObject *s, int keepend)
 
    Split a Unicode string at line breaks, returning a list of Unicode strings.
-   CRLF is considered to be one line break.  If *keepend* is 0, the Line break
+   CRLF is considered to be one line break.  If *keepend* is ``0``, the Line break
    characters are not included in the resulting strings.
 
 
@@ -1019,7 +1019,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
    resulting Unicode object.
 
    The mapping table must map Unicode ordinal integers to Unicode ordinal integers
-   or None (causing deletion of the character).
+   or ``None`` (causing deletion of the character).
 
    Mapping tables need only provide the :meth:`__getitem__` interface; dictionaries
    and sequences work well.  Unmapped character ordinals (ones which cause a
@@ -1037,9 +1037,9 @@ They all return *NULL* or ``-1`` if an exception occurs.
 
 .. c:function:: Py_ssize_t PyUnicode_Tailmatch(PyObject *str, PyObject *substr, Py_ssize_t start, Py_ssize_t end, int direction)
 
-   Return 1 if *substr* matches ``str[start:end]`` at the given tail end
-   (*direction* == -1 means to do a prefix match, *direction* == 1 a suffix match),
-   0 otherwise. Return ``-1`` if an error occurred.
+   Return ``1`` if *substr* matches ``str[start:end]`` at the given tail end
+   (*direction* == ``-1`` means to do a prefix match, *direction* == ``1`` a suffix match),
+   ``0`` otherwise. Return ``-1`` if an error occurred.
 
    .. versionchanged:: 2.5
       This function used an :c:type:`int` type for *start* and *end*. This
@@ -1050,7 +1050,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
 .. c:function:: Py_ssize_t PyUnicode_Find(PyObject *str, PyObject *substr, Py_ssize_t start, Py_ssize_t end, int direction)
 
    Return the first position of *substr* in ``str[start:end]`` using the given
-   *direction* (*direction* == 1 means to do a forward search, *direction* == -1 a
+   *direction* (*direction* == ``1`` means to do a forward search, *direction* == ``-1`` a
    backward search).  The return value is the index of the first match; a value of
    ``-1`` indicates that no match was found, and ``-2`` indicates that an error
    occurred and an exception has been set.
@@ -1075,7 +1075,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
 .. c:function:: PyObject* PyUnicode_Replace(PyObject *str, PyObject *substr, PyObject *replstr, Py_ssize_t maxcount)
 
    Replace at most *maxcount* occurrences of *substr* in *str* with *replstr* and
-   return the resulting Unicode object. *maxcount* == -1 means replace all
+   return the resulting Unicode object. *maxcount* == ``-1`` means replace all
    occurrences.
 
    .. versionchanged:: 2.5
@@ -1085,7 +1085,7 @@ They all return *NULL* or ``-1`` if an exception occurs.
 
 .. c:function:: int PyUnicode_Compare(PyObject *left, PyObject *right)
 
-   Compare two strings and return -1, 0, 1 for less than, equal, and greater than,
+   Compare two strings and return ``-1``, ``0``, ``1`` for less than, equal, and greater than,
    respectively.
 
 

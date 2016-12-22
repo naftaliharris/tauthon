@@ -266,9 +266,9 @@ represented as a plain integer, in which case they yield a long integer.
 Integer literals with an ``'L'`` or ``'l'`` suffix yield long integers (``'L'``
 is preferred because ``1l`` looks too much like eleven!).  Numeric literals
 containing a decimal point or an exponent sign yield floating point numbers.
-Appending ``'j'`` or ``'J'`` to a numeric literal yields a complex number with a
-zero real part. A complex numeric literal is the sum of a real and an imaginary
-part.
+Appending ``'j'`` or ``'J'`` to a numeric literal yields an imaginary number
+(a complex number with a zero real part) which you can add to an integer or
+float to get a complex number with real and imaginary parts.
 
 .. index::
    single: arithmetic
@@ -1874,7 +1874,7 @@ The constructors for both classes work the same:
       Test whether the set is a proper superset of *other*, that is, ``set >=
       other and set != other``.
 
-   .. method:: union(other, ...)
+   .. method:: union(*others)
                set | other | ...
 
       Return a new set with elements from the set and all others.
@@ -1882,7 +1882,7 @@ The constructors for both classes work the same:
       .. versionchanged:: 2.6
          Accepts multiple input iterables.
 
-   .. method:: intersection(other, ...)
+   .. method:: intersection(*others)
                set & other & ...
 
       Return a new set with elements common to the set and all others.
@@ -1890,7 +1890,7 @@ The constructors for both classes work the same:
       .. versionchanged:: 2.6
          Accepts multiple input iterables.
 
-   .. method:: difference(other, ...)
+   .. method:: difference(*others)
                set - other - ...
 
       Return a new set with elements in the set that are not in the others.
@@ -1944,7 +1944,7 @@ The constructors for both classes work the same:
    The following table lists operations available for :class:`set` that do not
    apply to immutable instances of :class:`frozenset`:
 
-   .. method:: update(other, ...)
+   .. method:: update(*others)
                set |= other | ...
 
       Update the set, adding elements from all others.
@@ -1952,7 +1952,7 @@ The constructors for both classes work the same:
       .. versionchanged:: 2.6
          Accepts multiple input iterables.
 
-   .. method:: intersection_update(other, ...)
+   .. method:: intersection_update(*others)
                set &= other & ...
 
       Update the set, keeping only elements found in it and all others.
@@ -1960,7 +1960,7 @@ The constructors for both classes work the same:
       .. versionchanged:: 2.6
          Accepts multiple input iterables.
 
-   .. method:: difference_update(other, ...)
+   .. method:: difference_update(*others)
                set -= other | ...
 
       Update the set, removing elements found in others.

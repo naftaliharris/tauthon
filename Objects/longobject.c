@@ -211,7 +211,7 @@ PyLong_FromDouble(double dval)
 /* Checking for overflow in PyLong_AsLong is a PITA since C doesn't define
  * anything about what happens when a signed integer operation overflows,
  * and some compilers think they're doing you a favor by being "clever"
- * then.  The bit pattern for the largest postive signed long is
+ * then.  The bit pattern for the largest positive signed long is
  * (unsigned long)LONG_MAX, and for the smallest negative signed long
  * it is abs(LONG_MIN), which we could write -(unsigned long)LONG_MIN.
  * However, some other compilers warn about applying unary minus to an
@@ -556,10 +556,10 @@ _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
         size_t i;
         const unsigned char* p = pendbyte;
         const int pincr = -incr;  /* search MSB to LSB */
-        const unsigned char insignficant = is_signed ? 0xff : 0x00;
+        const unsigned char insignificant = is_signed ? 0xff : 0x00;
 
         for (i = 0; i < n; ++i, p += pincr) {
-            if (*p != insignficant)
+            if (*p != insignificant)
                 break;
         }
         numsignificantbytes = n - i;
@@ -3390,9 +3390,9 @@ long_true_divide(PyObject *v, PyObject *w)
     /* Round by directly modifying the low digit of x. */
     mask = (digit)1 << (extra_bits - 1);
     low = x->ob_digit[0] | inexact;
-    if (low & mask && low & (3*mask-1))
+    if ((low & mask) && (low & (3U*mask-1U)))
         low += mask;
-    x->ob_digit[0] = low & ~(mask-1U);
+    x->ob_digit[0] = low & ~(2U*mask-1U);
 
     /* Convert x to a double dx; the conversion is exact. */
     dx = x->ob_digit[--x_size];
@@ -3785,11 +3785,17 @@ long_lshift(PyObject *v, PyObject *w)
 
     shiftby = PyLong_AsSsize_t((PyObject *)b);
     if (shiftby == -1L && PyErr_Occurred())
-        goto lshift_error;
+        goto out;
     if (shiftby < 0) {
         PyErr_SetString(PyExc_ValueError, "negative shift count");
-        goto lshift_error;
+        goto out;
     }
+
+    if (Py_SIZE(a) == 0) {
+        z = (PyLongObject *)PyLong_FromLong(0);
+        goto out;
+    }
+
     /* wordshift, remshift = divmod(shiftby, PyLong_SHIFT) */
     wordshift = shiftby / PyLong_SHIFT;
     remshift  = shiftby - wordshift * PyLong_SHIFT;
@@ -3800,7 +3806,7 @@ long_lshift(PyObject *v, PyObject *w)
         ++newsize;
     z = _PyLong_New(newsize);
     if (z == NULL)
-        goto lshift_error;
+        goto out;
     if (a->ob_size < 0)
         z->ob_size = -(z->ob_size);
     for (i = 0; i < wordshift; i++)
@@ -3816,7 +3822,7 @@ long_lshift(PyObject *v, PyObject *w)
     else
         assert(!accum);
     z = long_normalize(z);
-  lshift_error:
+  out:
     Py_DECREF(a);
     Py_DECREF(b);
     return (PyObject *) z;

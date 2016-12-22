@@ -263,7 +263,7 @@ Utility functions
    two-element tuples is used as the *query* argument, the first element of
    each tuple is a key and the second is a value. The value element in itself
    can be a sequence and in that case, if the optional parameter *doseq* is
-   evaluates to *True*, individual ``key=value`` pairs separated by ``'&'`` are
+   evaluates to ``True``, individual ``key=value`` pairs separated by ``'&'`` are
    generated for each element of the value sequence for the key.  The order of
    parameters in the encoded string will match the order of parameter tuples in
    the sequence. The :mod:`urlparse` module provides the functions
@@ -294,6 +294,16 @@ Utility functions
    Mac OS X and Windows Systems Registry for Windows.
    If both lowercase and uppercase environment variables exist (and disagree),
    lowercase is preferred.
+
+    .. note::
+
+        If the environment variable ``REQUEST_METHOD`` is set, which usually
+        indicates your script is running in a CGI environment, the environment
+        variable ``HTTP_PROXY`` (uppercase ``_PROXY``) will be ignored. This is
+        because that variable can be injected by a client using the "Proxy:"
+        HTTP header. If you need to use an HTTP proxy in a CGI environment,
+        either use ``ProxyHandler`` explicitly, or make sure the variable name
+        is in lowercase (or at least the ``_proxy`` suffix).
 
 .. note::
     urllib also exposes certain utility functions like splittype, splithost and

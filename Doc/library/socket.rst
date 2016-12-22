@@ -34,6 +34,8 @@ in the C interface: as with :meth:`read` and :meth:`write` operations on Python
 files, buffer allocation on receive operations is automatic, and buffer length
 is implicit on send operations.
 
+.. _host_port:
+
 Socket addresses are represented as follows: A single string is used for the
 :const:`AF_UNIX` address family. A pair ``(host, port)`` is used for the
 :const:`AF_INET` address family, where *host* is a string representing either a
@@ -757,7 +759,7 @@ correspond to Unix system calls applicable to sockets.
    Set blocking or non-blocking mode of the socket: if *flag* is 0, the socket is
    set to non-blocking, else to blocking mode.  Initially all sockets are in
    blocking mode.  In non-blocking mode, if a :meth:`recv` call doesn't find any
-   data, or if a :meth:`send` call can't immediately dispose of the data, a
+   data, or if a :meth:`send` call can't immediately dispose of the data, an
    :exc:`error` exception is raised; in blocking mode, the calls block until they
    can proceed. ``s.setblocking(0)`` is equivalent to ``s.settimeout(0.0)``;
    ``s.setblocking(1)`` is equivalent to ``s.settimeout(None)``.
@@ -833,7 +835,7 @@ Note that there are no methods :meth:`read` or :meth:`write`; use
 :meth:`~socket.recv` and :meth:`~socket.send` without *flags* argument instead.
 
 Socket objects also have these (read-only) attributes that correspond to the
-values given to the :class:`socket` constructor.
+values given to the :class:`~socket.socket` constructor.
 
 
 .. attribute:: socket.family

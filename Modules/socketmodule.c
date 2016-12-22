@@ -167,12 +167,14 @@ shutdown(how) -- shut down traffic in one or both directions\n\
 #endif
 
 #ifdef HAVE_GETHOSTBYNAME_R
-# if defined(_AIX) || defined(__osf__)
+# if defined(_AIX) && !defined(_LINUX_SOURCE_COMPAT) || defined(__osf__)
 #  define HAVE_GETHOSTBYNAME_R_3_ARG
 # elif defined(__sun) || defined(__sgi)
 #  define HAVE_GETHOSTBYNAME_R_5_ARG
 # elif defined(linux)
 /* Rely on the configure script */
+# elif defined(_LINUX_SOURCE_COMPAT) /* Linux compatibility on AIX */
+#  define HAVE_GETHOSTBYNAME_R_6_ARG
 # else
 #  undef HAVE_GETHOSTBYNAME_R
 # endif
@@ -780,7 +782,7 @@ internal_select(PySocketSockObject *s, int writing)
 */
 #define BEGIN_SELECT_LOOP(s) \
     { \
-        double deadline, interval = s->sock_timeout; \
+        double deadline = 0, interval = s->sock_timeout; \
         int has_timeout = s->sock_timeout > 0.0; \
         if (has_timeout) { \
             deadline = _PyTime_FloatTime() + s->sock_timeout; \
@@ -1637,12 +1639,13 @@ getsockaddrlen(PySocketSockObject *s, socklen_t *len_ret)
         return 1;
     }
 #endif /* AF_UNIX */
+
 #if defined(AF_NETLINK)
-       case AF_NETLINK:
-       {
-           *len_ret = sizeof (struct sockaddr_nl);
-           return 1;
-       }
+    case AF_NETLINK:
+    {
+        *len_ret = sizeof (struct sockaddr_nl);
+        return 1;
+    }
 #endif
 
     case AF_INET:
@@ -3471,7 +3474,7 @@ socket_gethostbyname_ex(PyObject *self, PyObject *args)
     int buf_len = (sizeof buf) - 1;
     int errnop;
 #endif
-#if defined(HAVE_GETHOSTBYNAME_R_3_ARG) || defined(HAVE_GETHOSTBYNAME_R_6_ARG)
+#ifdef HAVE_GETHOSTBYNAME_R_3_ARG
     int result;
 #endif
 #endif /* HAVE_GETHOSTBYNAME_R */
@@ -3483,7 +3486,7 @@ socket_gethostbyname_ex(PyObject *self, PyObject *args)
     Py_BEGIN_ALLOW_THREADS
 #ifdef HAVE_GETHOSTBYNAME_R
 #if   defined(HAVE_GETHOSTBYNAME_R_6_ARG)
-    result = gethostbyname_r(name, &hp_allocated, buf, buf_len,
+    gethostbyname_r(name, &hp_allocated, buf, buf_len,
                              &h, &errnop);
 #elif defined(HAVE_GETHOSTBYNAME_R_5_ARG)
     h = gethostbyname_r(name, &hp_allocated, buf, buf_len, &errnop);
@@ -3547,7 +3550,7 @@ socket_gethostbyaddr(PyObject *self, PyObject *args)
     int buf_len = (sizeof buf) - 1;
     int errnop;
 #endif
-#if defined(HAVE_GETHOSTBYNAME_R_3_ARG) || defined(HAVE_GETHOSTBYNAME_R_6_ARG)
+#ifdef HAVE_GETHOSTBYNAME_R_3_ARG
     int result;
 #endif
 #endif /* HAVE_GETHOSTBYNAME_R */
@@ -3580,7 +3583,7 @@ socket_gethostbyaddr(PyObject *self, PyObject *args)
     Py_BEGIN_ALLOW_THREADS
 #ifdef HAVE_GETHOSTBYNAME_R
 #if   defined(HAVE_GETHOSTBYNAME_R_6_ARG)
-    result = gethostbyaddr_r(ap, al, af,
+    gethostbyaddr_r(ap, al, af,
         &hp_allocated, buf, buf_len,
         &h, &errnop);
 #elif defined(HAVE_GETHOSTBYNAME_R_5_ARG)
