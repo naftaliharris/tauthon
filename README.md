@@ -18,7 +18,7 @@ now use some of the new features from Python
 3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
 
 
-[![Build Status](https://travis-ci.org/naftaliharris/python2.8.svg?branch=master)](https://travis-ci.org/naftaliharris/python2.8)
+[![Build Status](https://travis-ci.org/naftaliharris/placeholder.svg?branch=master)](https://travis-ci.org/naftaliharris/placeholder)
 
 What's new in Placeholder
 -------------------------
