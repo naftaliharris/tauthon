@@ -291,7 +291,9 @@ PEP 273: Importing Modules from ZIP Archives
 The new :mod:`zipimport` module adds support for importing modules from a ZIP-
 format archive.  You don't need to import the module explicitly; it will be
 automatically imported if a ZIP archive's filename is added to ``sys.path``.
-For example::
+For example:
+
+.. code-block:: shell-session
 
    amk@nyman:~/src/python$ unzip -l /tmp/example.zip
    Archive:  /tmp/example.zip
@@ -392,7 +394,7 @@ be shared between all three operating systems without needing to convert the
 line-endings.
 
 This feature can be disabled when compiling Python by specifying the
-:option:`--without-universal-newlines` switch when running Python's
+:option:`!--without-universal-newlines` switch when running Python's
 :program:`configure` script.
 
 
@@ -1681,13 +1683,13 @@ Date and time types suitable for expressing timestamps were added as the
 fancy features, and just stick to the basics of representing time.
 
 The three primary types are: :class:`date`, representing a day, month, and year;
-:class:`time`, consisting of hour, minute, and second; and :class:`datetime`,
-which contains all the attributes of both :class:`date` and :class:`time`.
+:class:`~datetime.time`, consisting of hour, minute, and second; and :class:`~datetime.datetime`,
+which contains all the attributes of both :class:`date` and :class:`~datetime.time`.
 There's also a :class:`timedelta` class representing differences between two
 points in time, and time zone logic is implemented by classes inheriting from
 the abstract :class:`tzinfo` class.
 
-You can create instances of :class:`date` and :class:`time` by either supplying
+You can create instances of :class:`date` and :class:`~datetime.time` by either supplying
 keyword arguments to the appropriate constructor, e.g.
 ``datetime.date(year=1972, month=10, day=15)``, or by using one of a number of
 class methods.  For example, the :meth:`date.today` class method returns the
@@ -1706,7 +1708,7 @@ number of methods for producing formatted strings from objects::
    '2002 30 Dec'
 
 The :meth:`replace` method allows modifying one or more fields  of a
-:class:`date` or :class:`datetime` instance, returning a new instance::
+:class:`date` or :class:`~datetime.datetime` instance, returning a new instance::
 
    >>> d = datetime.datetime.now()
    >>> d
@@ -1716,11 +1718,11 @@ The :meth:`replace` method allows modifying one or more fields  of a
    >>>
 
 Instances can be compared, hashed, and converted to strings (the result is the
-same as that of :meth:`isoformat`).  :class:`date` and :class:`datetime`
+same as that of :meth:`isoformat`).  :class:`date` and :class:`~datetime.datetime`
 instances can be subtracted from each other, and added to :class:`timedelta`
 instances.  The largest missing feature is that there's no standard library
 support for parsing strings and getting back a :class:`date` or
-:class:`datetime`.
+:class:`~datetime.datetime`.
 
 For more information, refer to the module's reference documentation.
 (Contributed by Tim Peters.)
@@ -1761,7 +1763,9 @@ This returns an object containing all of the option values, and a list of
 strings containing the remaining arguments.
 
 Invoking the script with the various arguments now works as you'd expect it to.
-Note that the length argument is automatically converted to an integer. ::
+Note that the length argument is automatically converted to an integer.
+
+.. code-block:: shell-session
 
    $ ./python opt.py -i data arg1
    <Values at 0x400cad4c: {'input': 'data', 'length': None}>
@@ -1771,7 +1775,9 @@ Note that the length argument is automatically converted to an integer. ::
    []
    $
 
-The help message is automatically generated for you::
+The help message is automatically generated for you:
+
+.. code-block:: shell-session
 
    $ ./python opt.py --help
    usage: opt.py [options]
@@ -1806,9 +1812,9 @@ pools of memory and then fulfills smaller memory requests from these pools.
 
 In 2.1 and 2.2, pymalloc was an experimental feature and wasn't enabled by
 default; you had to explicitly enable it when compiling Python by providing the
-:option:`--with-pymalloc` option to the :program:`configure` script.  In 2.3,
+:option:`!--with-pymalloc` option to the :program:`configure` script.  In 2.3,
 pymalloc has had further enhancements and is now enabled by default; you'll have
-to supply :option:`--without-pymalloc` to disable it.
+to supply :option:`!--without-pymalloc` to disable it.
 
 This change is transparent to code written in Python; however, pymalloc may
 expose bugs in C extensions.  Authors of C extension modules should test their
@@ -1847,7 +1853,7 @@ Thanks to lots of work by Tim Peters, pymalloc in 2.3 also provides debugging
 features to catch memory overwrites and doubled frees in both extension modules
 and in the interpreter itself.  To enable this support, compile a debugging
 version of the Python interpreter by running :program:`configure` with
-:option:`--with-pydebug`.
+:option:`!--with-pydebug`.
 
 To aid extension writers, a header file :file:`Misc/pymemcompat.h` is
 distributed with the source to Python 2.3 that allows Python extensions to use
@@ -1873,11 +1879,11 @@ Changes to Python's build process and to the C API include:
 
 * The cycle detection implementation used by the garbage collection has proven
   to be stable, so it's now been made mandatory.  You can no longer compile Python
-  without it, and the :option:`--with-cycle-gc` switch to :program:`configure` has
+  without it, and the :option:`!--with-cycle-gc` switch to :program:`configure` has
   been removed.
 
 * Python can now optionally be built as a shared library
-  (:file:`libpython2.3.so`) by supplying :option:`--enable-shared` when running
+  (:file:`libpython2.3.so`) by supplying :option:`!--enable-shared` when running
   Python's :program:`configure` script.  (Contributed by Ondrej Palkovsky.)
 
 * The :c:macro:`DL_EXPORT` and :c:macro:`DL_IMPORT` macros are now deprecated.
@@ -1886,7 +1892,7 @@ Changes to Python's build process and to the C API include:
   generally use the :c:macro:`PyAPI_FUNC` and :c:macro:`PyAPI_DATA` macros.
 
 * The interpreter can be compiled without any docstrings for the built-in
-  functions and modules by supplying :option:`--without-doc-strings` to the
+  functions and modules by supplying :option:`!--without-doc-strings` to the
   :program:`configure` script. This makes the Python executable about 10% smaller,
   but will also mean that you can't get help for Python's built-ins.  (Contributed
   by Gustavo Niemeyer.)
@@ -2078,4 +2084,3 @@ Michael Hudson, Chris Lambert, Detlef Lannert, Martin von Löwis, Andrew
 MacIntyre, Lalo Martins, Chad Netzer, Gustavo Niemeyer, Neal Norwitz, Hans
 Nowak, Chris Reedy, Francesco Ricciardi, Vinay Sajip, Neil Schemenauer, Roman
 Suzi, Jason Tishler, Just van Rossum.
-

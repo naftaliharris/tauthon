@@ -1425,7 +1425,9 @@ specifying the :const:`doctest.REPORT_UDIFF` (unified diffs),
            print word
 
 Running the above function's tests with :const:`doctest.REPORT_UDIFF` specified,
-you get the following output::
+you get the following output:
+
+.. code-block:: none
 
    **********************************************************************
    File "t.py", line 15, in g
@@ -1481,10 +1483,10 @@ Some of the changes to Python's build process and to the C API are:
 
 * Python can now be built with additional profiling for the interpreter itself,
   intended as an aid to people developing the Python core.  Providing
-  :option:`--enable-profiling` to the :program:`configure` script will let you
+  :option:`!--enable-profiling` to the :program:`configure` script will let you
   profile the interpreter with :program:`gprof`, and providing the
-  :option:`--with-tsc` switch enables profiling using the Pentium's Time-Stamp-
-  Counter register.  Note that the :option:`--with-tsc` switch is slightly
+  :option:`!--with-tsc` switch enables profiling using the Pentium's Time-Stamp-
+  Counter register.  Note that the :option:`!--with-tsc` switch is slightly
   misnamed, because the profiling feature also works on the PowerPC platform,
   though that processor architecture doesn't call that register "the TSC
   register".  (Contributed by Jeremy Hylton.)
@@ -1521,7 +1523,7 @@ code:
   empty list instead of raising a :exc:`TypeError` exception if called with no
   arguments.
 
-* You can no longer compare the :class:`date` and :class:`datetime` instances
+* You can no longer compare the :class:`date` and :class:`~datetime.datetime` instances
   provided by the :mod:`datetime` module.  Two  instances of different classes
   will now always be unequal, and  relative comparisons (``<``, ``>``) will raise
   a :exc:`TypeError`.

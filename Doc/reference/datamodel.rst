@@ -301,7 +301,7 @@ Sequences
          character is represented by a string of one item. Characters represent (at
          least) 8-bit bytes.  The built-in functions :func:`chr` and :func:`ord` convert
          between characters and nonnegative integers representing the byte values.  Bytes
-         with the values 0-127 usually represent the corresponding ASCII values, but the
+         with the values 0--127 usually represent the corresponding ASCII values, but the
          interpretation of values is up to the program.  The string data type is also
          used to represent arrays of bytes, e.g., to hold data read from a file.
 
@@ -830,7 +830,7 @@ Classes
    dictionary containing the class's namespace; :attr:`~class.__bases__` is a
    tuple (possibly empty or a singleton) containing the base classes, in the
    order of their occurrence in the base class list; :attr:`__doc__` is the
-   class's documentation string, or None if undefined.
+   class's documentation string, or ``None`` if undefined.
 
 Class instances
    .. index::
@@ -1013,7 +1013,7 @@ Internal types
       called at the start of each source code line (this is used by the debugger);
       :attr:`f_exc_type`, :attr:`f_exc_value`, :attr:`f_exc_traceback` represent the
       last exception raised in the parent frame provided another exception was ever
-      raised in the current frame (in all other cases they are None); :attr:`f_lineno`
+      raised in the current frame (in all other cases they are ``None``); :attr:`f_lineno`
       is the current line number of the frame --- writing to this from within a trace
       function jumps to the given line (only for the bottom-most frame).  A debugger
       can implement a Jump command (aka Set Next Statement) by writing to f_lineno.
@@ -1418,7 +1418,7 @@ Basic customization
    will not be usable in hashed collections.  If a class defines mutable objects
    and implements a :meth:`__cmp__` or :meth:`__eq__` method, it should not
    implement :meth:`__hash__`, since hashable collection implementations require
-   that a object's hash value is immutable (if the object's hash value changes,
+   that an object's hash value is immutable (if the object's hash value changes,
    it will be in the wrong hash bucket).
 
    User-defined classes have :meth:`__cmp__` and :meth:`__hash__` methods

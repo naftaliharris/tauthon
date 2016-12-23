@@ -207,7 +207,7 @@ Classification functions
 
 .. function:: isinf(x)
 
-   Return *True* if the real or the imaginary part of x is positive
+   Return ``True`` if the real or the imaginary part of x is positive
    or negative infinity.
 
    .. versionadded:: 2.6
@@ -215,7 +215,7 @@ Classification functions
 
 .. function:: isnan(x)
 
-   Return *True* if the real or imaginary part of x is not a number (NaN).
+   Return ``True`` if the real or imaginary part of x is not a number (NaN).
 
    .. versionadded:: 2.6
 
@@ -255,6 +255,6 @@ cuts for numerical purposes, a good reference should be the following:
 
    Kahan, W:  Branch cuts for complex elementary functions; or, Much ado about
    nothing's sign bit.  In Iserles, A., and Powell, M. (eds.), The state of the art
-   in numerical analysis. Clarendon Press (1987) pp165-211.
+   in numerical analysis. Clarendon Press (1987) pp165--211.
 
 

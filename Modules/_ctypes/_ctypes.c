@@ -366,7 +366,7 @@ _ctypes_alloc_format_string_with_shape(int ndim, const Py_ssize_t *shape,
 
 /*
   PyCStructType_Type - a meta type/class.  Creating a new class using this one as
-  __metaclass__ will call the contructor StructUnionType_new.  It replaces the
+  __metaclass__ will call the constructor StructUnionType_new.  It replaces the
   tp_dict member with a new instance of StgDict, and initializes the C
   accessible fields somehow.
 */
@@ -501,7 +501,10 @@ CDataType_from_buffer(PyObject *type, PyObject *args)
     Py_ssize_t offset = 0;
     PyObject *obj, *result;
     StgDictObject *dict = PyType_stgdict(type);
-    assert (dict);
+    if (!dict) {
+        PyErr_SetString(PyExc_TypeError, "abstract class");
+        return NULL;
+    }
 
     if (!PyArg_ParseTuple(args,
 #if (PY_VERSION_HEX < 0x02050000)
@@ -557,13 +560,16 @@ CDataType_from_buffer_copy(PyObject *type, PyObject *args)
     Py_ssize_t offset = 0;
     PyObject *obj, *result;
     StgDictObject *dict = PyType_stgdict(type);
-    assert (dict);
+    if (!dict) {
+        PyErr_SetString(PyExc_TypeError, "abstract class");
+        return NULL;
+    }
 
     if (!PyArg_ParseTuple(args,
 #if (PY_VERSION_HEX < 0x02050000)
-                          "O|i:from_buffer",
+                          "O|i:from_buffer_copy",
 #else
-                          "O|n:from_buffer",
+                          "O|n:from_buffer_copy",
 #endif
                           &obj, &offset))
         return NULL;
@@ -1426,8 +1432,10 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     stgdict->shape[0] = length;
-    memmove(&stgdict->shape[1], itemdict->shape,
-        sizeof(Py_ssize_t) * (stgdict->ndim - 1));
+    if (stgdict->ndim > 1) {
+        memmove(&stgdict->shape[1], itemdict->shape,
+            sizeof(Py_ssize_t) * (stgdict->ndim - 1));
+    }
 
     itemsize = itemdict->size;
     if (length * itemsize < 0) {
@@ -3985,7 +3993,7 @@ PyCFuncPtr_call(PyCFuncPtrObject *self, PyObject *inargs, PyObject *kwds)
                                                    self,
                                                    callargs,
                                                    NULL);
-        /* If the errcheck funtion failed, return NULL.
+        /* If the errcheck function failed, return NULL.
            If the errcheck function returned callargs unchanged,
            continue normal processing.
            If the errcheck function returned something else,
@@ -5394,11 +5402,11 @@ comerror_init(PyObject *self, PyObject *args)
 
     a = PySequence_GetSlice(args, 1, PySequence_Size(args));
     if (!a)
-    return NULL;
+        return NULL;
     status = PyObject_SetAttrString(self, "args", a);
     Py_DECREF(a);
     if (status < 0)
-    return NULL;
+        return NULL;
 
     if (PyObject_SetAttrString(self, "hresult", hresult) < 0)
         return NULL;
@@ -5753,25 +5761,25 @@ PyObject *My_PyUnicode_FromWideChar(register const wchar_t *w,
     PyUnicodeObject *unicode;
 
     if (w == NULL) {
-    PyErr_BadInternalCall();
-    return NULL;
+        PyErr_BadInternalCall();
+        return NULL;
     }
 
     unicode = (PyUnicodeObject *)PyUnicode_FromUnicode(NULL, size);
     if (!unicode)
-    return NULL;
+        return NULL;
 
     /* Copy the wchar_t data into the new object */
 #ifdef HAVE_USABLE_WCHAR_T
     memcpy(unicode->str, w, size * sizeof(wchar_t));
 #else
     {
-    register Py_UNICODE *u;
-    register int i;
-    u = PyUnicode_AS_UNICODE(unicode);
-    /* In Python, the following line has a one-off error */
-    for (i = size; i > 0; i--)
-        *u++ = *w++;
+        register Py_UNICODE *u;
+        register int i;
+        u = PyUnicode_AS_UNICODE(unicode);
+        /* In Python, the following line has a one-off error */
+        for (i = size; i > 0; i--)
+            *u++ = *w++;
     }
 #endif
 
@@ -5783,21 +5791,21 @@ Py_ssize_t My_PyUnicode_AsWideChar(PyUnicodeObject *unicode,
                             Py_ssize_t size)
 {
     if (unicode == NULL) {
-    PyErr_BadInternalCall();
-    return -1;
+        PyErr_BadInternalCall();
+        return -1;
     }
     if (size > PyUnicode_GET_SIZE(unicode))
-    size = PyUnicode_GET_SIZE(unicode);
+        size = PyUnicode_GET_SIZE(unicode);
 #ifdef HAVE_USABLE_WCHAR_T
     memcpy(w, unicode->str, size * sizeof(wchar_t));
 #else
     {
-    register Py_UNICODE *u;
-    register int i;
-    u = PyUnicode_AS_UNICODE(unicode);
-    /* In Python, the following line has a one-off error */
-    for (i = size; i > 0; i--)
-        *w++ = *u++;
+        register Py_UNICODE *u;
+        register int i;
+        u = PyUnicode_AS_UNICODE(unicode);
+        /* In Python, the following line has a one-off error */
+        for (i = size; i > 0; i--)
+            *w++ = *u++;
     }
 #endif
 

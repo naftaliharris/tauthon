@@ -1652,7 +1652,7 @@ class PyBuildExt(build_ext):
             if int(os.uname()[2].split('.')[0]) >= 8:
                 # We're on Mac OS X 10.4 or later, the compiler should
                 # support '-Wno-deprecated-declarations'. This will
-                # surpress deprecation warnings for the Carbon extensions,
+                # suppress deprecation warnings for the Carbon extensions,
                 # these extensions wrap the Carbon APIs and even those
                 # parts that are deprecated.
                 carbon_extra_compile_args = ['-Wno-deprecated-declarations']
@@ -2132,14 +2132,16 @@ class PyBuildExt(build_ext):
             ffi_inc = find_file('ffi.h', [], inc_dirs)
         if ffi_inc is not None:
             ffi_h = ffi_inc[0] + '/ffi.h'
-            fp = open(ffi_h)
-            while 1:
-                line = fp.readline()
-                if not line:
+            with open(ffi_h) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(('#define LIBFFI_H',
+                                        '#define ffi_wrapper_h')):
+                        break
+                else:
                     ffi_inc = None
-                    break
-                if line.startswith('#define LIBFFI_H'):
-                    break
+                    print('Header file {} does not define LIBFFI_H or '
+                          'ffi_wrapper_h'.format(ffi_h))
         ffi_lib = None
         if ffi_inc is not None:
             for lib_name in ('ffi_convenience', 'ffi_pic', 'ffi'):

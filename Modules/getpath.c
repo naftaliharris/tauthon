@@ -329,11 +329,9 @@ search_for_exec_prefix(char *argv0_path, char *home)
 	n = fread(rel_builddir_path, 1, MAXPATHLEN, f);
 	rel_builddir_path[n] = '\0';
 	fclose(f);
-	if (n >= 0) {
-	  strcpy(exec_prefix, argv0_path);
-	  joinpath(exec_prefix, rel_builddir_path);
-	  return -1;
-	}
+	strcpy(exec_prefix, argv0_path);
+	joinpath(exec_prefix, rel_builddir_path);
+	return -1;
       }
     }
 
@@ -599,7 +597,10 @@ calculate_path(void)
 
             if (defpath[0] != SEP) {
                 strcat(buf, prefix);
-                strcat(buf, separator);
+                if (prefixsz >= 2 && prefix[prefixsz - 2] != SEP &&
+                    defpath[0] != (delim ? DELIM : L'\0')) {  /* not empty */
+                    strcat(buf, separator);
+                }
             }
 
             if (delim) {
