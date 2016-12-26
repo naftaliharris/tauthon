@@ -1,7 +1,7 @@
 """HTML character entity references."""
 from __future__ import unicode_literals
 
-__all__ = ['html5', 'name2codepoint', 'codepoint2name', 'entitydefs']
+__all__ = [b'html5', b'name2codepoint', b'codepoint2name', b'entitydefs']
 
 
 # maps the HTML entity name to the Unicode code point
