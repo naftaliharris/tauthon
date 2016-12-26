@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 Tests for the html module functions.
 """
+
+from __future__ import unicode_literals
 
 import html
 import unittest

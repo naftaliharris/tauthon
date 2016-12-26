@@ -1,4 +1,5 @@
 """HTML character entity references."""
+from __future__ import unicode_literals
 
 __all__ = ['html5', 'name2codepoint', 'codepoint2name', 'entitydefs']
 
@@ -2504,6 +2505,6 @@ entitydefs = {}
 
 for (name, codepoint) in name2codepoint.items():
     codepoint2name[codepoint] = name
-    entitydefs[name] = chr(codepoint)
+    entitydefs[name] = unichr(codepoint)
 
 del name, codepoint

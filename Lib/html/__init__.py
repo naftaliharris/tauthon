@@ -1,6 +1,7 @@
 """
 General functions for HTML manipulation.
 """
+from __future__ import unicode_literals
 
 import re as _re
 from html.entities import html5 as _html5
@@ -102,7 +103,7 @@ def _replace_charref(s):
             return '\uFFFD'
         if num in _invalid_codepoints:
             return ''
-        return chr(num)
+        return ("\\U%08x" % num).decode("unicode-escape")
     else:
         # named charref
         if s in _html5:
