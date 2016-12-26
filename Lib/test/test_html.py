@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 
 import html
 import unittest
+from test.test_support import run_unittest
 
 
 class HtmlTests(unittest.TestCase):
@@ -102,5 +103,8 @@ class HtmlTests(unittest.TestCase):
         check('&co;', '&co;')
 
 
+def test_main():
+    run_unittest(HtmlTests)
+
 if __name__ == '__main__':
-    unittest.main()
+    test_main()
