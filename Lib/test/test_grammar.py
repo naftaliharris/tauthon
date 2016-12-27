@@ -724,6 +724,14 @@ hello world
         global a, b
         global one, two, three, four, five, six, seven, eight, nine, ten
 
+    def testNonlocal(self):
+        # 'nonlocal' NAME (',' NAME)*
+        x = 0
+        y = 0
+        def f():
+            nonlocal x
+            nonlocal x, y
+
     def testExec(self):
         # 'exec' expr ['in' expr [',' expr]]
         z = None
