@@ -951,6 +951,7 @@ VALIDATER(return_stmt);         VALIDATER(list_iter);
 VALIDATER(raise_stmt);          VALIDATER(import_stmt);
 VALIDATER(import_name);         VALIDATER(import_from);
 VALIDATER(global_stmt);         VALIDATER(list_if);
+VALIDATER(nonlocal_stmt);
 VALIDATER(assert_stmt);         VALIDATER(list_for);
 VALIDATER(exec_stmt);           VALIDATER(compound_stmt);
 VALIDATER(while);               VALIDATER(for);
@@ -1643,6 +1644,7 @@ validate_small_stmt(node *tree)
               || (ntype == flow_stmt)
               || (ntype == import_stmt)
               || (ntype == global_stmt)
+              || (ntype == nonlocal_stmt)
               || (ntype == assert_stmt)
               || (ntype == exec_stmt))
             res = validate_node(CHILD(tree, 0));
@@ -2071,8 +2073,10 @@ validate_import_stmt(node *tree)
 }
 
 
-
-
+/*  global_stmt:
+ *
+ *  'global' NAME (',' NAME)*
+ */
 static int
 validate_global_stmt(node *tree)
 {
@@ -2092,6 +2096,32 @@ validate_global_stmt(node *tree)
                && validate_ntype(CHILD(tree, j + 1), NAME));
 
     return (res);
+}
+
+
+/*  nonlocal_stmt:
+ *
+ *  'nonlocal' NAME (',' NAME)*
+ */
+static int
+validate_nonlocal_stmt(node *tree)
+{
+    int j;
+    int nch = NCH(tree);
+    int res = (validate_ntype(tree, nonlocal_stmt)
+               && is_even(nch) && (nch >= 2));
+
+    if (!res && !PyErr_Occurred())
+        err_string("illegal nonlocal statement");
+
+    if (res)
+        res = (validate_name(CHILD(tree, 0), "nonlocal")
+               && validate_ntype(CHILD(tree, 1), NAME));
+    for (j = 2; res && (j < nch); j += 2)
+        res = (validate_comma(CHILD(tree, j))
+               && validate_ntype(CHILD(tree, j + 1), NAME));
+
+    return res;
 }
 
 
@@ -3323,7 +3353,8 @@ validate_node(node *tree)
           case small_stmt:
             /*
              *  expr_stmt | print_stmt | del_stmt | pass_stmt | flow_stmt
-             *  | import_stmt | global_stmt | exec_stmt | assert_stmt
+             *  | import_stmt | global_stmt | nonlocal_stmt | exec_stmt
+             *  | assert_stmt
              */
             res = validate_small_stmt(tree);
             break;
@@ -3392,6 +3423,9 @@ validate_node(node *tree)
             break;
           case global_stmt:
             res = validate_global_stmt(tree);
+            break;
+          case nonlocal_stmt:
+            res = validate_nonlocal_stmt(tree);
             break;
           case exec_stmt:
             res = validate_exec_stmt(tree);
