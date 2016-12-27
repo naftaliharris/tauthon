@@ -337,8 +337,6 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
    block, the name is treated as global until it is assigned to; then it
    is treated as a local.
 
-   TODO(jhylton): Discuss nonlocal
-
    The symbol table requires two passes to determine the scope of each name.
    The first pass collects raw facts from the AST: the name is a parameter
    here, the name is used by not defined here, etc.  The second pass analyzes
@@ -347,8 +345,10 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
    When a function is entered during the second pass, the parent passes
    the set of all name bindings visible to its children.  These bindings
    are used to determine if the variable is free or an implicit global.
-   After doing the local analysis, it analyzes each of its child blocks
-   using an updated set of name bindings.
+   Names which are explicitly declared nonlocal must exist in this set of
+   visible names - if they do not, a syntax error is raised. After doing
+   the local analysis, it analyzes each of its child blocks using an
+   updated set of name bindings.
 
    The children update the free variable set.  If a local variable is free
    in a child, the variable is marked as a cell.  The current function must
@@ -415,6 +415,11 @@ analyze_name(PySTEntryObject *ste, PyObject *dict, PyObject *name, long flags,
                         PyString_AS_STRING(name));
             return 0;
         }
+	if (!bound) {
+	    PyErr_Format(PyExc_SyntaxError,
+			 "nonlocal declaration not allowed at module level");
+	    return 0;
+	}
         if (!PyDict_GetItem(bound, name)) {
             PyErr_Format(PyExc_SyntaxError,
                         "no binding for nonlocal '%s' found",
