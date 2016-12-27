@@ -329,15 +329,15 @@ error_at_directive(PySTEntryObject *ste, PyObject *name)
     Py_ssize_t i;
     PyObject *data;
     assert(ste->ste_directives);
-    for (i = 0; ; i++) {
+    for (i = 0; i < PyList_GET_SIZE(ste->ste_directives); i++) {
         data = PyList_GET_ITEM(ste->ste_directives, i);
         assert(PyTuple_CheckExact(data));
         if (PyTuple_GET_ITEM(data, 0) == name)
             break;
     }
     PyErr_SyntaxLocationEx(ste->ste_table->st_filename,
-                           PyLong_AsLong(PyTuple_GET_ITEM(data, 1)),
-                           PyLong_AsLong(PyTuple_GET_ITEM(data, 2)));
+                           PyInt_AsLong(PyTuple_GET_ITEM(data, 1)),
+                           PyInt_AsLong(PyTuple_GET_ITEM(data, 2)));
     return 0;
 }
 
@@ -1086,14 +1086,17 @@ error:
 static int
 symtable_record_directive(struct symtable *st, identifier name, stmt_ty s)
 {
-    PyObject *data;
+    PyObject *data, *mangled;
     int res;
     if (!st->st_cur->ste_directives) {
         st->st_cur->ste_directives = PyList_New(0);
         if (!st->st_cur->ste_directives)
             return 0;
     }
-    data = Py_BuildValue("(Oii)", name, s->lineno, s->col_offset);
+    mangled = _Py_Mangle(st->st_private, name);
+    if (!mangled)
+        return 0;
+    data = Py_BuildValue("(Nii)", mangled, s->lineno, s->col_offset);
     if (!data)
         return 0;
     res = PyList_Append(st->st_cur->ste_directives, data);
