@@ -29,6 +29,7 @@ typedef struct _symtable_entry {
     PyObject *ste_name;      /* string: name of block */
     PyObject *ste_varnames;  /* list of variable names */
     PyObject *ste_children;  /* list of child ids */
+    PyObject *ste_directives;/* locations of global and nonlocal statements */
     _Py_block_ty ste_type;   /* module, class, or function */
     int ste_unoptimized;     /* false if namespace is optimized */
     int ste_nested;      /* true if block is nested */
