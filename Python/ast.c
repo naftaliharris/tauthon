@@ -2922,6 +2922,27 @@ ast_for_global_stmt(struct compiling *c, const node *n)
 }
 
 static stmt_ty
+ast_for_nonlocal_stmt(struct compiling *c, const node *n)
+{
+    /* nonlocal_stmt: 'nonlocal' NAME (',' NAME)* */
+    identifier name;
+    asdl_seq *s;
+    int i;
+
+    REQ(n, nonlocal_stmt);
+    s = asdl_seq_new(NCH(n) / 2, c->c_arena);
+    if (!s)
+        return NULL;
+    for (i = 1; i < NCH(n); i += 2) {
+        name = NEW_IDENTIFIER(CHILD(n, i));
+        if (!name)
+            return NULL;
+        asdl_seq_SET(s, i / 2, name);
+    }
+    return Nonlocal(s, LINENO(n), n->n_col_offset, c->c_arena);
+}
+
+static stmt_ty
 ast_for_exec_stmt(struct compiling *c, const node *n)
 {
     expr_ty expr1, globals = NULL, locals = NULL;
@@ -3529,8 +3550,8 @@ ast_for_stmt(struct compiling *c, const node *n)
     if (TYPE(n) == small_stmt) {
         n = CHILD(n, 0);
         /* small_stmt: expr_stmt | print_stmt  | del_stmt | pass_stmt
-                     | flow_stmt | import_stmt | global_stmt | exec_stmt
-                     | assert_stmt
+                     | flow_stmt | import_stmt | global_stmt | nonlocal_stmt
+                     | exec_stmt | assert_stmt
         */
         switch (TYPE(n)) {
             case expr_stmt:
@@ -3547,6 +3568,8 @@ ast_for_stmt(struct compiling *c, const node *n)
                 return ast_for_import_stmt(c, n);
             case global_stmt:
                 return ast_for_global_stmt(c, n);
+            case nonlocal_stmt:
+                return ast_for_nonlocal_stmt(c, n);
             case exec_stmt:
                 return ast_for_exec_stmt(c, n);
             case assert_stmt:

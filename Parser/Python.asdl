@@ -53,6 +53,7 @@ module Python version "$Revision$"
 	      | Exec(expr body, expr? globals, expr? locals)
 
 	      | Global(identifier* names)
+	      | Nonlocal(identifier* names)
 	      | Expr(expr value)
 	      | Pass | Break | Continue
 

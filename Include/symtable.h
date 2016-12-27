@@ -66,19 +66,20 @@ PyAPI_FUNC(void) PySymtable_Free(struct symtable *);
 #define DEF_GLOBAL 1           /* global stmt */
 #define DEF_LOCAL 2            /* assignment in code block */
 #define DEF_PARAM 2<<1         /* formal parameter */
-#define USE 2<<2               /* name is used */
-#define DEF_FREE 2<<3         /* name used but not defined in nested block */
-#define DEF_FREE_CLASS 2<<4    /* free variable from class's method */
-#define DEF_IMPORT 2<<5        /* assignment occurred via import */
+#define DEF_NONLOCAL 2<<2      /* nonlocal stmt */
+#define USE 2<<3               /* name is used */
+#define DEF_FREE 2<<4         /* name used but not defined in nested block */
+#define DEF_FREE_CLASS 2<<5    /* free variable from class's method */
+#define DEF_IMPORT 2<<6        /* assignment occurred via import */
 
 #define DEF_BOUND (DEF_LOCAL | DEF_PARAM | DEF_IMPORT)
 
 /* GLOBAL_EXPLICIT and GLOBAL_IMPLICIT are used internally by the symbol
    table.  GLOBAL is returned from PyST_GetScope() for either of them.
-   It is stored in ste_symbols at bits 12-14.
+   It is stored in ste_symbols at bits 12-15.
 */
 #define SCOPE_OFF 11
-#define SCOPE_MASK 7
+#define SCOPE_MASK (DEF_GLOBAL | DEF_LOCAL | DEF_PARAM | DEF_NONLOCAL)
 
 #define LOCAL 1
 #define GLOBAL_EXPLICIT 2

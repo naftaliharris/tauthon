@@ -166,6 +166,10 @@ static PyTypeObject *Global_type;
 static char *Global_fields[]={
         "names",
 };
+static PyTypeObject *Nonlocal_type;
+static char *Nonlocal_fields[]={
+        "names",
+};
 static PyTypeObject *Expr_type;
 static char *Expr_fields[]={
         "value",
@@ -788,6 +792,8 @@ static int init_types(void)
         if (!Exec_type) return 0;
         Global_type = make_type("Global", stmt_type, Global_fields, 1);
         if (!Global_type) return 0;
+        Nonlocal_type = make_type("Nonlocal", stmt_type, Nonlocal_fields, 1);
+        if (!Nonlocal_type) return 0;
         Expr_type = make_type("Expr", stmt_type, Expr_fields, 1);
         if (!Expr_type) return 0;
         Pass_type = make_type("Pass", stmt_type, NULL, 0);
@@ -1566,6 +1572,20 @@ Global(asdl_seq * names, int lineno, int col_offset, PyArena *arena)
                 return NULL;
         p->kind = Global_kind;
         p->v.Global.names = names;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+stmt_ty
+Nonlocal(asdl_seq * names, int lineno, int col_offset, PyArena *arena)
+{
+        stmt_ty p;
+        p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = Nonlocal_kind;
+        p->v.Nonlocal.names = names;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -2845,6 +2865,15 @@ ast2obj_stmt(void* _o)
                 result = PyType_GenericNew(Global_type, NULL, NULL);
                 if (!result) goto failed;
                 value = ast2obj_list(o->v.Global.names, ast2obj_identifier);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "names", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case Nonlocal_kind:
+                result = PyType_GenericNew(Nonlocal_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_list(o->v.Nonlocal.names, ast2obj_identifier);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "names", value) == -1)
                         goto failed;
@@ -5514,6 +5543,46 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 if (*out == NULL) goto failed;
                 return 0;
         }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)Nonlocal_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                asdl_seq* names;
+
+                if (PyObject_HasAttrString(obj, "names")) {
+                        int res;
+                        Py_ssize_t len;
+                        Py_ssize_t i;
+                        tmp = PyObject_GetAttrString(obj, "names");
+                        if (tmp == NULL) goto failed;
+                        if (!PyList_Check(tmp)) {
+                                PyErr_Format(PyExc_TypeError, "Nonlocal field \"names\" must be a list, not a %.200s", tmp->ob_type->tp_name);
+                                goto failed;
+                        }
+                        len = PyList_GET_SIZE(tmp);
+                        names = asdl_seq_new(len, arena);
+                        if (names == NULL) goto failed;
+                        for (i = 0; i < len; i++) {
+                                identifier value;
+                                res = obj2ast_identifier(PyList_GET_ITEM(tmp, i), &value, arena);
+                                if (res != 0) goto failed;
+                                if (len != PyList_GET_SIZE(tmp)) {
+                                        PyErr_SetString(PyExc_RuntimeError, "Nonlocal field \"names\" changed size during iteration");
+                                        goto failed;
+                                }
+                                asdl_seq_SET(names, i, value);
+                        }
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"names\" missing from Nonlocal");
+                        return 1;
+                }
+                *out = Nonlocal(names, lineno, col_offset, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
         isinstance = PyObject_IsInstance(obj, (PyObject*)Expr_type);
         if (isinstance == -1) {
                 return 1;
@@ -7870,6 +7939,8 @@ init_ast(void)
             0) return;
         if (PyDict_SetItemString(d, "Exec", (PyObject*)Exec_type) < 0) return;
         if (PyDict_SetItemString(d, "Global", (PyObject*)Global_type) < 0)
+            return;
+        if (PyDict_SetItemString(d, "Nonlocal", (PyObject*)Nonlocal_type) < 0)
             return;
         if (PyDict_SetItemString(d, "Expr", (PyObject*)Expr_type) < 0) return;
         if (PyDict_SetItemString(d, "Pass", (PyObject*)Pass_type) < 0) return;

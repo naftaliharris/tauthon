@@ -2578,6 +2578,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
         ADDOP(c, EXEC_STMT);
         break;
     case Global_kind:
+    case Nonlocal_kind:
         break;
     case Expr_kind:
         if (c->c_interactive && c->c_nestlevel <= 1) {
