@@ -2342,7 +2342,7 @@ static label labels[184] = {
     {1, "as"},
     {291, 0},
     {1, "global"},
-    {1, "nonlocal"},
+    {56, 0},
     {1, "exec"},
     {318, 0},
     {1, "in"},

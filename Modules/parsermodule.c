@@ -2101,7 +2101,7 @@ validate_global_stmt(node *tree)
 
 /*  nonlocal_stmt:
  *
- *  'nonlocal' NAME (',' NAME)*
+ *  NONLOCAL NAME (',' NAME)*
  */
 static int
 validate_nonlocal_stmt(node *tree)

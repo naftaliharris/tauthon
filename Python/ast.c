@@ -2924,7 +2924,7 @@ ast_for_global_stmt(struct compiling *c, const node *n)
 static stmt_ty
 ast_for_nonlocal_stmt(struct compiling *c, const node *n)
 {
-    /* nonlocal_stmt: 'nonlocal' NAME (',' NAME)* */
+    /* nonlocal_stmt: NONLOCAL NAME (',' NAME)* */
     identifier name;
     asdl_seq *s;
     int i;

@@ -92,6 +92,7 @@ char *_PyParser_TokenNames[] = {
     "OP",
     "AWAIT",
     "ASYNC",
+    "NONLOCAL",
     "<ERRORTOKEN>",
     "<N_TOKENS>"
 };
@@ -1483,6 +1484,14 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
                     tok->async_def = 1;
                     return ASYNC;
                 }
+            }
+        }
+
+        /* nonlocal parsing block */
+        if (tok->cur - tok->start == 8) {
+            /* Current token length is 8. */
+            if (memcmp(tok->start, "nonlocal", 8) == 0) {
+                return NONLOCAL;
             }
         }
 
