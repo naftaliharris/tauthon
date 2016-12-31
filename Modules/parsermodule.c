@@ -2115,7 +2115,7 @@ validate_nonlocal_stmt(node *tree)
         err_string("illegal nonlocal statement");
 
     if (res)
-        res = (validate_name(CHILD(tree, 0), "nonlocal")
+        res = (validate_ntype(CHILD(tree, 0), NONLOCAL)
                && validate_ntype(CHILD(tree, 1), NAME));
     for (j = 2; res && (j < nch); j += 2)
         res = (validate_comma(CHILD(tree, j))
