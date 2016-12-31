@@ -1491,7 +1491,20 @@ tok_get(register struct tok_state *tok, char **p_start, char **p_end)
         if (tok->cur - tok->start == 8) {
             /* Current token length is 8. */
             if (memcmp(tok->start, "nonlocal", 8) == 0) {
-                return NONLOCAL;
+                /* The current token is 'nonlocal'.
+                   Look ahead one token.*/
+
+                struct tok_state ahead_tok;
+                char *ahead_tok_start = NULL, *ahead_tok_end = NULL;
+                int ahead_tok_kind;
+
+                memcpy(&ahead_tok, tok, sizeof(ahead_tok));
+                ahead_tok_kind = tok_get(&ahead_tok, &ahead_tok_start,
+                                         &ahead_tok_end);
+
+                if (ahead_tok_kind == NAME) {
+                    return NONLOCAL;
+                }
             }
         }
 
