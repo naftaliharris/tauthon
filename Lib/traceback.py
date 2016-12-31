@@ -178,26 +178,40 @@ def format_exception_only(etype, value):
         return [_format_final_exc_line(stype, value)]
 
     # It was a syntax error; show exactly where the problem was found.
+    # This code roughly follows PyErr_Display
     lines = []
     try:
-        msg, (filename, lineno, offset, badline) = value.args
-    except Exception:
-        pass
+        # Mimic parse_syntax_error
+        msg = value.msg
+        filename = str(value.filename) if value.filename is not None else None
+        lineno = int(value.lineno)
+        offset = int(value.offset) if value.offset is not None else -1
+        text = str(value.text) if value.text is not None else None
+    except:
+        msg = value
     else:
-        filename = filename or "<string>"
+        filename = "<string>" if filename is None else filename
         lines.append('  File "%s", line %d\n' % (filename, lineno))
-        if badline is not None:
-            lines.append('    %s\n' % badline.strip())
-            if offset is not None:
-                caretspace = badline.rstrip('\n')
-                offset = min(len(caretspace), offset) - 1
-                caretspace = caretspace[:offset].lstrip()
-                # non-space whitespace (likes tabs) must be kept for alignment
-                caretspace = ((c.isspace() and c or ' ') for c in caretspace)
-                lines.append('    %s^\n' % ''.join(caretspace))
-        value = msg
+        if text is not None:
+            # Mimic print_error_text
+            if offset >= 0:
+                if offset > 0 and offset == len(text) and text[-1] == '\n':
+                    offset -= 1
+                nl = text.rfind('\n', 0, offset)
+                if nl >= 0:
+                    text = text[(nl+1):]
+                    offset -= (nl+1)
+                for i, c in enumerate(text):
+                    if c not in (' ', '\t'):
+                        break
+                text = text[i:]
+                offset -= i
+            added_newline = '\n' if text == "" or text[-1] != '\n' else ''
+            lines.append('    %s%s' % (text, added_newline))
+            if offset != -1:
+                lines.append("    " + " " * (offset - 1) + "^\n")
 
-    lines.append(_format_final_exc_line(stype, value))
+    lines.append("%s: %s\n" % (stype, msg))
     return lines
 
 def _format_final_exc_line(etype, value):

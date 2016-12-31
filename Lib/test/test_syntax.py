@@ -5,7 +5,9 @@ Here's an example of the sort of thing that is tested.
 >>> def f(x):
 ...     global x
 Traceback (most recent call last):
-SyntaxError: name 'x' is local and global (<doctest test.test_syntax[0]>, line 1)
+  ...
+  File "<doctest test.test_syntax[0]>", line 1
+SyntaxError: name 'x' is local and global
 
 The tests are all raise SyntaxErrors.  They were created by checking
 each C call that raises SyntaxError.  There are several modules that
