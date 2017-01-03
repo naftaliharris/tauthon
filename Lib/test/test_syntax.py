@@ -457,6 +457,14 @@ TODO(jhylton): Figure out how to test SyntaxWarning with doctest.
      ...
    SyntaxError: no binding for nonlocal '_A__x' found
 
+# Can't use nonlocal to define keywords as identifiers
+   >>> def f():
+   ...     nonlocal pass
+   Traceback (most recent call last):
+     ...
+   SyntaxError: invalid syntax
+
+
 This tests assignment-context; there was a bug in Python 2.5 where compiling
 a complex 'if' (one with 'elif') would fail to notice an invalid suite,
 leading to spurious errors.
