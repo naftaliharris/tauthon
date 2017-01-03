@@ -38,6 +38,11 @@ class TracebackCases(unittest.TestCase):
     def syntax_error_bad_indentation2(self):
         compile(" print(2)", "?", "exec")
 
+    def make_raiser(self, error):
+        def raiser():
+            raise error
+        return raiser
+
     def test_caret(self):
         err = self.get_exception_format(self.syntax_error_with_caret,
                                         SyntaxError)
@@ -68,6 +73,20 @@ class TracebackCases(unittest.TestCase):
         self.assertTrue(err[1].strip() == "print 2")
         self.assertIn("^", err[2])
         self.assertTrue(err[1].find("2") == err[2].find("^"))
+
+    def test_no_lineno(self):
+        e = SyntaxError("message", ("myfile.py", None, None, None))
+        err = self.get_exception_format(self.make_raiser(e), SyntaxError)
+        self.assertEqual("".join(err), "SyntaxError: message (myfile.py)\n")
+
+    def test_long_indentation(self):
+        e = SyntaxError("message", ("myfile.py", 3, 10, "hello"))
+        err = self.get_exception_format(self.make_raiser(e), SyntaxError)
+        self.assertEqual("".join(err), """\
+  File "myfile.py", line 3
+    hello
+             ^
+SyntaxError: message\n""")
 
     def test_bug737473(self):
         import os, tempfile, time

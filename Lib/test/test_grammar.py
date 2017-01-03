@@ -724,6 +724,29 @@ hello world
         global a, b
         global one, two, three, four, five, six, seven, eight, nine, ten
 
+    def testNonlocal(self):
+        # 'nonlocal' NAME (',' NAME)*
+        x = 0
+        y = 0
+        def f():
+            nonlocal x
+            nonlocal x, y
+        def g():
+            nonlocal = True
+            nonlocal x
+            nonlocal = False
+            nonlocal y
+            async, await = True, True
+            def nonlocal():
+                nonlocal nonlocal
+                nonlocal = "nonlocal"
+                nonlocal async, await
+                async, await = False, False
+            nonlocal()
+            self.assertEqual(nonlocal, "nonlocal")
+            self.assertEqual((async, await), (False, False))
+        g()
+
     def testExec(self):
         # 'exec' expr ['in' expr [',' expr]]
         z = None

@@ -8,8 +8,14 @@
 #define GLOBAL_AFTER_ASSIGN \
 "name '%.400s' is assigned to before global declaration"
 
+#define NONLOCAL_AFTER_ASSIGN \
+"name '%.400s' is assigned to before nonlocal declaration"
+
 #define GLOBAL_AFTER_USE \
 "name '%.400s' is used prior to global declaration"
+
+#define NONLOCAL_AFTER_USE \
+"name '%.400s' is used prior to nonlocal declaration"
 
 #define IMPORT_STAR_WARNING "import * only allowed at module level"
 
@@ -49,6 +55,8 @@ ste_new(struct symtable *st, identifier name, _Py_block_ty block,
     ste->ste_children = PyList_New(0);
     if (ste->ste_children == NULL)
         goto fail;
+
+    ste->ste_directives = NULL;
 
     ste->ste_type = block;
     ste->ste_unoptimized = 0;
@@ -99,6 +107,7 @@ ste_dealloc(PySTEntryObject *ste)
     Py_XDECREF(ste->ste_symbols);
     Py_XDECREF(ste->ste_varnames);
     Py_XDECREF(ste->ste_children);
+    Py_XDECREF(ste->ste_directives);
     PyObject_Del(ste);
 }
 
@@ -314,6 +323,24 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
     return (PyInt_AS_LONG(v) >> SCOPE_OFF) & SCOPE_MASK;
 }
 
+static int
+error_at_directive(PySTEntryObject *ste, PyObject *name)
+{
+    Py_ssize_t i;
+    PyObject *data;
+    assert(ste->ste_directives);
+    for (i = 0; i < PyList_GET_SIZE(ste->ste_directives); i++) {
+        data = PyList_GET_ITEM(ste->ste_directives, i);
+        assert(PyTuple_CheckExact(data));
+        if (PyTuple_GET_ITEM(data, 0) == name)
+            break;
+    }
+    PyErr_SyntaxLocationEx(ste->ste_table->st_filename,
+                           PyInt_AsLong(PyTuple_GET_ITEM(data, 1)),
+                           PyInt_AsLong(PyTuple_GET_ITEM(data, 2)));
+    return 0;
+}
+
 
 /* Analyze raw symbol information to determine scope of each name.
 
@@ -339,8 +366,10 @@ PyST_GetScope(PySTEntryObject *ste, PyObject *name)
    When a function is entered during the second pass, the parent passes
    the set of all name bindings visible to its children.  These bindings
    are used to determine if the variable is free or an implicit global.
-   After doing the local analysis, it analyzes each of its child blocks
-   using an updated set of name bindings.
+   Names which are explicitly declared nonlocal must exist in this set of
+   visible names - if they do not, a syntax error is raised. After doing
+   the local analysis, it analyzes each of its child blocks using an
+   updated set of name bindings.
 
    The children update the free variable set.  If a local variable is free
    in a child, the variable is marked as a cell.  The current function must
@@ -380,10 +409,13 @@ analyze_name(PySTEntryObject *ste, PyObject *dict, PyObject *name, long flags,
             PyErr_Format(PyExc_SyntaxError,
                          "name '%s' is local and global",
                          PyString_AS_STRING(name));
-            PyErr_SyntaxLocation(ste->ste_table->st_filename,
-                                 ste->ste_lineno);
-
-            return 0;
+	    return error_at_directive(ste, name);
+        }
+        if (flags & DEF_NONLOCAL) {
+	    PyErr_Format(PyExc_SyntaxError,
+	         	"name '%s' is nonlocal and global",
+	         	PyString_AS_STRING(name));
+	    return error_at_directive(ste, name);
         }
         SET_SCOPE(dict, name, GLOBAL_EXPLICIT);
         if (PyDict_SetItem(global, name, Py_None) < 0)
@@ -393,6 +425,28 @@ analyze_name(PySTEntryObject *ste, PyObject *dict, PyObject *name, long flags,
                 return 0;
         }
         return 1;
+    }
+    if (flags & DEF_NONLOCAL) {
+        if (flags & DEF_PARAM) {
+            PyErr_Format(PyExc_SyntaxError,
+                        "name '%s' is local and nonlocal",
+                        PyString_AS_STRING(name));
+	    return error_at_directive(ste, name);
+        }
+	if (!bound) {
+	    PyErr_Format(PyExc_SyntaxError,
+			 "nonlocal declaration not allowed at module level");
+	    return error_at_directive(ste, name);
+	}
+        if (!PyDict_GetItem(bound, name)) {
+            PyErr_Format(PyExc_SyntaxError,
+                        "no binding for nonlocal '%s' found",
+                        PyString_AS_STRING(name));
+	    return error_at_directive(ste, name);
+        }
+        SET_SCOPE(dict, name, FREE);
+        ste->ste_free = 1;
+        return PyDict_SetItem(free, name, Py_None) >= 0;
     }
     if (flags & DEF_BOUND) {
         SET_SCOPE(dict, name, LOCAL);
@@ -412,27 +466,19 @@ analyze_name(PySTEntryObject *ste, PyObject *dict, PyObject *name, long flags,
     if (bound && PyDict_GetItem(bound, name)) {
         SET_SCOPE(dict, name, FREE);
         ste->ste_free = 1;
-        if (PyDict_SetItem(free, name, Py_None) < 0)
-            return 0;
-        return 1;
+        return PyDict_SetItem(free, name, Py_None) >= 0;
     }
     /* If a parent has a global statement, then call it global
        explicit?  It could also be global implicit.
      */
-    else if (global && PyDict_GetItem(global, name)) {
+    if (global && PyDict_GetItem(global, name)) {
         SET_SCOPE(dict, name, GLOBAL_IMPLICIT);
         return 1;
     }
-    else {
-        if (ste->ste_nested)
-            ste->ste_free = 1;
-        SET_SCOPE(dict, name, GLOBAL_IMPLICIT);
-        return 1;
-    }
-    /* Should never get here. */
-    PyErr_Format(PyExc_SystemError, "failed to set scope for %s",
-                 PyString_AS_STRING(name));
-    return 0;
+    if (ste->ste_nested)
+        ste->ste_free = 1;
+    SET_SCOPE(dict, name, GLOBAL_IMPLICIT);
+    return 1;
 }
 
 #undef SET_SCOPE
@@ -1036,6 +1082,28 @@ error:
     } \
 }
 
+
+static int
+symtable_record_directive(struct symtable *st, identifier name, stmt_ty s)
+{
+    PyObject *data, *mangled;
+    int res;
+    if (!st->st_cur->ste_directives) {
+        st->st_cur->ste_directives = PyList_New(0);
+        if (!st->st_cur->ste_directives)
+            return 0;
+    }
+    mangled = _Py_Mangle(st->st_private, name);
+    if (!mangled)
+        return 0;
+    data = Py_BuildValue("(Nii)", mangled, s->lineno, s->col_offset);
+    if (!data)
+        return 0;
+    res = PyList_Append(st->st_cur->ste_directives, data);
+    Py_DECREF(data);
+    return res == 0;
+}
+
 static int
 symtable_visit_stmt(struct symtable *st, stmt_ty s)
 {
@@ -1230,6 +1298,37 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
                     return 0;
             }
             if (!symtable_add_def(st, name, DEF_GLOBAL))
+                return 0;
+            if (!symtable_record_directive(st, name, s))
+                return 0;
+        }
+        break;
+    }
+    case Nonlocal_kind: {
+        int i;
+        asdl_seq *seq = s->v.Nonlocal.names;
+        for (i = 0; i < asdl_seq_LEN(seq); i++) {
+            identifier name = (identifier)asdl_seq_GET(seq, i);
+            char *c_name = PyString_AS_STRING(name);
+            long cur = symtable_lookup(st, name);
+            if (cur < 0)
+                return 0;
+            if (cur & (DEF_LOCAL | USE)) {
+                char buf[256];
+                if (cur & DEF_LOCAL)
+                    PyOS_snprintf(buf, sizeof(buf),
+                                  NONLOCAL_AFTER_ASSIGN,
+                                  c_name);
+                else
+                    PyOS_snprintf(buf, sizeof(buf),
+                                  NONLOCAL_AFTER_USE,
+                                  c_name);
+                if (!symtable_warn(st, buf, s->lineno))
+                    return 0;
+            }
+            if (!symtable_add_def(st, name, DEF_NONLOCAL))
+                return 0;
+            if (!symtable_record_directive(st, name, s))
                 return 0;
         }
         break;

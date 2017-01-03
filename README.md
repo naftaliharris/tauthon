@@ -127,6 +127,35 @@ What's new in Placeholder
                 [API Docs (Python 3.x)](https://docs.python.org/3/reference/datamodel.html#metaclasses)*
 
 
+* ###"nonlocal"
+
+    ```python
+    >>> x = 0
+    >>> def f():
+    ...     x = 1
+    ...     def g():
+    ...         nonlocal x
+    ...         x = 2
+    ...     print x
+    ...     g()
+    ...     print x
+    ...
+    >>> print x; f(); print x
+    0
+    1
+    2
+    0
+    >>> nonlocal = True; print nonlocal
+    True
+    ```
+
+    Caveat: As you can see, to maintain backwards compatibility nonlocal is not
+    a keyword, unlike in Python 3.x. So it can still be used as an identifier.
+
+    *More info: [PEP 3104](https://www.python.org/dev/peps/pep-3104/),
+                [API Docs](https://docs.python.org/3/reference/simple_stmts.html#nonlocal)*
+
+
 * ###"yield from" Syntax
 
     ```python
