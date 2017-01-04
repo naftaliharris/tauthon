@@ -45,11 +45,10 @@ class G(A):
 
 class TestSuper(unittest.TestCase):
 
-    # TODO/RSI for when have nonlocal
-    #def tearDown(self):
-    #    # This fixes the damage that test_various___class___pathologies does.
-    #    nonlocal __class__
-    #    __class__ = TestSuper
+    def tearDown(self):
+        # This fixes the damage that test_various___class___pathologies does.
+        nonlocal __class__
+        __class__ = TestSuper
 
     def test_basics_working(self):
         self.assertEqual(D().f(), 'ABCD')
@@ -116,13 +115,12 @@ class TestSuper(unittest.TestCase):
         self.assertEqual(globals()["__class__"], 42)
         del globals()["__class__"]
         self.assertNotIn("__class__", X.__dict__)
-        # TODO/RSI for when have nonlocal
-        #class X:
-        #    nonlocal __class__
-        #    __class__ = 42
-        #    def f():
-        #        __class__
-        #self.assertEqual(__class__, 42)
+        class X:
+            nonlocal __class__
+            __class__ = 42
+            def f():
+                __class__
+        self.assertEqual(__class__, 42)
 
     def test___class___instancemethod(self):
         # See issue #14857
@@ -155,13 +153,12 @@ class TestSuper(unittest.TestCase):
             del x
             super()
         self.assertRaises(RuntimeError, f, None)
-        # TODO/RSI for when have nonlocal
-        #class X:
-        #    def f(x):
-        #        nonlocal __class__
-        #        del __class__
-        #        super()
-        #self.assertRaises(RuntimeError, X().f)
+        class X:
+            def f(x):
+                nonlocal __class__
+                del __class__
+                super()
+        self.assertRaises(RuntimeError, X().f)
 
     def test_cell_as_self(self):
         class X:
