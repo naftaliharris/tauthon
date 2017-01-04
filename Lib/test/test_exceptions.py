@@ -401,6 +401,17 @@ class ExceptionTests(unittest.TestCase):
         self.assertTrue(unicode(Exception(u'a')))
         self.assertTrue(unicode(Exception(u'\xe1')))
 
+    def test_exception_target_in_nested_scope(self):
+        # issue 4617: This used to raise a SyntaxError
+        # "can not delete variable 'e' referenced in nested scope"
+        def print_error():
+            e
+        try:
+            something
+        except Exception as e:
+            print_error()
+            # implicit "del e" here
+
     def testUnicodeChangeAttributes(self):
         # See issue 7309. This was a crasher.
 

@@ -600,15 +600,6 @@ class SyntaxTestCase(unittest.TestCase):
     def test_break_outside_loop(self):
         self._check_error("break", "outside loop")
 
-    def test_delete_deref(self):
-        source = re.sub('(?m)^ *:', '', """\
-            :def foo(x):
-            :  def bar():
-            :    print x
-            :  del x
-            :""")
-        self._check_error(source, "nested scope")
-
     def test_unexpected_indent(self):
         self._check_error("foo()\n bar()\n", "unexpected indent",
                           subclass=IndentationError)

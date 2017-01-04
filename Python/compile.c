@@ -968,6 +968,8 @@ opcode_stack_effect(int opcode, int oparg)
             return 1;
         case STORE_DEREF:
             return -1;
+        case DELETE_DEREF:
+            return 0;
         case GET_AWAITABLE:
             return 0;
         case SETUP_ASYNC_WITH:
@@ -2794,13 +2796,7 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
         case AugLoad:
         case AugStore:
             break;
-        case Del:
-            PyErr_Format(PyExc_SyntaxError,
-                         "can not delete variable '%s' referenced "
-                         "in nested scope",
-                         PyString_AS_STRING(name));
-            Py_DECREF(mangled);
-            return 0;
+        case Del: op = DELETE_DEREF; break;
         case Param:
         default:
             PyErr_SetString(PyExc_SystemError,
