@@ -141,6 +141,7 @@ class MathTests(unittest.TestCase):
 
     def testConstants(self):
         self.ftest('pi', math.pi, 3.1415926)
+        self.ftest('tau', math.tau, 6.2831853)
         self.ftest('e', math.e, 2.7182818)
 
     def testAcos(self):
