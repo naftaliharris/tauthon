@@ -1626,6 +1626,7 @@ initmath(void)
         goto finally;
 
     PyModule_AddObject(m, "pi", PyFloat_FromDouble(Py_MATH_PI));
+    PyModule_AddObject(m, "tau", PyFloat_FromDouble(Py_MATH_TAU));
     PyModule_AddObject(m, "e", PyFloat_FromDouble(Py_MATH_E));
 
     finally:
