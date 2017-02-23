@@ -547,7 +547,7 @@ Py_Main(int argc, char **argv)
 
     if (Py_VerboseFlag ||
         (command == NULL && filename == NULL && module == NULL && stdin_is_interactive)) {
-        fprintf(stderr, "Python %s on %s\n",
+        fprintf(stderr, "Tauthon %s on %s\n",
             Py_GetVersion(), Py_GetPlatform());
         if (!Py_NoSiteFlag)
             fprintf(stderr, "%s\n", COPYRIGHT);
