@@ -14,11 +14,7 @@ from test import test_support
 ref_from_del = None
 # collect_in_thread tests are really slow on vs 2015, presumably because
 # gc is slow? Need to investigate this in more detail in the future.
-count_multiplier = 1000
-if hasattr(sys, 'getwindowsversion'):
-    from distutils.msvccompiler import get_build_version
-    if get_build_version() >= 14.0:
-        count_multiplier = 1
+count_multiplier = 1 if test_support.universal_crt else 1000
 
 
 class C:

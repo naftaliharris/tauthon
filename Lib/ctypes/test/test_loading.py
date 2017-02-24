@@ -8,9 +8,7 @@ import test.test_support as support
 libc_name = None
 if os.name == "nt":
     libc_name = find_library("c")
-    from distutils.msvccompiler import get_build_version
-    universal_crt = get_build_version() >= 14.0
-    if universal_crt:
+    if support.universal_crt:
         # CRT is no longer directly loadable. See issue23606 for the
         # discussion about alternative approaches.
         libc_name = None

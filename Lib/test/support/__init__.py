@@ -34,7 +34,7 @@ __all__ = ["Error", "TestFailed", "TestDidNotRun", "ResourceDenied", "import_mod
            "get_original_stdout", "unload", "unlink", "rmtree", "forget",
            "is_resource_enabled", "requires", "requires_mac_ver",
            "find_unused_port", "bind_port",
-           "fcmp", "have_unicode", "is_jython", "TESTFN", "HOST", "FUZZ",
+           "fcmp", "have_unicode", "universal_crt", "is_jython", "TESTFN", "HOST", "FUZZ",
            "SAVEDCWD", "temp_cwd", "findfile", "sortdict", "check_syntax_error",
            "open_urlresource", "check_warnings", "check_py3k_warnings",
            "CleanImport", "EnvironmentVarGuard", "captured_output",
@@ -605,6 +605,11 @@ PIPE_MAX_SIZE = 4 * 1024 * 1024 + 1
 # on Linux), or on a per-socket basis (SO_SNDBUF/SO_RCVBUF). See issue #18643
 # for a discussion of this number).
 SOCK_MAX_SIZE = 16 * 1024 * 1024 + 1
+
+universal_crt = False
+if os.name == 'nt':
+    from distutils.msvccompiler import get_build_version
+    universal_crt = get_build_version() >= 14.0
 
 is_jython = sys.platform.startswith('java')
 
