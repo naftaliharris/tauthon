@@ -1856,20 +1856,17 @@ has the same effect as typing a particular string at the help> prompt.
 
     def intro(self):
         self.output.write('''
-Welcome to Python %s!  This is the online help utility.
-
-If this is your first time using Python, you should definitely check out
-the tutorial on the Internet at http://docs.python.org/%s/tutorial/.
+Welcome to Tauthon %s!  This is the online help utility.
 
 Enter the name of any module, keyword, or topic to get help on writing
-Python programs and using Python modules.  To quit this help utility and
+Tauthon programs and using Tauthon modules.  To quit this help utility and
 return to the interpreter, just type "quit".
 
 To get a list of available modules, keywords, or topics, type "modules",
 "keywords", or "topics".  Each module also comes with a one-line summary
 of what it does; to list the modules whose summaries contain a given word
 such as "spam", type "modules spam".
-''' % tuple([sys.version[:3]]*2))
+''' % tuple([sys.version[:3]]*1))
 
     def list(self, items, columns=4, width=80):
         items = items[:]
