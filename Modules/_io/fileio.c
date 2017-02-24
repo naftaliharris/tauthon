@@ -1,6 +1,7 @@
 /* Author: Daniel Stutzbach */
 
 #define PY_SSIZE_T_CLEAN
+#define Py_BUILD_CORE 
 #include "Python.h"
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
