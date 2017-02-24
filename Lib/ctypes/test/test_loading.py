@@ -8,6 +8,12 @@ import test.test_support as support
 libc_name = None
 if os.name == "nt":
     libc_name = find_library("c")
+    from distutils.msvccompiler import get_build_version
+    universal_crt = get_build_version() >= 14.0
+    if universal_crt:
+        # CRT is no longer directly loadable. See issue23606 for the
+        # discussion about alternative approaches.
+        libc_name = None
 elif os.name == "ce":
     libc_name = "coredll"
 elif sys.platform == "cygwin":
@@ -54,9 +60,8 @@ class LoaderTest(unittest.TestCase):
     @unittest.skipUnless(os.name in ("nt", "ce"),
                          'test specific to Windows (NT/CE)')
     def test_load_library(self):
-        # CRT is no longer directly loadable. See issue23606 for the
-        # discussion about alternative approaches.
-        # self.assertIsNotNone(libc_name)
+        if not universal_crt:
+            self.assertIsNotNone(libc_name)
         if is_resource_enabled("printing"):
             print find_library("kernel32")
             print find_library("user32")
