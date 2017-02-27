@@ -1,4 +1,4 @@
-#!/usr/bin/env tauthon2
+#!/usr/bin/env tauthon
 from __future__ import print_function
 
 import os
