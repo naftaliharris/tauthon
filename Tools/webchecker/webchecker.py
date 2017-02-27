@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Original code by Guido van Rossum; extensive changes by Sam Bayer,
 # including code to check URL fragments.

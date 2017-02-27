@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """Play with the new Tk 8.0 toplevel menu option."""
 

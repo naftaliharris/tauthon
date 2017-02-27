@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """
 Synopsis: %(prog)s [-h|-b|-g|-r|-a|-d] [ picklefile ] dbfile

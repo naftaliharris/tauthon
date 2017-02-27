@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 # -*- coding: utf-8 -*-
 
 # Check for stylistic and formal issues in .rst and .py

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """buildpkg.py -- Build OS X packages for Apple's Installer.app.
 

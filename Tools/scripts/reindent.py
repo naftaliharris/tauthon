@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Released to the public domain, by Tim Peters, 03 October 2000.
 

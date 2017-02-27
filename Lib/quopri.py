@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """Conversions to/from quoted-printable transport encoding as per RFC 1521."""
 

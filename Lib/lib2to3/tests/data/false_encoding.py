@@ -1,2 +1,2 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 print '#coding=0'

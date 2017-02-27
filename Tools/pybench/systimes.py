@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """ systimes() user and system timer implementations for use by
     pybench.

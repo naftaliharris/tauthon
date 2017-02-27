@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 # -*- mode: python -*-
 
 # Re test suite and benchmark suite v1.5

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 """nm2def.py
 
 Helpers to extract symbols from Unix libs and auto-generate

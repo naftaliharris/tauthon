@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """Python interface for the 'lsprof' profiler.
    Compatible with the 'profile' module.

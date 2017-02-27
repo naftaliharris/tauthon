@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 """Interfaces for launching and remotely controlling Web browsers."""
 # Maintained by Georg Brandl.
 

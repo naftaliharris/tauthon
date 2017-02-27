@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """\
 bundlebuilder.py -- Tools to assemble MacOS X (application) bundles.

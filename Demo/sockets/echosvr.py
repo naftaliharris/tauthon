@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Python implementation of an 'echo' tcp server: echo all data it receives.
 #

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 # Takes an optional filename, defaulting to this file itself.
 # Reads the file and compresses the content using level 1 and level 9

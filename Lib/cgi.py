@@ -1,4 +1,4 @@
-#! /usr/local/bin/python
+#! /usr/local/bin/tauthon
 
 # NOTE: the above "/usr/local/bin/python" is NOT a mistake.  It is
 # intentionally NOT "/usr/bin/env python".  On many systems

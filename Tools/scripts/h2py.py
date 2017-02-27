@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Read #define's and translate to Python code.
 # Handle #include statements.

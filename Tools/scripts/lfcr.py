@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 "Replace LF with CRLF in argument files.  Print names of changed files."
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """Basic regular expression demonstration facility (Perl style syntax)."""
 
 from Tkinter import *

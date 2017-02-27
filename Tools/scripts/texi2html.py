@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Convert GNU texinfo files into HTML, one file per node.
 # Based on Texinfo 2.14.

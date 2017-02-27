@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # This file contains a class and a main program that perform three
 # related (though complimentary) formatting operations on Python

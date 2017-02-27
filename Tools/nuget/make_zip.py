@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /usr/bin/tauthon3
 
 import argparse
 import py_compile

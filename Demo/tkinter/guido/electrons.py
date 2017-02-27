@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Simulate "electrons" migrating across the screen.
 # An optional bitmap file in can be in the background.

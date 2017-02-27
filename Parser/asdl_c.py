@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 """Generate C code from an ASDL description."""
 
 # TO DO

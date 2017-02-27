@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 #
 # Class for profiling python code. rev 1.0  6/2/94
 #

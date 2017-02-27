@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 # Make a reST file compliant to our pre-commit hook.
 # Currently just remove trailing whitespace.

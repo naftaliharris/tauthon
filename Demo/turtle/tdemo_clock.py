@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 # -*- coding: cp1252 -*-
 """       turtle-example-suite:
 

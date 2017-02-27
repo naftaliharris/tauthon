@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # This script is obsolete -- it is kept for historical purposes only.
 #

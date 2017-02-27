@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 # No bug report AFAIK, mail on python-dev on 2006-01-10
 

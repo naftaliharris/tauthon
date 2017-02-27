@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env tauthon2
 """
 Checks that the version of the projects bundled in ensurepip are the latest
 versions available.

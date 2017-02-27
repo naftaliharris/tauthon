@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 #
 # Send/receive UDP multicast packets.
 # Requires that your OS kernel supports IP multicast.

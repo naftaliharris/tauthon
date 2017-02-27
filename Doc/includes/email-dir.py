@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """Send the contents of a directory as a MIME message."""
 

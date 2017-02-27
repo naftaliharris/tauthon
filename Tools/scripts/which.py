@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Variant of "which".
 # On stderr, near and total misses are reported.

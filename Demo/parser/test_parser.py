@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 #  (Force the script to use the latest build.)
 #
 #  test_parser.py

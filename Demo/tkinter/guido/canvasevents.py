@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 from Tkinter import *
 from Canvas import Oval, Group, CanvasText

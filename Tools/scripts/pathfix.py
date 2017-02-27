@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Change the #! line occurring in Python scripts.  The new interpreter
 # pathname must be given with a -i option.

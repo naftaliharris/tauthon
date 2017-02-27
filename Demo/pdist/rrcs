@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 import addpack
 addpack.addpack('/home/guido/src/python/Demo/pdist')

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """CGI test 2 - basic use of cgi module."""
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """mailerdaemon - classes to parse mailer-daemon messages"""
 
 import rfc822
