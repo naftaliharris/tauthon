@@ -15,7 +15,7 @@ some of the new features from Python
 What's new in Tauthon
 -------------------------
 
-* ###Function Annotations
+* ### Function Annotations
 
     ```python
     >>> def f(a:int, b:str) -> list:
@@ -28,7 +28,7 @@ What's new in Tauthon
     *More info: [PEP 3107](https://www.python.org/dev/peps/pep-3107/)*
 
 
-* ###Keyword-Only Arguments
+* ### Keyword-Only Arguments
 
     ```python
     >>> def f(a, *, b):
@@ -45,7 +45,7 @@ What's new in Tauthon
     *More info: [PEP 3102](https://www.python.org/dev/peps/pep-3102/)*
 
 
-* ###"async" and "await" Syntax
+* ### "async" and "await" Syntax
 
     ```python
     >>> import types
@@ -72,7 +72,7 @@ What's new in Tauthon
                 [Tutorial](http://www.snarky.ca/how-the-heck-does-async-await-work-in-python-3-5)*
 
 
-* ###Argument-less "super"
+* ### Argument-less "super"
 
     ```python
     >>> class MyList(list):
@@ -87,7 +87,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/library/functions.html#super)*
 
 
-* ###New Metaclass Syntax
+* ### New Metaclass Syntax
 
     ```python
     >>> from collections import OrderedDict
@@ -119,7 +119,7 @@ What's new in Tauthon
                 [API Docs (Python 3.x)](https://docs.python.org/3/reference/datamodel.html#metaclasses)*
 
 
-* ###"nonlocal"
+* ### "nonlocal"
 
     ```python
     >>> x = 0
@@ -148,7 +148,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/reference/simple_stmts.html#nonlocal)*
 
 
-* ###"yield from" Syntax
+* ### "yield from" Syntax
 
     ```python
     >>> def generator():
@@ -162,7 +162,7 @@ What's new in Tauthon
     *More info: [PEP 380](https://www.python.org/dev/peps/pep-0380/)*
 
 
-* ###"typing" Module
+* ### "typing" Module
 
     ```python
     >>> from typing import List, Dict
@@ -177,7 +177,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/library/typing.html)*
 
 
-* ###Function Signatures in "inspect"
+* ### Function Signatures in "inspect"
 
     ```python
     >>> import inspect
@@ -193,7 +193,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/library/inspect.html#introspecting-callables-with-the-signature-object)*
 
 
-* ###Matrix Multiplication Operator
+* ### Matrix Multiplication Operator
 
     ```python
     >>> import numpy as np
@@ -221,7 +221,7 @@ What's new in Tauthon
     *More info: [PEP 465](https://www.python.org/dev/peps/pep-0465/)*
 
 
-* ###Fine-grained OSErrors
+* ### Fine-grained OSErrors
 
     ```python
     >>> open("not a file")
@@ -245,7 +245,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/library/exceptions.html#os-exceptions)*
 
 
-* ###Underscores in Numeric Literals
+* ### Underscores in Numeric Literals
 
     ```python
     >>> 1_234_567
@@ -260,7 +260,7 @@ What's new in Tauthon
     *More info: [PEP 515](https://www.python.org/dev/peps/pep-0515/)*
 
 
-* ###"concurrent.futures" Module
+* ### "concurrent.futures" Module
 
     ```python
     >>> from concurrent.futures import ThreadPoolExecutor
@@ -293,7 +293,7 @@ What's new in Tauthon
                 [API Docs](https://docs.python.org/3/library/concurrent.futures.html)*
 
 
-* ###"types.MappingProxyType"
+* ### "types.MappingProxyType"
 
     ```python
     >>> import types
@@ -315,7 +315,7 @@ What's new in Tauthon
     *More info: [API Docs](https://docs.python.org/3.5/library/types.html#types.MappingProxyType)*
 
 
-* ###"selectors" Module
+* ### "selectors" Module
 
     ```python
     >>> import selectors
