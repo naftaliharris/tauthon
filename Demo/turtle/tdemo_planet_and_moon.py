@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """       turtle-example-suite:
 
         tdemo_planets_and_moon.py

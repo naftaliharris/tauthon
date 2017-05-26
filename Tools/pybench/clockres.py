@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """ clockres - calculates the resolution in seconds of a given timer.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 ## vim:ts=4:et:nowrap
 """A user-defined wrapper around string objects
 

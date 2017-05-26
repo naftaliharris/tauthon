@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 # Fix Python script(s) to reference the interpreter via /usr/bin/env python.
 # Warning: this overwrites the file without making a backup.

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 # -*- coding: iso-8859-1 -*-
 # Originally written by Barry Warsaw <barry@python.org>
 #

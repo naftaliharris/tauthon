@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """
 This script is used to build "official" universal installers on Mac OS X.
 It requires at least Mac OS X 10.5, Xcode 3, and the 10.4u SDK for

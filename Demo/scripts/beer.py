@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # By GvR, demystified after a version by Fredrik Lundh.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 
 """Unit tests for the keyword only argument specified in PEP 3102."""
 

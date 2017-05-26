@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env tauthon
 
 """
 This script should be called *manually* when we want to upgrade SSLError

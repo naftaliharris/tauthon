@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 # Check that all ".pyc" files exist and are up-to-date
 # Uses module 'os'
 

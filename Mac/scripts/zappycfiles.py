@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """Recursively zap all .pyc and .pyo files"""
 import os
 import sys

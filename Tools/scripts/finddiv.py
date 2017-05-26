@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """finddiv - a grep-like tool that looks for division operators.
 

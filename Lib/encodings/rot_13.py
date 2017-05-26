@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env tauthon
 """ Python Character Mapping Codec for ROT13.
 
     See http://ucsub.colorado.edu/~kominek/rot13/ for details.

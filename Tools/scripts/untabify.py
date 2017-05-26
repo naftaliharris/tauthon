@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 "Replace tabs with spaces in argument files.  Print names of changed files."
 

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Module ndiff version 1.7.0
 # Released to the public domain 08-Dec-2000,

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """RFC 3548: Base16, Base32, Base64 Data Encodings"""
 

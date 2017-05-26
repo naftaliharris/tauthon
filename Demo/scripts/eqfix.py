@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Fix Python source files to use the new equality test operator, i.e.,
 #       if x = y: ...

@@ -1,4 +1,4 @@
-#!/usr/local/bin/python -O
+#!/usr/bin/env tauthon -O
 
 """ A Python Benchmark Suite
 

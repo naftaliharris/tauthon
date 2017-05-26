@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 # Factorize numbers.
 # The algorithm is not efficient, but easy to understand.

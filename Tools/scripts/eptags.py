@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 """Create a TAGS file for Python programs, usable with GNU Emacs.
 
 usage: eptags pyfiles...

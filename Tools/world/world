@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env tauthon
 
 """world -- Print mappings between country names and DNS country codes.
 
