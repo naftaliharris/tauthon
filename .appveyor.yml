@@ -1,5 +1,7 @@
 os: Visual Studio 2017
 
+clone_depth: 50
+
 build:
   parallel: true                  # enable MSBuild parallel builds
   project: PCbuild/pcbuild.sln    # path to Visual Studio solution or project
