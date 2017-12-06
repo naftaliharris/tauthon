@@ -3,7 +3,7 @@ goto Run
 :Usage
 echo.%~nx0 [flags and arguments] [quoted MSBuild options]
 echo.
-echo.Build CPython from the command line.  Requires the appropriate
+echo.Build Tauthon from the command line.  Requires the appropriate
 echo.version(s) of Microsoft Visual Studio to be installed (see readme.txt).
 echo.Also requires Subversion (svn.exe) to be on PATH if the '-e' flag is
 echo.given.

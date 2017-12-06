@@ -692,7 +692,7 @@ variation, and those that do usually say it's not worth the bother:  insertion
 sort remains quadratic (expected and worst cases) either way.  Speeding the
 search doesn't reduce the quadratic data movement costs.
 
-But in CPython's case, comparisons are extraordinarily expensive compared to
+But in Tauthon's case, comparisons are extraordinarily expensive compared to
 moving data, and the details matter.  Moving objects is just copying
 pointers.  Comparisons can be arbitrarily expensive (can invoke arbitrary
 user-supplied Python code), but even in simple cases (like 3 < 4) _all_
@@ -703,7 +703,7 @@ triggers a large pile of C-level pointer dereferences, conditionals, and
 function calls.
 
 So cutting the number of compares is almost always measurably helpful in
-CPython, and the savings swamp the quadratic-time data movement costs for
+Tauthon, and the savings swamp the quadratic-time data movement costs for
 reasonable minrun values.
 
 

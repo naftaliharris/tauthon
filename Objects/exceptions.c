@@ -409,7 +409,7 @@ static PyTypeObject _PyExc_BaseException = {
     0,                          /* tp_alloc */
     BaseException_new,          /* tp_new */
 };
-/* the CPython API expects exceptions to be (PyObject *) - both a hold-over
+/* the Tauthon API expects exceptions to be (PyObject *) - both a hold-over
 from the previous implmentation and also allowing Python objects to be used
 in the API */
 PyObject *PyExc_BaseException = (PyObject *)&_PyExc_BaseException;
