@@ -1314,11 +1314,11 @@ validate_varargslist_trailer(node *tree, int start)
 	    }
             while (res && i+1 < nch) { /* validate  (',' vname ['=' test])* */
                 res = validate_comma(CHILD(tree, i));
-                if (TYPE(CHILD(tree, i+1)) == DOUBLESTAR) 
+                if (TYPE(CHILD(tree, i+1)) == DOUBLESTAR)
                     break;
                 res = res && validate_vname(CHILD(tree, i+1));
                 if (res && i+2 < nch && TYPE(CHILD(tree, i+2)) == EQUAL) {
-                    res = res && (i+3 < nch) 
+                    res = res && (i+3 < nch)
                           && validate_test(CHILD(tree, i+3));
                     i += 4;
                 }

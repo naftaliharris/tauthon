@@ -805,7 +805,7 @@ def getargs(co):
     """Get information about the arguments accepted by a code object.
 
     Three things are returned: (args, varargs, varkw), where
-    'args' is the list of argument names, possibly containing nested 
+    'args' is the list of argument names, possibly containing nested
     lists. Keyword-only arguments are appended. 'varargs' and 'varkw'
     are the names of the * and ** arguments or None."""
     args, varargs, kwonlyargs, varkw = _getfullargs(co)
@@ -887,7 +887,7 @@ def getargspec(func):
     'args' will include keyword-only argument names.
     'varargs' and 'varkw' are the names of the * and ** arguments or None.
     'defaults' is an n-tuple of the default values of the last n arguments.
-        
+
     Use the getfullargspec() API for Python-3000 code, as annotations
     and keyword arguments are supported. getargspec() will raise ValueError
     if the func has either annotations or keyword arguments.
@@ -903,7 +903,7 @@ def getargspec(func):
 def getfullargspec(func):
     """Get the names and default values of a function's arguments.
 
-    A tuple of seven things is returned: (args, varargs, kwonlyargs, 
+    A tuple of seven things is returned: (args, varargs, kwonlyargs,
     kwonlydefaults, varkw, defaults, annotations).
     'args' is a list of the argument names (it may contain nested lists).
     'varargs' and 'varkw' are the names of the * and ** arguments or None.
@@ -911,7 +911,7 @@ def getfullargspec(func):
     'kwonlyargs' is a list of keyword-only argument names.
     'kwonlydefaults' is a dictionary mapping names from kwonlyargs to defaults.
     'annotations' is a dictionary mapping argument names to annotations.
-    
+
     The first four items in the tuple correspond to getargspec().
     """
 
@@ -920,7 +920,7 @@ def getfullargspec(func):
     if not isfunction(func):
         raise TypeError('arg is not a Python function')
     args, varargs, kwonlyargs, varkw = _getfullargs(func.__code__)
-    return (args, varargs, varkw, func.__defaults__, 
+    return (args, varargs, varkw, func.__defaults__,
             kwonlyargs, func.__kwdefaults__, func.__annotations__)
 
 ArgInfo = namedtuple('ArgInfo', 'args varargs keywords locals')
@@ -970,7 +970,7 @@ def formatargspec(args, varargs=None, varkw=None, defaults=None,
                   formatreturns=lambda text: ' -> ' + text,
                   formatannotation=formatannotation,
                   join=joinseq):
-    """Format an argument spec from the values returned by getargspec 
+    """Format an argument spec from the values returned by getargspec
     or getfullargspec.
 
     The first seven arguments are (args, varargs, varkw, defaults,

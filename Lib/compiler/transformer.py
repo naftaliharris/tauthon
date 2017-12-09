@@ -885,7 +885,7 @@ class Transformer:
         else:
             annotation = None
         return SimpleArg(name, annotation, lineno)
-        
+
     def com_arglist(self, nodelist):
         # varargslist:
         #     (fpdef ['=' test] ',')*
