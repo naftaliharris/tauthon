@@ -1554,7 +1554,7 @@ def generateKwonlyArgList(keywordOnlyArgs):
         assert isinstance(elt, ast.Kwarg)
         kwonlyargs.append(elt.arg.name)
     return kwonlyargs
-    
+
 def findOp(node):
     """Find the op (DELETE, LOAD, STORE) in an AssTuple tree"""
     v = OpFinder()

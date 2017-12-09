@@ -36,7 +36,6 @@ consts: ('None',)
 ...     c = a * b
 ...     return c
 ...
-
 >>> dump(h.func_code)
 name: h
 argcount: 2

@@ -3315,6 +3315,12 @@ posix_execve(PyObject *self, PyObject *args)
         {
             goto fail_2;
         }
+        /* Search from index 1 because on Windows starting '=' is allowed for
+           defining hidden environment variables. */
+        if (*k == '\0' || strchr(k + 1, '=') != NULL) {
+            PyErr_SetString(PyExc_ValueError, "illegal environment variable name");
+            goto fail_2;
+        }
 
 #if defined(PYOS_OS2)
         /* Omit Pseudo-Env Vars that Would Confuse Programs if Passed On */
@@ -3550,6 +3556,12 @@ posix_spawnve(PyObject *self, PyObject *args)
         {
             goto fail_2;
         }
+        /* Search from index 1 because on Windows starting '=' is allowed for
+           defining hidden environment variables. */
+        if (*k == '\0' || strchr(k + 1, '=') != NULL) {
+            PyErr_SetString(PyExc_ValueError, "illegal environment variable name");
+            goto fail_2;
+        }
         len = PyString_Size(key) + PyString_Size(val) + 2;
         p = PyMem_NEW(char, len);
         if (p == NULL) {
@@ -3781,6 +3793,12 @@ posix_spawnvpe(PyObject *self, PyObject *args)
                 "s;spawnvpe() arg 3 contains a non-string value",
                 &v))
         {
+            goto fail_2;
+        }
+        /* Search from index 1 because on Windows starting '=' is allowed for
+           defining hidden environment variables. */
+        if (*k == '\0' || strchr(k + 1, '=') != NULL) {
+            PyErr_SetString(PyExc_ValueError, "illegal environment variable name");
             goto fail_2;
         }
         len = PyString_Size(key) + PyString_Size(val) + 2;
@@ -6077,7 +6095,7 @@ Set the groups of the current process to list.");
 static PyObject *
 posix_setgroups(PyObject *self, PyObject *groups)
 {
-    int i, len;
+    Py_ssize_t i, len;
     gid_t grouplist[MAX_GROUPS];
 
     if (!PySequence_Check(groups)) {
@@ -6085,6 +6103,9 @@ posix_setgroups(PyObject *self, PyObject *groups)
         return NULL;
     }
     len = PySequence_Size(groups);
+    if (len < 0) {
+        return NULL;
+    }
     if (len > MAX_GROUPS) {
         PyErr_SetString(PyExc_ValueError, "too many groups");
         return NULL;
@@ -7175,6 +7196,13 @@ posix_putenv(PyObject *self, PyObject *args)
             return os2_error(rc);
     } else {
 #endif
+
+    /* Search from index 1 because on Windows starting '=' is allowed for
+       defining hidden environment variables. */
+    if (*s1 == '\0' || strchr(s1 + 1, '=') != NULL) {
+        PyErr_SetString(PyExc_ValueError, "illegal environment variable name");
+        return NULL;
+    }
 
     /* XXX This can leak memory -- not easy to fix :-( */
     len = strlen(s1) + strlen(s2) + 2;

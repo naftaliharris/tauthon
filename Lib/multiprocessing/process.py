@@ -129,6 +129,9 @@ class Process(object):
             from .forking import Popen
         self._popen = Popen(self)
         self._sentinel = getattr(self._popen, 'sentinel', 'no sentinel on windows')
+        # Avoid a refcycle if the target function holds an indirect
+        # reference to the process object (see bpo-30775)
+        del self._target, self._args, self._kwargs
         _current_process._children.add(self)
 
     def terminate(self):
@@ -154,10 +157,16 @@ class Process(object):
         if self is _current_process:
             return True
         assert self._parent_pid == os.getpid(), 'can only test a child process'
+
         if self._popen is None:
             return False
-        self._popen.poll()
-        return self._popen.returncode is None
+
+        returncode = self._popen.poll()
+        if returncode is None:
+            return True
+        else:
+            _current_process._children.discard(self)
+            return False
 
     @property
     def name(self):
@@ -239,7 +248,7 @@ class Process(object):
             else:
                 status = 'started'
 
-        if type(status) is int:
+        if type(status) in (int, long):
             if status == 0:
                 status = 'stopped'
             else:
@@ -274,8 +283,8 @@ class Process(object):
         except SystemExit, e:
             if not e.args:
                 exitcode = 1
-            elif isinstance(e.args[0], int):
-                exitcode = e.args[0]
+            elif isinstance(e.args[0], (int, long)):
+                exitcode = int(e.args[0])
             else:
                 sys.stderr.write(str(e.args[0]) + '\n')
                 sys.stderr.flush()

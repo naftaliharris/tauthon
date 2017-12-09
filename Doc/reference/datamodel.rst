@@ -1409,8 +1409,12 @@ Basic customization
    hashed collections including :class:`set`, :class:`frozenset`, and
    :class:`dict`.  :meth:`__hash__` should return an integer.  The only required
    property is that objects which compare equal have the same hash value; it is
-   advised to somehow mix together (e.g. using exclusive or) the hash values for
-   the components of the object that also play a part in comparison of objects.
+   advised to mix together the hash values of the components of the object that
+   also play a part in comparison of objects by packing them into a tuple and
+   hashing the tuple. Example::
+
+       def __hash__(self):
+           return hash((self.name, self.nick, self.color))
 
    If a class does not define a :meth:`__cmp__` or :meth:`__eq__` method it
    should not define a :meth:`__hash__` operation either; if it defines
@@ -1886,6 +1890,14 @@ sequences, it should iterate through the values.
    of the object, an integer ``>=`` 0.  Also, an object that doesn't define a
    :meth:`__nonzero__` method and whose :meth:`__len__` method returns zero is
    considered to be false in a Boolean context.
+
+   .. impl-detail::
+
+      In CPython, the length is required to be at most :attr:`sys.maxsize`.
+      If the length is larger than :attr:`!sys.maxsize` some features (such as
+      :func:`len`) may raise :exc:`OverflowError`.  To prevent raising
+      :exc:`!OverflowError` by truth value testing, an object must define a
+      :meth:`__nonzero__` method.
 
 
 .. method:: object.__getitem__(self, key)

@@ -2284,8 +2284,8 @@ listindex(PyListObject *self, PyObject *args)
     static PyObject *err_format = NULL;
 
     if (!PyArg_ParseTuple(args, "O|O&O&:index", &v,
-                                _PyEval_SliceIndex, &start,
-                                _PyEval_SliceIndex, &stop))
+                                _PyEval_SliceIndexNotNone, &start,
+                                _PyEval_SliceIndexNotNone, &stop))
         return NULL;
     if (start < 0) {
         start += Py_SIZE(self);
@@ -2562,10 +2562,11 @@ list_subscript(PyListObject* self, PyObject* item)
         PyObject* it;
         PyObject **src, **dest;
 
-        if (PySlice_GetIndicesEx((PySliceObject*)item, Py_SIZE(self),
-                         &start, &stop, &step, &slicelength) < 0) {
+        if (_PySlice_Unpack(item, &start, &stop, &step) < 0) {
             return NULL;
         }
+        slicelength = _PySlice_AdjustIndices(Py_SIZE(self), &start, &stop,
+                                            step);
 
         if (slicelength <= 0) {
             return PyList_New(0);
@@ -2611,10 +2612,11 @@ list_ass_subscript(PyListObject* self, PyObject* item, PyObject* value)
     else if (PySlice_Check(item)) {
         Py_ssize_t start, stop, step, slicelength;
 
-        if (PySlice_GetIndicesEx((PySliceObject*)item, Py_SIZE(self),
-                         &start, &stop, &step, &slicelength) < 0) {
+        if (_PySlice_Unpack(item, &start, &stop, &step) < 0) {
             return -1;
         }
+        slicelength = _PySlice_AdjustIndices(Py_SIZE(self), &start, &stop,
+                                            step);
 
         if (step == 1)
             return list_ass_slice(self, start, stop, value);

@@ -334,7 +334,8 @@ class Set(Sized, Iterable, Container):
     def __gt__(self, other):
         if not isinstance(other, Set):
             return NotImplemented
-        return len(self) > len(other) and self.__ge__(other) 
+        return len(self) > len(other) and self.__ge__(other)
+
     def __ge__(self, other):
         if not isinstance(other, Set):
             return NotImplemented

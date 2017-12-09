@@ -33,6 +33,12 @@ module-level functions and :class:`RegexObject` methods.  The functions are
 shortcuts that don't require you to compile a regex object first, but miss some
 fine-tuning parameters.
 
+.. seealso::
+
+   The third-party `regex <https://pypi.python.org/pypi/regex/>`_ module,
+   which has an API compatible with the standard library :mod:`re` module,
+   but offers additional functionality and a more thorough Unicode support.
+
 
 .. _re-syntax:
 
@@ -480,7 +486,9 @@ form.
           IGNORECASE
 
    Perform case-insensitive matching; expressions like ``[A-Z]`` will match
-   lowercase letters, too.  This is not affected by the current locale.
+   lowercase letters, too.  This is not affected by the current locale.  To
+   get this effect on non-ASCII Unicode characters such as ``ü`` and ``Ü``,
+   add the :const:`UNICODE` flag.
 
 
 .. data:: L
@@ -511,8 +519,9 @@ form.
 .. data:: U
           UNICODE
 
-   Make ``\w``, ``\W``, ``\b``, ``\B``, ``\d``, ``\D``, ``\s`` and ``\S`` dependent
-   on the Unicode character properties database.
+   Make the ``\w``, ``\W``, ``\b``, ``\B``, ``\d``, ``\D``, ``\s`` and ``\S``
+   sequences dependent on the Unicode character properties database. Also
+   enables non-ASCII matching for :const:`IGNORECASE`.
 
    .. versionadded:: 2.0
 
@@ -689,11 +698,22 @@ form.
       Added the optional flags argument.
 
 
-.. function:: escape(string)
+.. function:: escape(pattern)
 
-   Return *string* with all non-alphanumerics backslashed; this is useful if you
-   want to match an arbitrary literal string that may have regular expression
-   metacharacters in it.
+   Escape all the characters in *pattern* except ASCII letters and numbers.
+   This is useful if you want to match an arbitrary literal string that may
+   have regular expression metacharacters in it.  For example::
+
+      >>> print re.escape('python.exe')
+      python\.exe
+
+      >>> legal_chars = string.ascii_lowercase + string.digits + "!#$%&'*+-.^_`|~:"
+      >>> print '[%s]+' % re.escape(legal_chars)
+      [abcdefghijklmnopqrstuvwxyz0123456789\!\#\$\%\&\'\*\+\-\.\^\_\`\|\~\:]+
+
+      >>> operators = ['+', '-', '*', '/', '**']
+      >>> print '|'.join(map(re.escape, sorted(operators, reverse=True)))
+      \/|\-|\+|\*\*|\*
 
 
 .. function:: purge()

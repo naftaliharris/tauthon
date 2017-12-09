@@ -113,11 +113,11 @@ Notes:
 
 (1)
    This is a short-circuit operator, so it only evaluates the second
-   argument if the first one is :const:`False`.
+   argument if the first one is false.
 
 (2)
    This is a short-circuit operator, so it only evaluates the second
-   argument if the first one is :const:`True`.
+   argument if the first one is true.
 
 (3)
    ``not`` has a lower priority than non-Boolean operators, so ``not a == b`` is
@@ -423,10 +423,12 @@ Bitwise Operations on Integer Types
    pair: bitwise; operations
    pair: shifting; operations
    pair: masking; operations
+   operator: |
    operator: ^
    operator: &
    operator: <<
    operator: >>
+   operator: ~
 
 Bitwise operations only make sense for integers.  Negative numbers are treated
 as their 2's complement value (this assumes a sufficiently large number of bits
@@ -819,7 +821,7 @@ Notes:
    :ref:`faq-multidimensional-list`.
 
 (3)
-   If *i* or *j* is negative, the index is relative to the end of the string:
+   If *i* or *j* is negative, the index is relative to the end of sequence *s*:
    ``len(s) + i`` or ``len(s) + j`` is substituted.  But note that ``-0`` is still
    ``0``.
 
@@ -834,8 +836,10 @@ Notes:
    The slice of *s* from *i* to *j* with step *k* is defined as the sequence of
    items with index  ``x = i + n*k`` such that ``0 <= n < (j-i)/k``.  In other words,
    the indices are ``i``, ``i+k``, ``i+2*k``, ``i+3*k`` and so on, stopping when
-   *j* is reached (but never including *j*).  If *i* or *j* is greater than
-   ``len(s)``, use ``len(s)``.  If *i* or *j* are omitted or ``None``, they become
+   *j* is reached (but never including *j*).  When *k* is positive,
+   *i* and *j* are reduced to ``len(s)`` if they are greater.
+   When *k* is negative, *i* and *j* are reduced to ``len(s) - 1`` if
+   they are greater.  If *i* or *j* are omitted or ``None``, they become
    "end" values (which end depends on the sign of *k*).  Note, *k* cannot be zero.
    If *k* is ``None``, it is treated like ``1``.
 
@@ -1066,9 +1070,10 @@ string functions based on regular expressions.
 
 .. method:: str.join(iterable)
 
-   Return a string which is the concatenation of the strings in the
-   :term:`iterable` *iterable*.  The separator between elements is the string
-   providing this method.
+   Return a string which is the concatenation of the strings in *iterable*.
+   A :exc:`TypeError` will be raised if there are any non-string values in
+   *iterable*, including :class:`bytes` objects.  The separator between
+   elements is the string providing this method.
 
 
 .. method:: str.ljust(width[, fillchar])
@@ -1551,9 +1556,7 @@ Notes:
 
 (2)
    The alternate form causes a leading ``'0x'`` or ``'0X'`` (depending on whether
-   the ``'x'`` or ``'X'`` format was used) to be inserted between left-hand padding
-   and the formatting of the number if the leading character of the result is not
-   already a zero.
+   the ``'x'`` or ``'X'`` format was used) to be inserted before the first digit.
 
 (3)
    The alternate form causes the result to always contain a decimal point, even if
@@ -2003,9 +2006,7 @@ The constructors for both classes work the same:
 
    Note, the *elem* argument to the :meth:`__contains__`, :meth:`remove`, and
    :meth:`discard` methods may be a set.  To support searching for an equivalent
-   frozenset, the *elem* set is temporarily mutated during the search and then
-   restored.  During the search, the *elem* set should not be read or mutated
-   since it does not have a meaningful value.
+   frozenset, a temporary one is created from *elem*.
 
 
 .. seealso::

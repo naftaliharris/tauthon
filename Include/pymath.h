@@ -50,7 +50,7 @@ extern double copysign(double, double);
 #define Py_MATH_PIl 3.1415926535897932384626433832795029L
 #endif
 #ifndef Py_MATH_PI
-#define Py_MATH_PI  3.14159265358979323846
+#define Py_MATH_PI 3.14159265358979323846
 #endif
 
 #ifndef Py_MATH_TAU

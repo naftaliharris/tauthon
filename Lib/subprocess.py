@@ -507,7 +507,7 @@ class Popen(object):
                     p2cread, _ = _subprocess.CreatePipe(None, 0)
             elif stdin == PIPE:
                 p2cread, p2cwrite = _subprocess.CreatePipe(None, 0)
-            elif isinstance(stdin, int):
+            elif isinstance(stdin, (int, long)):
                 p2cread = msvcrt.get_osfhandle(stdin)
             else:
                 # Assuming file-like object
@@ -524,7 +524,7 @@ class Popen(object):
                     _, c2pwrite = _subprocess.CreatePipe(None, 0)
             elif stdout == PIPE:
                 c2pread, c2pwrite = _subprocess.CreatePipe(None, 0)
-            elif isinstance(stdout, int):
+            elif isinstance(stdout, (int, long)):
                 c2pwrite = msvcrt.get_osfhandle(stdout)
             else:
                 # Assuming file-like object
@@ -543,7 +543,7 @@ class Popen(object):
                 errread, errwrite = _subprocess.CreatePipe(None, 0)
             elif stderr == STDOUT:
                 errwrite = c2pwrite
-            elif isinstance(stderr, int):
+            elif isinstance(stderr, (int, long)):
                 errwrite = msvcrt.get_osfhandle(stderr)
             else:
                 # Assuming file-like object
@@ -720,10 +720,11 @@ class Popen(object):
                         if e.errno == errno.EPIPE:
                             # communicate() should ignore broken pipe error
                             pass
-                        elif (e.errno == errno.EINVAL
-                              and self.poll() is not None):
-                            # Issue #19612: stdin.write() fails with EINVAL
-                            # if the process already exited before the write
+                        elif e.errno == errno.EINVAL:
+                            # bpo-19612, bpo-30418: On Windows, stdin.write()
+                            # fails with EINVAL if the child process exited or
+                            # if the child process is still running but closed
+                            # the pipe.
                             pass
                         else:
                             raise
@@ -800,7 +801,7 @@ class Popen(object):
             elif stdin == PIPE:
                 p2cread, p2cwrite = self.pipe_cloexec()
                 to_close.update((p2cread, p2cwrite))
-            elif isinstance(stdin, int):
+            elif isinstance(stdin, (int, long)):
                 p2cread = stdin
             else:
                 # Assuming file-like object
@@ -811,7 +812,7 @@ class Popen(object):
             elif stdout == PIPE:
                 c2pread, c2pwrite = self.pipe_cloexec()
                 to_close.update((c2pread, c2pwrite))
-            elif isinstance(stdout, int):
+            elif isinstance(stdout, (int, long)):
                 c2pwrite = stdout
             else:
                 # Assuming file-like object
@@ -827,7 +828,7 @@ class Popen(object):
                     errwrite = c2pwrite
                 else: # child's stdout is not set, use parent's stdout
                     errwrite = sys.__stdout__.fileno()
-            elif isinstance(stderr, int):
+            elif isinstance(stderr, (int, long)):
                 errwrite = stderr
             else:
                 # Assuming file-like object
@@ -1026,13 +1027,16 @@ class Popen(object):
 
         def _handle_exitstatus(self, sts, _WIFSIGNALED=os.WIFSIGNALED,
                 _WTERMSIG=os.WTERMSIG, _WIFEXITED=os.WIFEXITED,
-                _WEXITSTATUS=os.WEXITSTATUS):
+                _WEXITSTATUS=os.WEXITSTATUS, _WIFSTOPPED=os.WIFSTOPPED,
+                _WSTOPSIG=os.WSTOPSIG):
             # This method is called (indirectly) by __del__, so it cannot
             # refer to anything outside of its local scope.
             if _WIFSIGNALED(sts):
                 self.returncode = -_WTERMSIG(sts)
             elif _WIFEXITED(sts):
                 self.returncode = _WEXITSTATUS(sts)
+            elif _WIFSTOPPED(sts):
+                self.returncode = -_WSTOPSIG(sts)
             else:
                 # Should never happen
                 raise RuntimeError("Unknown child exit status!")

@@ -113,7 +113,6 @@ tok_new(void)
     tok->tabsize = TABSIZE;
     tok->indent = 0;
     tok->indstack[0] = 0;
-
     tok->atbol = 1;
     tok->pendin = 0;
     tok->prompt = tok->nextprompt = NULL;

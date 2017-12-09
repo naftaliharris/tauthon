@@ -16,7 +16,7 @@ available.  They are listed here in alphabetical order.
 :func:`basestring`   :func:`execfile`   :func:`issubclass`  :func:`print`      :func:`super`
 :func:`bin`          :func:`file`       :func:`iter`        :func:`property`   :func:`tuple`
 :func:`bool`         :func:`filter`     :func:`len`         :func:`range`      :func:`type`
-:func:`bytearray`    :func:`float`      :func:`list`        :func:`raw_input`  :func:`unichr`
+:func:`bytearray`    :func:`float`      |func-list|_        :func:`raw_input`  :func:`unichr`
 :func:`callable`     :func:`format`     :func:`locals`      :func:`reduce`     :func:`unicode`
 :func:`chr`          |func-frozenset|_  :func:`long`        :func:`reload`     :func:`vars`
 :func:`classmethod`  :func:`getattr`    :func:`map`         |func-repr|_       :func:`xrange`
@@ -38,6 +38,7 @@ section.
 
 .. |func-dict| replace:: ``dict()``
 .. |func-frozenset| replace:: ``frozenset()``
+.. |func-list| replace:: ``list()``
 .. |func-memoryview| replace:: ``memoryview()``
 .. |func-repr| replace:: ``repr()``
 .. |func-set| replace:: ``set()``
@@ -617,7 +618,7 @@ section.
       '0x1L'
 
    If x is not a Python :class:`int` or :class:`long` object, it has to
-   define an __index__() method that returns an integer.
+   define a __hex__() method that returns a string.
 
    See also :func:`int` for converting a hexadecimal string to an
    integer using a base of 16.
@@ -740,7 +741,9 @@ section.
    (such as a dictionary, set, or frozen set).
 
 
+.. _func-list:
 .. class:: list([iterable])
+   :noindex:
 
    Return a list whose items are the same and in the same order as *iterable*'s
    items.  *iterable* may be either a sequence, a container that supports

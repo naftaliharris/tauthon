@@ -340,7 +340,7 @@ attempts to use the file object will automatically fail. ::
    >>> f.close()
    >>> f.read()
    Traceback (most recent call last):
-     File "<stdin>", line 1, in ?
+     File "<stdin>", line 1, in <module>
    ValueError: I/O operation on closed file
 
 It is good practice to use the :keyword:`with` keyword when dealing with file
@@ -390,6 +390,7 @@ sent over a network connection to some distant machine.
 If you have an object ``x``, you can view its JSON string representation with a
 simple line of code::
 
+   >>> import json
    >>> json.dumps([1, 'simple', 'list'])
    '[1, "simple", "list"]'
 

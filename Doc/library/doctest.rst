@@ -425,7 +425,7 @@ Simple example::
 
    >>> [1, 2, 3].remove(42)
    Traceback (most recent call last):
-     File "<stdin>", line 1, in ?
+     File "<stdin>", line 1, in <module>
    ValueError: list.remove(x): x not in list
 
 That doctest succeeds if :exc:`ValueError` is raised, with the ``list.remove(x):
@@ -449,7 +449,7 @@ multi-line detail::
 
    >>> raise ValueError('multi\n    line\ndetail')
    Traceback (most recent call last):
-     File "<stdin>", line 1, in ?
+     File "<stdin>", line 1, in <module>
    ValueError: multi
        line
    detail
@@ -530,8 +530,8 @@ Option Flags
 
 A number of option flags control various aspects of doctest's behavior.
 Symbolic names for the flags are supplied as module constants, which can be
-or'ed together and passed to various functions.  The names can also be used in
-:ref:`doctest directives <doctest-directives>`.
+:ref:`bitwise ORed <bitwise>` together and passed to various functions.
+The names can also be used in :ref:`doctest directives <doctest-directives>`.
 
 The first group of options define test semantics, controlling aspects of how
 doctest decides whether actual output matches an example's expected output:
@@ -607,7 +607,7 @@ doctest decides whether actual output matches an example's expected output:
 
       >>> (1, 2)[3] = 'moo'
       Traceback (most recent call last):
-        File "<stdin>", line 1, in ?
+        File "<stdin>", line 1, in <module>
       TypeError: object doesn't support item assignment
 
    passes under Python 2.3 and later Python versions with the flag specified,
@@ -1161,10 +1161,11 @@ reporting flags specific to :mod:`unittest` support, via this function:
    the option flags specified for the test case when the :class:`DocTestCase`
    instance was constructed.  If no reporting flags were specified (which is the
    typical and expected case), :mod:`doctest`'s :mod:`unittest` reporting flags are
-   or'ed into the option flags, and the option flags so augmented are passed to the
-   :class:`DocTestRunner` instance created to run the doctest.  If any reporting
-   flags were specified when the :class:`DocTestCase` instance was constructed,
-   :mod:`doctest`'s :mod:`unittest` reporting flags are ignored.
+   :ref:`bitwise ORed <bitwise>` into the option flags, and the option flags
+   so augmented are passed to the :class:`DocTestRunner` instance created to
+   run the doctest.  If any reporting flags were specified when the
+   :class:`DocTestCase` instance was constructed, :mod:`doctest`'s
+   :mod:`unittest` reporting flags are ignored.
 
    The value of the :mod:`unittest` reporting flags in effect before the function
    was called is returned by the function.
