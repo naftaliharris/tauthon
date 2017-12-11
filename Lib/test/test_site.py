@@ -8,6 +8,7 @@ import unittest
 from test.test_support import run_unittest, TESTFN, EnvironmentVarGuard
 from test.test_support import captured_output
 import __builtin__
+import errno
 import os
 import sys
 import re
@@ -24,14 +25,30 @@ if "site" in sys.modules:
 else:
     raise unittest.SkipTest("importation of site.py suppressed")
 
-if site.ENABLE_USER_SITE and not os.path.isdir(site.USER_SITE):
-    # need to add user site directory for tests
-    try:
-        os.makedirs(site.USER_SITE)
-        site.addsitedir(site.USER_SITE)
-    except OSError as exc:
-        raise unittest.SkipTest('unable to create user site directory (%r): %s'
-                                % (site.USER_SITE, exc))
+
+OLD_SYS_PATH = None
+
+
+def setUpModule():
+    global OLD_SYS_PATH
+    OLD_SYS_PATH = sys.path[:]
+
+    if site.ENABLE_USER_SITE and not os.path.isdir(site.USER_SITE):
+        # need to add user site directory for tests
+        try:
+            os.makedirs(site.USER_SITE)
+            # modify sys.path: will be restored by tearDownModule()
+            site.addsitedir(site.USER_SITE)
+        except OSError as exc:
+            if exc.errno in (errno.EACCES, errno.EPERM):
+                raise unittest.SkipTest('unable to create user site directory (%r): %s'
+                                        % (site.USER_SITE, exc))
+            else:
+                raise
+
+
+def tearDownModule():
+    sys.path[:] = OLD_SYS_PATH
 
 
 class HelperFunctionsTests(unittest.TestCase):

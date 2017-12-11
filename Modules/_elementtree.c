@@ -164,8 +164,7 @@ deepcopy(PyObject* object, PyObject* memo)
 LOCAL(PyObject*)
 list_join(PyObject* list)
 {
-    /* join list elements (destroying the list in the process) */
-
+    /* join list elements */
     PyObject* joiner;
     PyObject* function;
     PyObject* args;
@@ -173,12 +172,10 @@ list_join(PyObject* list)
 
     switch (PyList_GET_SIZE(list)) {
     case 0:
-        Py_DECREF(list);
         return PyString_FromString("");
     case 1:
         result = PyList_GET_ITEM(list, 0);
         Py_INCREF(result);
-        Py_DECREF(list);
         return result;
     }
 
@@ -196,9 +193,13 @@ list_join(PyObject* list)
     }
 
     args = PyTuple_New(1);
-    if (!args)
+    if (!args) {
+        Py_DECREF(function);
+        Py_DECREF(joiner);
         return NULL;
+    }
 
+    Py_INCREF(list);
     PyTuple_SET_ITEM(args, 0, list);
 
     result = PyObject_CallObject(function, args);
@@ -435,15 +436,17 @@ element_get_text(ElementObject* self)
 {
     /* return borrowed reference to text attribute */
 
-    PyObject* res = self->text;
+    PyObject *res = self->text;
 
     if (JOIN_GET(res)) {
         res = JOIN_OBJ(res);
         if (PyList_CheckExact(res)) {
-            res = list_join(res);
-            if (!res)
+            PyObject *tmp = list_join(res);
+            if (!tmp)
                 return NULL;
-            self->text = res;
+            self->text = tmp;
+            Py_DECREF(res);
+            res = tmp;
         }
     }
 
@@ -455,15 +458,17 @@ element_get_tail(ElementObject* self)
 {
     /* return borrowed reference to text attribute */
 
-    PyObject* res = self->tail;
+    PyObject *res = self->tail;
 
     if (JOIN_GET(res)) {
         res = JOIN_OBJ(res);
         if (PyList_CheckExact(res)) {
-            res = list_join(res);
-            if (!res)
+            PyObject *tmp = list_join(res);
+            if (!tmp)
                 return NULL;
-            self->tail = res;
+            self->tail = tmp;
+            Py_DECREF(res);
+            res = tmp;
         }
     }
 
@@ -524,8 +529,9 @@ subelement(PyObject* self, PyObject* args, PyObject* kw)
     }
 
     elem = element_new(tag, attrib);
-
     Py_DECREF(attrib);
+    if (elem == NULL)
+        return NULL;
 
     if (element_add_subelement(parent, elem) < 0) {
         Py_DECREF(elem);
@@ -956,7 +962,11 @@ element_getchildren(ElementObject* self, PyObject* args)
     int i;
     PyObject* list;
 
-    /* FIXME: report as deprecated? */
+    if (PyErr_WarnPy3k("This method will be removed in future versions.  "
+                       "Use 'list(elem)' or iteration over elem instead.",
+                       1) < 0) {
+        return NULL;
+    }
 
     if (!PyArg_ParseTuple(args, ":getchildren"))
         return NULL;
@@ -978,13 +988,10 @@ element_getchildren(ElementObject* self, PyObject* args)
 }
 
 static PyObject*
-element_iter(ElementObject* self, PyObject* args)
+element_iter_impl(ElementObject* self, PyObject* tag)
 {
+    PyObject* args;
     PyObject* result;
-    
-    PyObject* tag = Py_None;
-    if (!PyArg_ParseTuple(args, "|O:iter", &tag))
-        return NULL;
 
     if (!elementtree_iter_obj) {
         PyErr_SetString(
@@ -1006,6 +1013,34 @@ element_iter(ElementObject* self, PyObject* args)
     Py_DECREF(args);
 
     return result;
+}
+
+static PyObject*
+element_iter(ElementObject* self, PyObject* args)
+{
+    PyObject* tag = Py_None;
+    if (!PyArg_ParseTuple(args, "|O:iter", &tag))
+        return NULL;
+
+    return element_iter_impl(self, tag);
+}
+
+static PyObject*
+element_getiterator(ElementObject* self, PyObject* args)
+{
+    PyObject* tag = Py_None;
+    if (!PyArg_ParseTuple(args, "|O:getiterator", &tag))
+        return NULL;
+
+    /* Change for a DeprecationWarning in 1.4 */
+    if (Py_Py3kWarningFlag &&
+        PyErr_WarnEx(PyExc_PendingDeprecationWarning,
+                     "This method will be removed in future versions.  "
+                     "Use 'tree.iter()' or 'list(tree.iter())' instead.",
+                     1) < 0) {
+        return NULL;
+    }
+    return element_iter_impl(self, tag);
 }
 
 
@@ -1231,8 +1266,10 @@ element_repr(ElementObject* self)
     if (status == 0) {
         PyObject *repr, *tag;
         tag = PyObject_Repr(self->tag);
-        if (!tag)
+        if (!tag) {
+            Py_ReprLeave((PyObject *)self);
             return NULL;
+        }
 
         repr = PyString_FromFormat("<Element %s at %p>",
                                    PyString_AS_STRING(tag), self);
@@ -1328,11 +1365,11 @@ element_subscr(PyObject* self_, PyObject* item)
         if (!self->extra)
             return PyList_New(0);
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
-                self->extra->length,
-                &start, &stop, &step, &slicelen) < 0) {
+        if (_PySlice_Unpack(item, &start, &stop, &step) < 0) {
             return NULL;
         }
+        slicelen = _PySlice_AdjustIndices(self->extra->length, &start, &stop,
+                                         step);
 
         if (slicelen <= 0)
             return PyList_New(0);
@@ -1387,11 +1424,11 @@ element_ass_subscr(PyObject* self_, PyObject* item, PyObject* value)
         if (!self->extra)
             element_new_extra(self, NULL);
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
-                self->extra->length,
-                &start, &stop, &step, &slicelen) < 0) {
+        if (_PySlice_Unpack(item, &start, &stop, &step) < 0) {
             return -1;
         }
+        slicelen = _PySlice_AdjustIndices(self->extra->length, &start, &stop,
+                                         step);
         assert(slicelen <= self->extra->length);
 
         if (value == NULL)
@@ -1504,7 +1541,7 @@ static PyMethodDef element_methods[] = {
     {"itertext", (PyCFunction) element_itertext, METH_VARARGS},
     {"iterfind", (PyCFunction) element_iterfind, METH_VARARGS},
 
-    {"getiterator", (PyCFunction) element_iter, METH_VARARGS},
+    {"getiterator", (PyCFunction) element_getiterator, METH_VARARGS},
     {"getchildren", (PyCFunction) element_getchildren, METH_VARARGS},
 
     {"items", (PyCFunction) element_items, METH_VARARGS},
@@ -1542,7 +1579,7 @@ element_getattr(ElementObject* self, char* name)
         return res;
     } else if (strcmp(name, "text") == 0) {
         res = element_get_text(self);
-        Py_INCREF(res);
+        Py_XINCREF(res);
         return res;
     }
 
@@ -1729,6 +1766,37 @@ treebuilder_dealloc(TreeBuilderObject* self)
     PyObject_Del(self);
 }
 
+/* -------------------------------------------------------------------- */
+/* helpers for handling of arbitrary element-like objects */
+
+static void
+treebuilder_set_element_text_or_tail(PyObject **data, PyObject **dest)
+{
+    PyObject *tmp = JOIN_OBJ(*dest);
+    *dest = JOIN_SET(*data, PyList_CheckExact(*data));
+    *data = NULL;
+    Py_DECREF(tmp);
+}
+
+LOCAL(void)
+treebuilder_flush_data(TreeBuilderObject* self)
+{
+    ElementObject *element = self->last;
+
+    if (self->data) {
+        if (self->this == element) {
+            treebuilder_set_element_text_or_tail(
+                &self->data,
+                &element->text);
+        }
+        else {
+            treebuilder_set_element_text_or_tail(
+                &self->data,
+                &element->tail);
+        }
+    }
+}
+
 LOCAL(int)
 treebuilder_append_event(TreeBuilderObject *self, PyObject *action,
                          PyObject *node)
@@ -1763,20 +1831,7 @@ treebuilder_handle_start(TreeBuilderObject* self, PyObject* tag,
     PyObject* node;
     PyObject* this;
 
-    if (self->data) {
-        if (self->this == self->last) {
-            Py_DECREF(JOIN_OBJ(self->last->text));
-            self->last->text = JOIN_SET(
-                self->data, PyList_CheckExact(self->data)
-                );
-        } else {
-            Py_DECREF(JOIN_OBJ(self->last->tail));
-            self->last->tail = JOIN_SET(
-                self->data, PyList_CheckExact(self->data)
-                );
-        }
-        self->data = NULL;
-    }
+    treebuilder_flush_data(self);
 
     node = element_new(tag, attrib);
     if (!node)
@@ -1866,20 +1921,7 @@ treebuilder_handle_end(TreeBuilderObject* self, PyObject* tag)
 {
     ElementObject *item;
 
-    if (self->data) {
-        if (self->this == self->last) {
-            Py_DECREF(JOIN_OBJ(self->last->text));
-            self->last->text = JOIN_SET(
-                self->data, PyList_CheckExact(self->data)
-                );
-        } else {
-            Py_DECREF(JOIN_OBJ(self->last->tail));
-            self->last->tail = JOIN_SET(
-                self->data, PyList_CheckExact(self->data)
-                );
-        }
-        self->data = NULL;
-    }
+    treebuilder_flush_data(self);
 
     if (self->index == 0) {
         PyErr_SetString(

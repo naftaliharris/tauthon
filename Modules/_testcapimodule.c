@@ -10,6 +10,14 @@
 #include "structmember.h"
 #include "datetime.h"
 #include "marshal.h"
+#include <signal.h>
+#ifdef MS_WINDOWS
+#  include <crtdbg.h>
+#endif
+
+#ifdef HAVE_SYS_WAIT_H
+#include <sys/wait.h>           /* For W_STOPCODE */
+#endif
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -1824,7 +1832,7 @@ set_errno(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-#ifdef Py_USING_UNICODE
+#if defined(Py_USING_UNICODE) && !defined(Py_BUILD_CORE)
 static int test_run_counter = 0;
 
 static PyObject *
@@ -2481,12 +2489,81 @@ pymarshal_read_object_from_file(PyObject* self, PyObject *args)
     return Py_BuildValue("Nl", obj, pos);
 }
 
+static PyObject*
+test_raise_signal(PyObject* self, PyObject *args)
+{
+    int signum, err;
+
+    if (PyArg_ParseTuple(args, "i:raise_signal", &signum) < 0)
+        return NULL;
+
+    err = raise(signum);
+    if (err)
+        return PyErr_SetFromErrno(PyExc_OSError);
+
+    if (PyErr_CheckSignals() < 0)
+        return NULL;
+
+    Py_RETURN_NONE;
+}
+
+
+#ifdef MS_WINDOWS
+static PyObject*
+msvcrt_CrtSetReportMode(PyObject* self, PyObject *args)
+{
+    int type, mode;
+    int res;
+
+    if (!PyArg_ParseTuple(args, "ii:CrtSetReportMode", &type, &mode)) {
+        return NULL;
+    }
+
+    res = _CrtSetReportMode(type, mode);
+    if (res == -1) {
+        PyErr_SetFromErrno(PyExc_OSError);
+        return NULL;
+    }
+    return PyInt_FromLong(res);
+}
+
+
+static PyObject*
+msvcrt_CrtSetReportFile(PyObject* self, PyObject *args)
+{
+    int type, file;
+    long res;
+
+    if (!PyArg_ParseTuple(args, "ii:CrtSetReportFile", &type, &file)) {
+        return NULL;
+    }
+
+    res = (long)_CrtSetReportFile(type, (_HFILE)file);
+
+    return PyInt_FromLong(res);
+}
+#endif
+
+
+#ifdef W_STOPCODE
+static PyObject*
+py_w_stopcode(PyObject *self, PyObject *args)
+{
+    int sig, status;
+    if (!PyArg_ParseTuple(args, "i", &sig)) {
+        return NULL;
+    }
+    status = W_STOPCODE(sig);
+    return PyLong_FromLong(status);
+}
+#endif
+
 
 static PyMethodDef TestMethods[] = {
     {"raise_exception",         raise_exception,                 METH_VARARGS},
     {"set_errno",               set_errno,                       METH_VARARGS},
     {"test_config",             (PyCFunction)test_config,        METH_NOARGS},
-#ifdef Py_USING_UNICODE
+#if defined(Py_USING_UNICODE) && !defined(Py_BUILD_CORE)
     {"test_datetime_capi",  test_datetime_capi,              METH_NOARGS},
 #endif
     {"test_list_api",           (PyCFunction)test_list_api,      METH_NOARGS},
@@ -2593,6 +2670,14 @@ static PyMethodDef TestMethods[] = {
         pymarshal_read_last_object_from_file, METH_VARARGS},
     {"pymarshal_read_object_from_file",
         pymarshal_read_object_from_file, METH_VARARGS},
+    {"raise_signal", (PyCFunction)test_raise_signal, METH_VARARGS},
+#ifdef MS_WINDOWS
+    {"CrtSetReportMode", (PyCFunction)msvcrt_CrtSetReportMode, METH_VARARGS},
+    {"CrtSetReportFile", (PyCFunction)msvcrt_CrtSetReportFile, METH_VARARGS},
+#endif
+#ifdef W_STOPCODE
+    {"W_STOPCODE", py_w_stopcode, METH_VARARGS},
+#endif
     {NULL, NULL} /* sentinel */
 };
 
@@ -3007,6 +3092,14 @@ init_testcapi(void)
     PyModule_AddObject(m, "PY_SSIZE_T_MAX", PyInt_FromSsize_t(PY_SSIZE_T_MAX));
     PyModule_AddObject(m, "PY_SSIZE_T_MIN", PyInt_FromSsize_t(PY_SSIZE_T_MIN));
     PyModule_AddObject(m, "SIZEOF_PYGC_HEAD", PyInt_FromSsize_t(sizeof(PyGC_Head)));
+
+#ifdef MS_WINDOWS
+    PyModule_AddIntConstant(m, "CRT_WARN", _CRT_WARN);
+    PyModule_AddIntConstant(m, "CRT_ERROR", _CRT_ERROR);
+    PyModule_AddIntConstant(m, "CRT_ASSERT", _CRT_ASSERT);
+    PyModule_AddIntConstant(m, "CRTDBG_MODE_FILE", _CRTDBG_MODE_FILE);
+    PyModule_AddIntConstant(m, "CRTDBG_FILE_STDERR", (int)_CRTDBG_FILE_STDERR);
+#endif
 
     TestError = PyErr_NewException("_testcapi.error", NULL, NULL);
     Py_INCREF(TestError);

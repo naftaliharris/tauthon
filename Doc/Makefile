@@ -10,7 +10,7 @@ PAPER        =
 SOURCES      =
 DISTVERSION  = $(shell $(PYTHON) tools/extensions/patchlevel.py)
 
-ALLSPHINXOPTS = -b $(BUILDER) -d build/doctrees -D latex_paper_size=$(PAPER) \
+ALLSPHINXOPTS = -b $(BUILDER) -d build/doctrees -D latex_elements.papersize=$(PAPER) \
                 $(SPHINXOPTS) . build/$(BUILDER) $(SOURCES)
 
 .PHONY: help build html htmlhelp latex text changes linkcheck \
@@ -157,12 +157,12 @@ serve:
 
 # for development releases: always build
 autobuild-dev:
-	make dist SPHINXOPTS='$(SPHINXOPTS) -A daily=1 -A versionswitcher=1'
+	make dist SPHINXOPTS='$(SPHINXOPTS) -A daily=1 -A switchers=1'
 	-make suspicious
 
 # for quick rebuilds (HTML only)
 autobuild-dev-html:
-	make html SPHINXOPTS='$(SPHINXOPTS) -A daily=1 -A versionswitcher=1'
+	make html SPHINXOPTS='$(SPHINXOPTS) -A daily=1 -A switchers=1'
 
 # for stable releases: only build if not in pre-release stage (alpha, beta)
 # release candidate downloads are okay, since the stable tree can be in that stage

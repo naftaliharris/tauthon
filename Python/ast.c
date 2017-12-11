@@ -681,7 +681,7 @@ compiler_complex_args(struct compiling *c, const node *n)
 
 /* returns -1 if failed to handle keyword only arguments
    returns new position to keep processing if successful
-               (',' tname ['=' test])* 
+               (',' tname ['=' test])*
                      ^^^
    start pointing here
  */
@@ -746,7 +746,7 @@ handle_keywordonly_args(struct compiling *c, const node *n, int start,
     }
     return i;
  error:
-    return -1;   
+    return -1;
 }
 
 /* Create AST for argument list. */
@@ -796,12 +796,12 @@ ast_for_arguments(struct compiling *c, const node *n)
             else {
                 i++;
             }
-            break; 
+            break;
         }
         if (TYPE(ch) == vfpdef || TYPE(ch) == tfpdef) nposargs++;
         if (TYPE(ch) == EQUAL) nposdefaults++;
     }
-    /* count the number of keyword only args & 
+    /* count the number of keyword only args &
        defaults for keyword only args */
     for ( ; i < NCH(n); ++i) {
         ch = CHILD(n, i);
@@ -816,14 +816,14 @@ ast_for_arguments(struct compiling *c, const node *n)
                    asdl_seq_new(nkwonlyargs, c->c_arena) : NULL);
     if (!kwonlyargs && nkwonlyargs)
         return NULL;
-    posdefaults = (nposdefaults ? 
+    posdefaults = (nposdefaults ?
                     asdl_seq_new(nposdefaults, c->c_arena) : NULL);
     if (!posdefaults && nposdefaults)
         return NULL;
-    /* The length of kwonlyargs and kwdefaults are same 
+    /* The length of kwonlyargs and kwdefaults are same
        since we set NULL as default for keyword only argument w/o default
        - we have sequence data structure, but no dictionary */
-    kwdefaults = (nkwonlyargs ? 
+    kwdefaults = (nkwonlyargs ?
                    asdl_seq_new(nkwonlyargs, c->c_arena) : NULL);
     if (!kwdefaults && nkwonlyargs)
         return NULL;
@@ -913,7 +913,7 @@ ast_for_arguments(struct compiling *c, const node *n)
                 }
                 ch = CHILD(n, i+1);  /* tname or COMMA */
                 if (TYPE(ch) == COMMA) {
-                    int res = 0;    
+                    int res = 0;
                     i += 2; /* now follows keyword only arguments */
                     res = handle_keywordonly_args(c, n, i,
                                                   kwonlyargs, kwdefaults);

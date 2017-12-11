@@ -159,8 +159,8 @@ precede any statement that will result in bytecodes being produced.
 PEP 207: Rich Comparisons
 =========================
 
-In earlier versions, Python's support for implementing comparisons on user-
-defined classes and extension types was quite simple. Classes could implement a
+In earlier versions, Python's support for implementing comparisons on user-defined
+classes and extension types was quite simple. Classes could implement a
 :meth:`__cmp__` method that was given two instances of a class, and could only
 return 0 if they were equal or +1 or -1 if they weren't; the method couldn't
 raise an exception or return anything other than a Boolean value.  Users of
@@ -204,7 +204,7 @@ Each of these magic methods can return anything at all: a Boolean, a matrix, a
 list, or any other Python object.  Alternatively they can raise an exception if
 the comparison is impossible, inconsistent, or otherwise meaningless.
 
-The built-in :func:`cmp(A,B)` function can use the rich comparison machinery,
+The built-in ``cmp(A,B)`` function can use the rich comparison machinery,
 and now accepts an optional argument specifying which comparison operation to
 use; this is given as one of the strings ``"<"``, ``"<="``, ``">"``, ``">="``,
 ``"=="``, or ``"!="``.  If called without the optional third argument,
@@ -350,7 +350,7 @@ where this behaviour is undesirable, object caches being the most common one,
 and another being circular references in data structures such as trees.
 
 For example, consider a memoizing function that caches the results of another
-function :func:`f(x)` by storing the function's argument and its result in a
+function ``f(x)`` by storing the function's argument and its result in a
 dictionary::
 
    _cache = {}
@@ -465,11 +465,11 @@ Windows being the primary examples; on these systems, it's impossible to
 distinguish the filenames ``FILE.PY`` and ``file.py``, even though they do store
 the file's name  in its original case (they're case-preserving, too).
 
-In Python 2.1, the :keyword:`import` statement will work to simulate case-
-sensitivity on case-insensitive platforms.  Python will now search for the first
+In Python 2.1, the :keyword:`import` statement will work to simulate case-sensitivity
+on case-insensitive platforms.  Python will now search for the first
 case-sensitive match by default, raising an :exc:`ImportError` if no such file
-is found, so ``import file`` will not import a module named ``FILE.PY``.  Case-
-insensitive matching can be requested by setting the :envvar:`PYTHONCASEOK`
+is found, so ``import file`` will not import a module named ``FILE.PY``.
+Case-insensitive matching can be requested by setting the :envvar:`PYTHONCASEOK`
 environment variable before starting the Python interpreter.
 
 .. ======================================================================
@@ -481,8 +481,8 @@ PEP 217: Interactive Display Hook
 When using the Python interpreter interactively, the output of commands is
 displayed using the built-in :func:`repr` function. In Python 2.1, the variable
 :func:`sys.displayhook` can be set to a callable object which will be called
-instead of :func:`repr`. For example, you can set it to a special pretty-
-printing function::
+instead of :func:`repr`. For example, you can set it to a special
+pretty-printing function::
 
    >>> # Create a recursive data structure
    ... L = [1,2,3]
@@ -656,7 +656,7 @@ New and Improved Modules
   use :mod:`ftplib` to retrieve files and then don't work from behind a firewall.
   It's deemed unlikely that this will cause problems for anyone, because Netscape
   defaults to passive mode and few people complain, but if passive mode is
-  unsuitable for your application or network setup, call :meth:`set_pasv(0)` on
+  unsuitable for your application or network setup, call ``set_pasv(0)`` on
   FTP objects to disable passive mode.
 
 * Support for raw socket access has been added to the :mod:`socket` module,
@@ -666,7 +666,7 @@ New and Improved Modules
   for displaying timing profiles for Python programs, invoked when the module is
   run as a script.  Contributed by  Eric S. Raymond.
 
-* A new implementation-dependent function, :func:`sys._getframe([depth])`, has
+* A new implementation-dependent function, ``sys._getframe([depth])``, has
   been added to return a given frame object from the current call stack.
   :func:`sys._getframe` returns the frame at the top of the call stack;  if the
   optional integer argument *depth* is supplied, the function returns the frame

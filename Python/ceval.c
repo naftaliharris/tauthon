@@ -1460,10 +1460,14 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         {
             w = POP();
             v = TOP();
-            if (PyString_CheckExact(v))
+            if (PyString_CheckExact(v)
+                && (!PyString_Check(w) || PyString_CheckExact(w))) {
+                /* fast path; string formatting, but not if the RHS is a str subclass
+                   (see issue28598) */
                 x = PyString_Format(v, w);
-            else
+            } else {
                 x = PyNumber_Remainder(v, w);
+            }
             Py_DECREF(v);
             Py_DECREF(w);
             SET_TOP(x);
@@ -2821,6 +2825,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if ((x = f->f_locals) == NULL) {
                 PyErr_SetString(PyExc_SystemError,
                     "no locals found during 'import *'");
+                Py_DECREF(v);
                 break;
             }
             READ_TIMESTAMP(intr0);
@@ -5050,7 +5055,7 @@ ext_call_fail:
 /* Extract a slice index from a PyInt or PyLong or an object with the
    nb_index slot defined, and store in *pi.
    Silently reduce values larger than PY_SSIZE_T_MAX to PY_SSIZE_T_MAX,
-   and silently boost values less than -PY_SSIZE_T_MAX-1 to -PY_SSIZE_T_MAX-1.
+   and silently boost values less than PY_SSIZE_T_MIN to PY_SSIZE_T_MIN.
    Return 0 on error, 1 on success.
 */
 /* Note:  If v is NULL, return success without storing into *pi.  This
@@ -5060,7 +5065,7 @@ ext_call_fail:
 int
 _PyEval_SliceIndex(PyObject *v, Py_ssize_t *pi)
 {
-    if (v != NULL) {
+    if (v != NULL && v != Py_None) {
         Py_ssize_t x;
         if (PyInt_Check(v)) {
             /* XXX(nnorwitz): I think PyInt_AS_LONG is correct,
@@ -5084,6 +5089,26 @@ _PyEval_SliceIndex(PyObject *v, Py_ssize_t *pi)
     }
     return 1;
 }
+
+int
+_PyEval_SliceIndexNotNone(PyObject *v, Py_ssize_t *pi)
+{
+    Py_ssize_t x;
+    if (PyIndex_Check(v)) {
+        x = PyNumber_AsSsize_t(v, NULL);
+        if (x == -1 && PyErr_Occurred())
+            return 0;
+    }
+    else {
+        PyErr_SetString(PyExc_TypeError,
+                        "slice indices must be integers or "
+                        "have an __index__ method");
+        return 0;
+    }
+    *pi = x;
+    return 1;
+}
+
 
 #undef ISINDEX
 #define ISINDEX(x) ((x) == NULL || \

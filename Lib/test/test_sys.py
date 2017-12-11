@@ -1,9 +1,12 @@
 # -*- coding: iso-8859-1 -*-
 import unittest, test.test_support
 from test.script_helper import assert_python_ok, assert_python_failure
-import sys, os, cStringIO
-import struct
+import cStringIO
+import gc
 import operator
+import os
+import struct
+import sys
 
 class SysModuleTest(unittest.TestCase):
 
@@ -158,6 +161,17 @@ class SysModuleTest(unittest.TestCase):
         # ... and normalized
         rc, out, err = assert_python_failure('-c', 'raise SystemExit(47)')
         self.assertEqual(rc, 47)
+        self.assertEqual(out, b'')
+        self.assertEqual(err, b'')
+
+        # test that the exit machinery handles long exit codes
+        rc, out, err = assert_python_failure('-c', 'raise SystemExit(47L)')
+        self.assertEqual(rc, 47)
+        self.assertEqual(out, b'')
+        self.assertEqual(err, b'')
+
+        rc, out, err = assert_python_ok('-c', 'raise SystemExit(0L)')
+        self.assertEqual(rc, 0)
         self.assertEqual(out, b'')
         self.assertEqual(err, b'')
 
@@ -457,7 +471,7 @@ class SysModuleTest(unittest.TestCase):
         self.assertEqual(os.path.abspath(sys.executable), sys.executable)
 
         # Issue #7774: Ensure that sys.executable is an empty string if argv[0]
-        # has been set to an non existent program name and Python is unable to
+        # has been set to a non existent program name and Python is unable to
         # retrieve the real program name
         import subprocess
         # For a normal installation, it should work without 'cwd'

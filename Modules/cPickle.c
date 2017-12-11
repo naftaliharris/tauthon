@@ -778,13 +778,18 @@ get(Picklerobject *self, PyObject *id)
             s[1] = (int)(c_value & 0xff);
             len = 2;
         }
-        else {
+        else if (c_value < 0x7fffffffL) {
             s[0] = LONG_BINGET;
             s[1] = (int)(c_value & 0xff);
             s[2] = (int)((c_value >> 8)  & 0xff);
             s[3] = (int)((c_value >> 16) & 0xff);
             s[4] = (int)((c_value >> 24) & 0xff);
             len = 5;
+        }
+        else { /* unlikely */
+            PyErr_SetString(PicklingError,
+                            "memo id too large for LONG_BINGET");
+            return -1;
         }
     }
 
@@ -857,7 +862,12 @@ put2(Picklerobject *self, PyObject *ob)
         goto finally;
     }
     else {
-        if (p >= 256) {
+        if (p < 256) {
+            c_str[0] = BINPUT;
+            c_str[1] = p;
+            len = 2;
+        }
+        else if (p < 0x7fffffffL) {
             c_str[0] = LONG_BINPUT;
             c_str[1] = (int)(p & 0xff);
             c_str[2] = (int)((p >> 8)  & 0xff);
@@ -865,10 +875,10 @@ put2(Picklerobject *self, PyObject *ob)
             c_str[4] = (int)((p >> 24) & 0xff);
             len = 5;
         }
-        else {
-            c_str[0] = BINPUT;
-            c_str[1] = p;
-            len = 2;
+        else { /* unlikely */
+            PyErr_SetString(PicklingError,
+                            "memo id too large for LONG_BINPUT");
+            goto finally;
         }
     }
 
@@ -1268,14 +1278,17 @@ save_string(Picklerobject *self, PyObject *args, int doput)
             c_str[1] = size;
             len = 2;
         }
-        else if (size <= INT_MAX) {
+        else if (size <= 0x7fffffffL) {
             c_str[0] = BINSTRING;
             for (i = 1; i < 5; i++)
                 c_str[i] = (int)(size >> ((i - 1) * 8));
             len = 5;
         }
-        else
+        else {
+            PyErr_SetString(PyExc_OverflowError,
+                            "cannot serialize a string larger than 2 GiB");
             return -1;    /* string too large */
+        }
 
         if (self->write_func(self, c_str, len) < 0)
             return -1;
@@ -1436,8 +1449,11 @@ save_unicode(Picklerobject *self, PyObject *args, int doput)
 
         if ((size = PyString_Size(repr)) < 0)
             goto err;
-        if (size > INT_MAX)
-            return -1;   /* string too large */
+        if (size > 0x7fffffffL) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "cannot serialize a Unicode string larger than 2 GiB");
+            goto err;   /* string too large */
+        }
 
         c_str[0] = BINUNICODE;
         for (i = 1; i < 5; i++)
@@ -3875,52 +3891,22 @@ load_dict(Unpicklerobject *self)
 static PyObject *
 Instance_New(PyObject *cls, PyObject *args)
 {
-    PyObject *r = 0;
-
     if (PyClass_Check(cls)) {
         int l;
 
-        if ((l=PyObject_Size(args)) < 0) goto err;
+        if ((l=PyObject_Size(args)) < 0) return NULL;
         if (!( l ))  {
-            PyObject *__getinitargs__;
-
-            __getinitargs__ = PyObject_GetAttr(cls,
-                                       __getinitargs___str);
-            if (!__getinitargs__)  {
+            if (!PyObject_HasAttr(cls, __getinitargs___str))  {
                 /* We have a class with no __getinitargs__,
                    so bypass usual construction  */
-                PyObject *inst;
-
-                PyErr_Clear();
-                if (!( inst=PyInstance_NewRaw(cls, NULL)))
-                    goto err;
-                return inst;
+                return PyInstance_NewRaw(cls, NULL);
             }
-            Py_DECREF(__getinitargs__);
         }
 
-        if ((r=PyInstance_New(cls, args, NULL))) return r;
-        else goto err;
+        return PyInstance_New(cls, args, NULL);
     }
 
-    if ((r=PyObject_CallObject(cls, args))) return r;
-
-  err:
-    {
-        PyObject *tp, *v, *tb, *tmp_value;
-
-        PyErr_Fetch(&tp, &v, &tb);
-        tmp_value = v;
-        /* NULL occurs when there was a KeyboardInterrupt */
-        if (tmp_value == NULL)
-            tmp_value = Py_None;
-        if ((r = PyTuple_Pack(3, tmp_value, cls, args))) {
-            Py_XDECREF(v);
-            v=r;
-        }
-        PyErr_Restore(tp,v,tb);
-    }
-    return NULL;
+    return PyObject_CallObject(cls, args);
 }
 
 

@@ -410,7 +410,7 @@ static int
 func_set_kwdefaults(PyFunctionObject *op, PyObject *value)
 {
        PyObject *tmp;
-    
+
        if (restricted())
                return -1;
 

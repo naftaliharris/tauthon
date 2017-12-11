@@ -10,12 +10,12 @@
 """
 
 ISSUE_URI = 'https://bugs.python.org/issue%s'
-SOURCE_URI = 'https://hg.python.org/cpython/file/2.7/%s'
+SOURCE_URI = 'https://github.com/python/cpython/tree/2.7/%s'
 
 from docutils import nodes, utils
+from docutils.parsers.rst import Directive
 
 from sphinx.util.nodes import split_explicit_title
-from sphinx.util.compat import Directive
 from sphinx.writers.html import HTMLTranslator
 from sphinx.writers.latex import LaTeXTranslator
 
@@ -58,7 +58,7 @@ LaTeXTranslator.depart_literal_block = new_depart_literal_block
 
 def issue_role(typ, rawtext, text, lineno, inliner, options={}, content=[]):
     issue = utils.unescape(text)
-    text = 'issue ' + issue
+    text = 'bpo-'+ issue
     refnode = nodes.reference(text, text, refuri=ISSUE_URI % issue)
     return [refnode], []
 

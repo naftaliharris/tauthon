@@ -777,7 +777,8 @@ class ContextTests(unittest.TestCase):
             ctx.options = (ctx.options & ~ssl.OP_NO_TLSv1)
             self.assertEqual(default, ctx.options)
             ctx.options = 0
-            self.assertEqual(0, ctx.options)
+            # Ubuntu has OP_NO_SSLv3 forced on by default
+            self.assertEqual(0, ctx.options & ~ssl.OP_NO_SSLv3)
         else:
             with self.assertRaises(ValueError):
                 ctx.options = 0
@@ -1954,6 +1955,8 @@ else:
             self.join()
             if support.verbose:
                 sys.stdout.write(" cleanup: successfully joined.\n")
+            # make sure that ConnectionHandler is removed from socket_map
+            asyncore.close_all(ignore_all=True)
 
         def start(self, flag=None):
             self.flag = flag
@@ -2963,8 +2966,9 @@ else:
                 except ssl.SSLError as e:
                     stats = e
 
-                if expected is None and IS_OPENSSL_1_1:
-                    # OpenSSL 1.1.0 raises handshake error
+                if (expected is None and IS_OPENSSL_1_1
+                        and ssl.OPENSSL_VERSION_INFO < (1, 1, 0, 6)):
+                    # OpenSSL 1.1.0 to 1.1.0e raises handshake error
                     self.assertIsInstance(stats, ssl.SSLError)
                 else:
                     msg = "failed trying %s (s) and %s (c).\n" \

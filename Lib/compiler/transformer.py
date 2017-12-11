@@ -885,7 +885,7 @@ class Transformer:
         else:
             annotation = None
         return SimpleArg(name, annotation, lineno)
-        
+
     def com_arglist(self, nodelist):
         # varargslist:
         #     (fpdef ['=' test] ',')*
@@ -1614,7 +1614,7 @@ for k, v in token.tok_name.items():
 def debug_tree(tree):
     l = []
     for elt in tree:
-        if isinstance(elt, int):
+        if isinstance(elt, (int, long)):
             l.append(_names.get(elt, elt))
         elif isinstance(elt, str):
             l.append(elt)

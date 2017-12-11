@@ -10,6 +10,13 @@ INF = float("inf")
 NAN = float("nan")
 # These tests ensure that complex math does the right thing
 
+# decorator for skipping tests on non-IEEE 754 platforms
+have_getformat = hasattr(float, "__getformat__")
+requires_IEEE_754 = unittest.skipUnless(have_getformat and
+    float.__getformat__("double").startswith("IEEE"),
+    "test requires IEEE 754 doubles")
+
+
 class ComplexTest(unittest.TestCase):
 
     def assertAlmostEqual(self, a, b):
@@ -454,6 +461,28 @@ class ComplexTest(unittest.TestCase):
                 continue
             if not any(ch in lit for ch in 'xXoObB'):
                 self.assertRaises(ValueError, complex, lit)
+
+    @requires_IEEE_754
+    def test_constructor_special_numbers(self):
+        class complex2(complex):
+            pass
+        for x in 0.0, -0.0, INF, -INF, NAN:
+            for y in 0.0, -0.0, INF, -INF, NAN:
+                z = complex(x, y)
+                self.assertFloatsAreIdentical(z.real, x)
+                self.assertFloatsAreIdentical(z.imag, y)
+                z = complex2(x, y)
+                self.assertIs(type(z), complex2)
+                self.assertFloatsAreIdentical(z.real, x)
+                self.assertFloatsAreIdentical(z.imag, y)
+                z = complex(complex2(x, y))
+                self.assertIs(type(z), complex)
+                self.assertFloatsAreIdentical(z.real, x)
+                self.assertFloatsAreIdentical(z.imag, y)
+                z = complex2(complex(x, y))
+                self.assertIs(type(z), complex2)
+                self.assertFloatsAreIdentical(z.real, x)
+                self.assertFloatsAreIdentical(z.imag, y)
 
     def test_hash(self):
         for x in xrange(-30, 30):
