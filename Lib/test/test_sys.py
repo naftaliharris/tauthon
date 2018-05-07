@@ -736,9 +736,15 @@ class SizeofTest(unittest.TestCase):
         # tupleiterator
         check(iter(()), size('lP'))
         # type
-        # (PyTypeObject + PyNumberMethods +  PyMappingMethods +
-        #  PySequenceMethods + PyBufferProcs + PyAsyncMethods)
-        s = vsize('P2P17Pl4PP9PP11PIP') + struct.calcsize('41P 10P 3P 6P 3P')
+        fmt = 'P2P17Pl4PP9PP11PIP'
+        if hasattr(sys, 'getcounts'):
+            fmt += '3P2P'
+        s = vsize(fmt +                 # PyTypeObject
+                  '41P'                 # PyNumberMethods
+                  '10P'                  # PyMappingMethods
+                  '3P'                 # PySequenceMethods
+                  '6P'                  # PyBufferProcs
+                  '3P')
         class newstyleclass(object):
             pass
         check(newstyleclass, s)

@@ -63,8 +63,7 @@ class TestPy3KWarnings(unittest.TestCase):
             exec expr in {'f' : f}
 
         tests = [("True", "assignment to True or False is forbidden in 3.x"),
-                 ("False", "assignment to True or False is forbidden in 3.x"),
-                 ("nonlocal", "nonlocal is a keyword in 3.x")]
+                 ("False", "assignment to True or False is forbidden in 3.x")]
         with check_py3k_warnings(('', SyntaxWarning)) as w:
             for keyword, expected in tests:
                 safe_exec("{0} = False".format(keyword))

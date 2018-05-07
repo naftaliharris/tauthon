@@ -466,6 +466,9 @@ PyMarshal_WriteLongToFile(long x, FILE *fp, int version)
 {
     WFILE wf;
     wf.fp = fp;
+    wf.str = NULL;
+    wf.ptr = NULL;
+    wf.end = NULL;
     wf.error = WFERR_OK;
     wf.depth = 0;
     wf.strings = NULL;
@@ -478,6 +481,9 @@ PyMarshal_WriteObjectToFile(PyObject *x, FILE *fp, int version)
 {
     WFILE wf;
     wf.fp = fp;
+    wf.str = NULL;
+    wf.ptr = NULL;
+    wf.end = NULL;
     wf.error = WFERR_OK;
     wf.depth = 0;
     wf.strings = (version > 0) ? PyDict_New() : NULL;
