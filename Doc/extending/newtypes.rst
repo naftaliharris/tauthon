@@ -685,7 +685,7 @@ Fortunately, Python's cyclic-garbage collector will eventually figure out that
 the list is garbage and free it.
 
 In the second version of the :class:`Noddy` example, we allowed any kind of
-object to be stored in the :attr:`first` or :attr:`last` attributes. [#]_ This
+object to be stored in the :attr:`first` or :attr:`last` attributes [#]_. This
 means that :class:`Noddy` objects can participate in cycles::
 
    >>> import noddy2
@@ -748,8 +748,9 @@ simplified::
    uniformity across these boring implementations.
 
 We also need to provide a method for clearing any subobjects that can
-participate in cycles.  We implement the method and reimplement the deallocator
-to use it::
+participate in cycles.
+
+::
 
    static int
    Noddy_clear(Noddy *self)
@@ -765,13 +766,6 @@ to use it::
        Py_XDECREF(tmp);
 
        return 0;
-   }
-
-   static void
-   Noddy_dealloc(Noddy* self)
-   {
-       Noddy_clear(self);
-       self->ob_type->tp_free((PyObject*)self);
    }
 
 Notice the use of a temporary variable in :c:func:`Noddy_clear`. We use the
@@ -794,6 +788,23 @@ decrementing of reference counts.  With :c:func:`Py_CLEAR`, the
        Py_CLEAR(self->first);
        Py_CLEAR(self->last);
        return 0;
+   }
+
+Note that :c:func:`Noddy_dealloc` may call arbitrary functions through
+``__del__`` method or weakref callback. It means circular GC can be
+triggered inside the function.  Since GC assumes reference count is not zero,
+we need to untrack the object from GC by calling :c:func:`PyObject_GC_UnTrack`
+before clearing members. Here is reimplemented deallocator which uses
+:c:func:`PyObject_GC_UnTrack` and :c:func:`Noddy_clear`.
+
+::
+
+   static void
+   Noddy_dealloc(Noddy* self)
+   {
+       PyObject_GC_UnTrack(self);
+       Noddy_clear(self);
+       Py_TYPE(self)->tp_free((PyObject*)self);
    }
 
 Finally, we add the :const:`Py_TPFLAGS_HAVE_GC` flag to the class flags::

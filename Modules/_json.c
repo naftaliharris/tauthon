@@ -840,7 +840,8 @@ py_encode_basestring_ascii(PyObject* self UNUSED, PyObject *pystr)
 static void
 scanner_dealloc(PyObject *self)
 {
-    /* Deallocate scanner object */
+    /* bpo-31095: UnTrack is needed before calling any callbacks */
+    PyObject_GC_UnTrack(self);
     scanner_clear(self);
     Py_TYPE(self)->tp_free(self);
 }
@@ -1766,8 +1767,7 @@ PyDoc_STRVAR(scanner_doc, "JSON scanner object");
 
 static
 PyTypeObject PyScannerType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                    /* tp_internal */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "_json.Scanner",       /* tp_name */
     sizeof(PyScannerObject), /* tp_basicsize */
     0,                    /* tp_itemsize */
@@ -2298,7 +2298,8 @@ bail:
 static void
 encoder_dealloc(PyObject *self)
 {
-    /* Deallocate Encoder */
+    /* bpo-31095: UnTrack is needed before calling any callbacks */
+    PyObject_GC_UnTrack(self);
     encoder_clear(self);
     Py_TYPE(self)->tp_free(self);
 }
@@ -2342,8 +2343,7 @@ PyDoc_STRVAR(encoder_doc, "_iterencode(obj, _current_indent_level) -> iterable")
 
 static
 PyTypeObject PyEncoderType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                    /* tp_internal */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "_json.Encoder",       /* tp_name */
     sizeof(PyEncoderObject), /* tp_basicsize */
     0,                    /* tp_itemsize */

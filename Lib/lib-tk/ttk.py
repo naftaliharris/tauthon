@@ -1332,7 +1332,7 @@ class Treeview(Widget, Tkinter.XView, Tkinter.YView):
         already exist in the tree. Otherwise, a new unique identifier
         is generated."""
         opts = _format_optdict(kw)
-        if iid:
+        if iid is not None:
             res = self.tk.call(self._w, "insert", parent, index,
                 "-id", iid, *opts)
         else:
@@ -1614,7 +1614,8 @@ class OptionMenu(Menubutton):
         menu.delete(0, 'end')
         for val in values:
             menu.add_radiobutton(label=val,
-                command=Tkinter._setit(self._variable, val, self._callback))
+                command=Tkinter._setit(self._variable, val, self._callback),
+                variable=self._variable)
 
         if default:
             self._variable.set(default)

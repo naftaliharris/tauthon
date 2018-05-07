@@ -187,8 +187,7 @@ test_dict_iteration(PyObject* self)
  *   PyType_Ready if it hasn't already been called
  */
 static PyTypeObject _HashInheritanceTester_Type = {
-    PyObject_HEAD_INIT(NULL)
-    0,                          /* Number of items for varobject */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "hashinheritancetester",            /* Name of this type */
     sizeof(PyObject),           /* Basic object size */
     0,                          /* Item size for varobject */
@@ -315,8 +314,7 @@ static PyBufferProcs memoryviewtester_as_buffer = {
 };
 
 static PyTypeObject _MemoryViewTester_Type = {
-    PyObject_HEAD_INIT(NULL)
-    0,                          /* Number of items for varobject */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "memoryviewtester",         /* Name of this type */
     sizeof(PyObject),           /* Basic object size */
     0,                          /* Item size for varobject */
@@ -911,8 +909,9 @@ test_L_code(PyObject *self)
     PyTuple_SET_ITEM(tuple, 0, num);
 
     value = -1;
-    if (PyArg_ParseTuple(tuple, "L:test_L_code", &value) < 0)
+    if (!PyArg_ParseTuple(tuple, "L:test_L_code", &value)) {
         return NULL;
+    }
     if (value != 42)
         return raiseTestError("test_L_code",
             "L code returned wrong value for long 42");
@@ -925,8 +924,9 @@ test_L_code(PyObject *self)
     PyTuple_SET_ITEM(tuple, 0, num);
 
     value = -1;
-    if (PyArg_ParseTuple(tuple, "L:test_L_code", &value) < 0)
+    if (!PyArg_ParseTuple(tuple, "L:test_L_code", &value)) {
         return NULL;
+    }
     if (value != 42)
         return raiseTestError("test_L_code",
             "L code returned wrong value for int 42");
@@ -1207,8 +1207,9 @@ test_k_code(PyObject *self)
     PyTuple_SET_ITEM(tuple, 0, num);
 
     value = 0;
-    if (PyArg_ParseTuple(tuple, "k:test_k_code", &value) < 0)
+    if (!PyArg_ParseTuple(tuple, "k:test_k_code", &value)) {
         return NULL;
+    }
     if (value != ULONG_MAX)
         return raiseTestError("test_k_code",
             "k code returned wrong value for long 0xFFF...FFF");
@@ -1226,8 +1227,9 @@ test_k_code(PyObject *self)
     PyTuple_SET_ITEM(tuple, 0, num);
 
     value = 0;
-    if (PyArg_ParseTuple(tuple, "k:test_k_code", &value) < 0)
+    if (!PyArg_ParseTuple(tuple, "k:test_k_code", &value)) {
         return NULL;
+    }
     if (value != (unsigned long)-0x42)
         return raiseTestError("test_k_code",
             "k code returned wrong value for long -0xFFF..000042");
@@ -1587,14 +1589,16 @@ test_u_code(PyObject *self)
     PyTuple_SET_ITEM(tuple, 0, obj);
 
     value = 0;
-    if (PyArg_ParseTuple(tuple, "u:test_u_code", &value) < 0)
+    if (!PyArg_ParseTuple(tuple, "u:test_u_code", &value)) {
         return NULL;
+    }
     if (value != PyUnicode_AS_UNICODE(obj))
         return raiseTestError("test_u_code",
             "u code returned wrong value for u'test'");
     value = 0;
-    if (PyArg_ParseTuple(tuple, "u#:test_u_code", &value, &len) < 0)
+    if (!PyArg_ParseTuple(tuple, "u#:test_u_code", &value, &len)) {
         return NULL;
+    }
     if (value != PyUnicode_AS_UNICODE(obj) ||
         len != PyUnicode_GET_SIZE(obj))
         return raiseTestError("test_u_code",
@@ -1692,8 +1696,9 @@ test_empty_argparse(PyObject *self)
     tuple = PyTuple_New(0);
     if (!tuple)
         return NULL;
-    if ((result = PyArg_ParseTuple(tuple, "|:test_empty_argparse")) < 0)
+    if (!(result = PyArg_ParseTuple(tuple, "|:test_empty_argparse"))) {
         goto done;
+    }
     dict = PyDict_New();
     if (!dict)
         goto done;
@@ -1701,8 +1706,9 @@ test_empty_argparse(PyObject *self)
   done:
     Py_DECREF(tuple);
     Py_XDECREF(dict);
-    if (result < 0)
+    if (!result) {
         return NULL;
+    }
     else {
         Py_RETURN_NONE;
     }
@@ -2494,8 +2500,9 @@ test_raise_signal(PyObject* self, PyObject *args)
 {
     int signum, err;
 
-    if (PyArg_ParseTuple(args, "i:raise_signal", &signum) < 0)
+    if (!PyArg_ParseTuple(args, "i:raise_signal", &signum)) {
         return NULL;
+    }
 
     err = raise(signum);
     if (err)
@@ -2557,6 +2564,22 @@ py_w_stopcode(PyObject *self, PyObject *args)
     return PyLong_FromLong(status);
 }
 #endif
+
+
+/* Read memory from NULL (address 0) to raise a SIGSEGV or SIGBUS signal
+   depending on the platform. This function is used by
+   test.support._crash_python() to "crash" Python. */
+static PyObject *
+read_null(PyObject *self, PyObject *args)
+{
+    volatile int *x;
+    volatile int y;
+
+    x = NULL;
+    y = *x;
+    return PyLong_FromLong(y);
+
+}
 
 
 static PyMethodDef TestMethods[] = {
@@ -2678,6 +2701,7 @@ static PyMethodDef TestMethods[] = {
 #ifdef W_STOPCODE
     {"W_STOPCODE", py_w_stopcode, METH_VARARGS},
 #endif
+    {"_read_null", (PyCFunction)read_null, METH_NOARGS},
     {NULL, NULL} /* sentinel */
 };
 
