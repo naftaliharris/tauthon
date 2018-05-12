@@ -3,12 +3,12 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 2.8)
+m4_define(TAUTHON_VERSION, 2.8)
 
 AC_PREREQ(2.65)
 
 AC_REVISION($Revision$)
-AC_INIT(python, PYTHON_VERSION, https://bugs.python.org/)
+AC_INIT(tauthon, TAUTHON_VERSION, https://bugs.python.org/)
 AC_CONFIG_SRCDIR([Include/object.h])
 AC_CONFIG_HEADER(pyconfig.h)
 
@@ -76,7 +76,7 @@ rm confdefs.h
 mv confdefs.h.new confdefs.h
 
 AC_SUBST(VERSION)
-VERSION=PYTHON_VERSION
+VERSION=TAUTHON_VERSION
 
 AC_SUBST(SOVERSION)
 SOVERSION=1.0
@@ -1398,7 +1398,7 @@ AC_SUBST(DEF_MAKE_ALL_RULE)
 AC_SUBST(DEF_MAKE_RULE)
 Py_OPT='false'
 AC_MSG_CHECKING(for --enable-optimizations)
-AC_ARG_ENABLE(optimizations, AS_HELP_STRING([--enable-optimizations], [Enable expensive optimizations (PGO, maybe LTO, etc).  Disabled by default.]),
+AC_ARG_ENABLE(optimizations, AS_HELP_STRING([--enable-optimizations], [Enable expensive optimizations (PGO, etc).  Disabled by default.]),
 [
 if test "$enableval" != no
 then
@@ -4960,7 +4960,7 @@ if test "$Py_OPT" = 'false' -a "$Py_DEBUG" != 'true'; then
     echo "" >&AS_MESSAGE_FD
     echo "" >&AS_MESSAGE_FD
     echo "If you want a release build with all optimizations active (LTO, PGO, etc),"
-    echo "please run ./configure --enable-optimizations" >&AS_MESSAGE_FD
+    echo "please run ./configure --enable-optimizations --with-lto" >&AS_MESSAGE_FD
     echo "" >&AS_MESSAGE_FD
     echo "" >&AS_MESSAGE_FD
 fi
