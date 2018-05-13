@@ -759,7 +759,7 @@ class build_ext (Command):
         else:
             from distutils import sysconfig
             if sysconfig.get_config_var('Py_ENABLE_SHARED'):
-                template = "python%d.%d"
+                template = "tauthon%d.%d"
                 pythonlib = (template %
                              (sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff))
                 return ext.libraries + [pythonlib]

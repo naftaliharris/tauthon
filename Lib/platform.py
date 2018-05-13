@@ -1414,15 +1414,15 @@ def _sys_version(sys_version=None):
         compiler = ""
 
     else:
-        # CPython
+        # Tauthon
         match = _sys_version_parser.match(sys_version)
         if match is None:
             raise ValueError(
-                'failed to parse CPython sys.version: %s' %
+                'failed to parse Tauthon sys.version: %s' %
                 repr(sys_version))
         version, buildno, builddate, buildtime, compiler = \
               match.groups()
-        name = 'CPython'
+        name = 'Tauthon'
         if builddate is None:
             builddate = ''
         elif buildtime:
@@ -1451,7 +1451,7 @@ def python_implementation():
     """ Returns a string identifying the Python implementation.
 
         Currently, the following implementations are identified:
-          'CPython' (C implementation of Python),
+          'Tauthon' (CPython fork),
           'IronPython' (.NET implementation of Python),
           'Jython' (Java implementation of Python),
           'PyPy' (Python implementation of Python).

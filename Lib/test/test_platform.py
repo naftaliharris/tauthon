@@ -62,27 +62,27 @@ class PlatformTest(unittest.TestCase):
         # Old test.
         for input, output in (
             ('2.4.3 (#1, Jun 21 2006, 13:54:21) \n[GCC 3.3.4 (pre 3.3.5 20040809)]',
-             ('CPython', '2.4.3', '', '', '1', 'Jun 21 2006 13:54:21', 'GCC 3.3.4 (pre 3.3.5 20040809)')),
+             ('Tauthon', '2.4.3', '', '', '1', 'Jun 21 2006 13:54:21', 'GCC 3.3.4 (pre 3.3.5 20040809)')),
             ('IronPython 1.0.60816 on .NET 2.0.50727.42',
              ('IronPython', '1.0.60816', '', '', '', '', '.NET 2.0.50727.42')),
             ('IronPython 1.0 (1.0.61005.1977) on .NET 2.0.50727.42',
              ('IronPython', '1.0.0', '', '', '', '', '.NET 2.0.50727.42')),
             ('2.4.3 (truncation, date, t) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', 'date t', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', 'date t', 'GCC')),
             ('2.4.3 (truncation, date, ) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
             ('2.4.3 (truncation, date,) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
             ('2.4.3 (truncation, date) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', 'date', 'GCC')),
             ('2.4.3 (truncation, d) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', 'd', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', 'd', 'GCC')),
             ('2.4.3 (truncation, ) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', '', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', '', 'GCC')),
             ('2.4.3 (truncation,) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', '', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', '', 'GCC')),
             ('2.4.3 (truncation) \n[GCC]',
-             ('CPython', '2.4.3', '', '', 'truncation', '', 'GCC')),
+             ('Tauthon', '2.4.3', '', '', 'truncation', '', 'GCC')),
             ):
             # branch and revision are not "parsed", but fetched
             # from sys.subversion.  Ignore them
@@ -95,9 +95,9 @@ class PlatformTest(unittest.TestCase):
         # python_revision(), python_build(), and python_compiler().
         sys_versions = {
             ("2.6.1 (r261:67515, Dec  6 2008, 15:26:00) \n[GCC 4.0.1 (Apple Computer, Inc. build 5370)]",
-             ('CPython', 'tags/r261', '67515'), self.save_platform)
+             ('Tauthon', 'tags/r261', '67515'), self.save_platform)
             :
-                ("CPython", "2.6.1", "tags/r261", "67515",
+                ("Tauthon", "2.6.1", "tags/r261", "67515",
                  ('r261:67515', 'Dec  6 2008 15:26:00'),
                  'GCC 4.0.1 (Apple Computer, Inc. build 5370)'),
 

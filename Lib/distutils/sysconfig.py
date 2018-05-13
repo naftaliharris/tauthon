@@ -90,7 +90,7 @@ def get_python_inc(plat_specific=0, prefix=None):
                 # Include is located in the srcdir
                 inc_dir = os.path.join(srcdir, "Include")
             return inc_dir
-        return os.path.join(prefix, "include", "python" + get_python_version())
+        return os.path.join(prefix, "include", "tauthon" + get_python_version())
     elif os.name == "nt":
         return os.path.join(prefix, "include")
     elif os.name == "os2":
@@ -120,7 +120,7 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
 
     if os.name == "posix":
         libpython = os.path.join(prefix,
-                                 "lib", "python" + get_python_version())
+                                 "lib", "tauthon" + get_python_version())
         if standard_lib:
             return libpython
         else:

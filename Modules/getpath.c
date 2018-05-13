@@ -108,7 +108,7 @@ static char prefix[MAXPATHLEN+1];
 static char exec_prefix[MAXPATHLEN+1];
 static char progpath[MAXPATHLEN+1];
 static char *module_search_path = NULL;
-static char lib_python[] = "lib/python" VERSION;
+static char lib_python[] = "lib/tauthon" VERSION;
 
 static void
 reduce(char *dir)
@@ -520,7 +520,7 @@ calculate_path(void)
     }
     else
         strncpy(zip_path, PREFIX, MAXPATHLEN);
-    joinpath(zip_path, "lib/python00.zip");
+    joinpath(zip_path, "lib/tauthon00.zip");
     bufsz = strlen(zip_path);   /* Replace "00" with version */
     zip_path[bufsz - 6] = VERSION[0];
     zip_path[bufsz - 5] = VERSION[2];

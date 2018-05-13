@@ -5,7 +5,7 @@ os:
   - osx
 env:
   global:
-    - EXTRATESTOPTS=-W
+    - EXTRATESTOPTS="-w -j3"
   matrix:
     - CONFIGURE_ARGS=--with-pydebug
     - CONFIGURE_ARGS=""

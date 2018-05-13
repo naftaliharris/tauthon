@@ -289,7 +289,7 @@ def getsitepackages():
             sitepackages.append(os.path.join(prefix, "Lib", "site-packages"))
         elif os.sep == '/':
             sitepackages.append(os.path.join(prefix, "lib",
-                                        "python" + sys.version[:3],
+                                        "tauthon" + sys.version[:3],
                                         "site-packages"))
             sitepackages.append(os.path.join(prefix, "lib", "site-python"))
         else:

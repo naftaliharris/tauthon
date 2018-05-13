@@ -1,5 +1,5 @@
 # Two-trick pony for OSX and other case insensitive file systems:
-# Ignore ./python binary on Unix but still look into ./Python/ directory.
+# Ignore ./tauthon binary on Unix but still look into ./Python/ directory.
 /tauthon
 !/Python/
 *.cover
@@ -70,16 +70,16 @@ build/
 config.cache
 config.log
 config.status
-libpython*.a
-libpython*.so*
-libpython*.dylib
-libpython*.dll
+libtauthon*.a
+libtauthon*.so*
+libtauthon*.dylib
+libtauthon*.dll
 platform
 pybuilddir.txt
 pyconfig.h
-python$
-python.bat
-python.exe
+tauthon$
+tauthon.bat
+tauthon.exe
 tauthon*-gdb.py
 tags
 TAGS
