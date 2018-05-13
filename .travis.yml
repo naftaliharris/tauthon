@@ -4,9 +4,7 @@ os:
   - linux
   - osx
 env:
-  global:
-    - EXTRATESTOPTS="-w -j3"
   matrix:
     - CONFIGURE_ARGS=--with-pydebug
     - CONFIGURE_ARGS=""
-script: "./configure $CONFIGURE_ARGS && make -j2 && make test"
+script: "./configure $CONFIGURE_ARGS && make -j2 && make test TESTOPTS='-w -j3'"
