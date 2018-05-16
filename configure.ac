@@ -8,7 +8,7 @@ m4_define(TAUTHON_VERSION, 2.8)
 AC_PREREQ(2.65)
 
 AC_REVISION($Revision$)
-AC_INIT(tauthon, TAUTHON_VERSION, https://bugs.python.org/)
+AC_INIT(tauthon, TAUTHON_VERSION, https://github.com/naftaliharris/tauthon)
 AC_CONFIG_SRCDIR([Include/object.h])
 AC_CONFIG_HEADER(pyconfig.h)
 
@@ -19,21 +19,21 @@ AC_SUBST(host)
 # pybuilddir.txt will be created by --generate-posix-vars in the Makefile
 rm -f pybuilddir.txt
 
-AC_CHECK_PROGS(PYTHON_FOR_REGEN, python$PACKAGE_VERSION python3 python, python3)
+AC_CHECK_PROGS(PYTHON_FOR_REGEN, tauthon$PACKAGE_VERSION tauthon python$PACKAGE_VERSION python3 python, python3)
 AC_SUBST(PYTHON_FOR_REGEN)
 
 if test "$cross_compiling" = yes; then
-    AC_MSG_CHECKING([for python interpreter for cross build])
+    AC_MSG_CHECKING([for tauthon/python interpreter for cross build])
     if test -z "$PYTHON_FOR_BUILD"; then
-        for interp in python$PACKAGE_VERSION python2 python; do
+        for interp in tauthon$PACKAGE_VERSION tauthon python$PACKAGE_VERSION python2 python; do
 	    which $interp >/dev/null 2>&1 || continue
-	    if $interp -c 'import sys;sys.exit(not (sys.version_info@<:@:2@:>@ >= (2,7) and sys.version_info@<:@0@:>@ < 3))'; then
+	    if $interp -c 'import sys;sys.exit(not (sys.version_info@<:@:2@:>@ >= (2,8) and sys.version_info@<:@0@:>@ < 3))'; then
 	        break
 	    fi
             interp=
 	done
         if test x$interp = x; then
-	    AC_MSG_ERROR([python$PACKAGE_VERSION interpreter not found])
+	    AC_MSG_ERROR([tauthon$PACKAGE_VERSION/python$PACKAGE_VERSION interpreter not found])
 	fi
         AC_MSG_RESULT($interp)
 	PYTHON_FOR_BUILD='_PYTHON_PROJECT_BASE=$(abs_builddir) _PYTHON_HOST_PLATFORM=$(_PYTHON_HOST_PLATFORM) PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib:$(srcdir)/Lib/$(PLATDIR) '$interp
@@ -41,7 +41,7 @@ if test "$cross_compiling" = yes; then
 elif test "$cross_compiling" = maybe; then
     AC_MSG_ERROR([Cross compiling required --host=HOST-TUPLE and --build=ARCH])
 else
-    PYTHON_FOR_BUILD='./$(BUILDPYTHON) -E'
+    PYTHON_FOR_BUILD='./$(BUILDTAUTHON) -E'
 fi
 AC_SUBST(PYTHON_FOR_BUILD)
 
@@ -431,7 +431,7 @@ case $ac_sys_system/$ac_sys_release in
   # From the perspective of Solaris, _XOPEN_SOURCE is not so much a
   # request to enable features supported by the standard as a request
   # to disable features not supported by the standard.  The best way
-  # for Python to use Solaris is simply to leave _XOPEN_SOURCE out
+  # for Tauthon to use Solaris is simply to leave _XOPEN_SOURCE out
   # entirely and define __EXTENSIONS__ instead.
   SunOS/*)
     define_xopen_source=no;;
@@ -661,7 +661,7 @@ AC_SUBST(MAINCC)
 AC_MSG_CHECKING(for --with-cxx-main=<compiler>)
 AC_ARG_WITH(cxx_main,
             AS_HELP_STRING([--with-cxx-main=<compiler>],
-                           [compile main() and link python executable with C++ compiler]),
+                           [compile main() and link tauthon executable with C++ compiler]),
 [
 	
 	case $withval in
@@ -778,7 +778,7 @@ AC_SUBST(LIBRARY)
 AC_MSG_CHECKING(LIBRARY)
 if test -z "$LIBRARY"
 then
-	LIBRARY='libpython$(VERSION).a'
+	LIBRARY='libtauthon$(VERSION).a'
 fi
 AC_MSG_RESULT($LIBRARY)
 
@@ -791,7 +791,7 @@ AC_MSG_RESULT($LIBRARY)
 # (defined in the Makefiles). On Cygwin LDLIBRARY is the import library,
 # DLLLIBRARY is the shared (i.e., DLL) library.
 # 
-# RUNSHARED is used to run shared python without installed libraries
+# RUNSHARED is used to run shared tauthon without installed libraries
 #
 # INSTSONAME is the name of the shared library that will be use to install
 # on the system - some systems like version suffix, others don't
@@ -808,10 +808,10 @@ DLLLIBRARY=''
 LDLIBRARYDIR=''
 RUNSHARED=''
 
-# LINKCC is the command that links the python executable -- default is $(CC).
+# LINKCC is the command that links the tauthon executable -- default is $(CC).
 # If CXX is set, and if it is needed to link a main function that was
 # compiled with CXX, LINKCC is CXX instead. Always using CXX is undesirable:
-# python might then depend on the C++ runtime
+# tauthon might then depend on the C++ runtime
 # This is altered for AIX in order to build the export list before 
 # linking.
 AC_SUBST(LINKCC)
@@ -856,7 +856,7 @@ AC_MSG_RESULT($GNULD)
 
 AC_MSG_CHECKING(for --enable-shared)
 AC_ARG_ENABLE(shared,
-              AS_HELP_STRING([--enable-shared], [disable/enable building shared python library]))
+              AS_HELP_STRING([--enable-shared], [disable/enable building shared tauthon library]))
 
 if test -z "$enable_shared"
 then 
@@ -894,7 +894,7 @@ AC_MSG_CHECKING(LDLIBRARY)
 # MacOSX framework builds need more magic. LDLIBRARY is the dynamic
 # library that we build, but we do not want to link against it (we
 # will find it with a -framework option). For this reason there is an
-# extra variable BLDLIBRARY against which Python and the extension
+# extra variable BLDLIBRARY against which Tauthon and the extension
 # modules are linked, BLDLIBRARY. This is normally the same as
 # LDLIBRARY, but empty for MacOSX framework builds.
 if test "$enable_framework"
@@ -908,24 +908,24 @@ fi
 
 # Other platforms follow
 if test $enable_shared = "yes"; then
-  AC_DEFINE(Py_ENABLE_SHARED, 1, [Defined if Python is built as a shared library.])
+  AC_DEFINE(Py_ENABLE_SHARED, 1, [Defined if Tauthon is built as a shared library.])
   case $ac_sys_system in
     BeOS*)
-          LDLIBRARY='libpython$(VERSION).so'
+          LDLIBRARY='libtauthon$(VERSION).so'
           ;;
     CYGWIN*)
-          LDLIBRARY='libpython$(VERSION).dll.a'
-          DLLLIBRARY='libpython$(VERSION).dll'
+          LDLIBRARY='libtauthon$(VERSION).dll.a'
+          DLLLIBRARY='libtauthon$(VERSION).dll'
           ;;
     SunOS*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-Wl,-R,$(LIBDIR) -L. -lpython$(VERSION)'
+	  LDLIBRARY='libtauthon$(VERSION).so'
+	  BLDLIBRARY='-Wl,-R,$(LIBDIR) -L. -ltauthon$(VERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 	  INSTSONAME="$LDLIBRARY".$SOVERSION
           ;;
     Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-L. -lpython$(VERSION)'
+	  LDLIBRARY='libtauthon$(VERSION).so'
+	  BLDLIBRARY='-L. -ltauthon$(VERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 	  case $ac_sys_system in
 	      FreeBSD*)
@@ -937,32 +937,32 @@ if test $enable_shared = "yes"; then
     hp*|HP*)
 	  case `uname -m` in
 		ia64)
-			LDLIBRARY='libpython$(VERSION).so'
+			LDLIBRARY='libtauthon$(VERSION).so'
 			;;
 		*)
-			LDLIBRARY='libpython$(VERSION).sl'
+			LDLIBRARY='libtauthon$(VERSION).sl'
 			;;
 	  esac
-	  BLDLIBRARY='-Wl,+b,$(LIBDIR) -L. -lpython$(VERSION)'
+	  BLDLIBRARY='-Wl,+b,$(LIBDIR) -L. -ltauthon$(VERSION)'
 	  RUNSHARED=SHLIB_PATH=`pwd`${SHLIB_PATH:+:${SHLIB_PATH}}
 	  ;;
     OSF*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-rpath $(LIBDIR) -L. -lpython$(VERSION)'
+	  LDLIBRARY='libtauthon$(VERSION).so'
+	  BLDLIBRARY='-rpath $(LIBDIR) -L. -ltauthon$(VERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 	  ;;
     atheos*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-L. -lpython$(VERSION)'
+	  LDLIBRARY='libtauthon$(VERSION).so'
+	  BLDLIBRARY='-L. -ltauthon$(VERSION)'
 	  RUNSHARED=DLL_PATH=`pwd`:${DLL_PATH:-/atheos/sys/libs:/atheos/autolnk/lib}
 	  ;;
     Darwin*)
-    	LDLIBRARY='libpython$(VERSION).dylib'
-	BLDLIBRARY='-L. -lpython$(VERSION)'
+    	LDLIBRARY='libtauthon$(VERSION).dylib'
+	BLDLIBRARY='-L. -ltauthon$(VERSION)'
 	RUNSHARED=DYLD_LIBRARY_PATH=`pwd`${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}
 	;;
     AIX*)
-	LDLIBRARY='libpython$(VERSION).so'
+	LDLIBRARY='libtauthon$(VERSION).so'
 	RUNSHARED=LIBPATH=`pwd`${LIBPATH:+:${LIBPATH}}
 	;;
 
@@ -971,7 +971,7 @@ else # shared is disabled
   case $ac_sys_system in
     CYGWIN*)
           BLDLIBRARY='$(LIBRARY)'
-          LDLIBRARY='libpython$(VERSION).dll.a'
+          LDLIBRARY='libtauthon$(VERSION).dll.a'
           ;;
   esac
 fi
@@ -1057,7 +1057,7 @@ fi],
 # Optimizer/debugger flags
 # ------------------------
 # (The following bit of code is complicated enough - please keep things
-# indented properly.  Just pretend you're editing Python code. ;-)
+# indented properly.  Just pretend you're editing Tauthon code. ;-)
 
 # There are two parallel sets of case statements below, one that checks to
 # see if OPT was set and one that does BASECFLAGS setting based upon
@@ -1120,7 +1120,7 @@ AC_SUBST(UNIVERSAL_ARCH_FLAGS)
 # tweak BASECFLAGS based on compiler and platform
 case $GCC in
 yes)
-    # Python violates C99 rules, by casting between incompatible
+    # Tauthon violates C99 rules, by casting between incompatible
     # pointer types. GCC may generate bad code as a result of that,
     # so use -fno-strict-aliasing if supported.
     AC_MSG_CHECKING(whether $CC accepts -fno-strict-aliasing)
@@ -1987,7 +1987,7 @@ yes)
 	extra_machdep_objs="Python/mactoolboxglue.o"
 	extra_undefs="-u _PyMac_Error"
 	AC_DEFINE(USE_TOOLBOX_OBJECT_GLUE, 1,
-         [Define if you want to use MacPython modules on MacOSX in unix-Python.])
+         [Define if you want to use MacTauthon modules on MacOSX in unix-Tauthon.])
 	;;
 *)
 	extra_machdep_objs=""
@@ -2143,7 +2143,7 @@ AC_DEFINE_UNQUOTED(SHLIB_EXT, "$SO", [Define this to be extension of shared libr
 # LDSHARED is the ld *command* used to create shared library
 # -- "cc -G" on SunOS 5.x, "ld -shared" on IRIX 5
 # (Shared libraries in this instance are shared modules to be loaded into
-# Python, as opposed to building Python itself as a shared library.)
+# Tauthon, as opposed to building Tauthon itself as a shared library.)
 AC_MSG_CHECKING(LDSHARED)
 if test -z "$LDSHARED"
 then
@@ -2183,7 +2183,7 @@ then
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
-			# No framework. Ignore undefined symbols, assuming they come from Python
+			# No framework. Ignore undefined symbols, assuming they come from Tauthon
 			LDSHARED="$LDSHARED -undefined suppress"
 			LDCXXSHARED="$LDCXXSHARED -undefined suppress"
 		fi ;;
@@ -2196,14 +2196,14 @@ then
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
-			# No framework, use the Python app as bundle-loader
-			BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
-			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+			# No framework, use the Tauthon app as bundle-loader
+			BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDTAUTHON)'
+			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
+			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
 		fi ;;
 	Darwin/*)
 		# Use -undefined dynamic_lookup whenever possible (10.3 and later).
-		# This allows an extension to be used in any Python
+		# This allows an extension to be used in any Tauthon
 
 		dep_target_major=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
 				sed 's/\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
@@ -2221,10 +2221,10 @@ then
 				LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 				LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			else
-				# No framework, use the Python app as bundle-loader
-				BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
-				LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-				LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+				# No framework, use the Tauthon app as bundle-loader
+				BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDTAUTHON)'
+				LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
+				LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
 			fi
 		else
 			# building for OS X 10.3 and later
@@ -2327,7 +2327,7 @@ then
 fi
 AC_MSG_RESULT($CCSHARED)
 # LINKFORSHARED are the flags passed to the $(CC) command that links
-# the python executable -- this is only needed for a few systems
+# the tauthon executable -- this is only needed for a few systems
 AC_MSG_CHECKING(LINKFORSHARED)
 if test -z "$LINKFORSHARED"
 then
@@ -2346,7 +2346,7 @@ then
 		# that dynamically loaded extension modules have access to it.
 		# -prebind is no longer used, because it actually seems to give a
 		# slowdown in stead of a speedup, maybe due to the large number of
-		# dynamic loads Python does.
+		# dynamic loads Tauthon does.
 
 		LINKFORSHARED="$extra_undefs"
 		if test "$enable_framework"
@@ -2401,12 +2401,12 @@ then
 fi
 AC_MSG_RESULT($CFLAGSFORSHARED)
 
-# SHLIBS are libraries (except -lc and -lm) to link to the python shared
+# SHLIBS are libraries (except -lc and -lm) to link to the tauthon shared
 # library (with --enable-shared).
 # For platforms on which shared libraries are not allowed to have unresolved
 # symbols, this must be set to $(LIBS) (expanded by make). We do this even
 # if it is not required, since it creates a dependency of the shared library
-# to LIBS. This, in turn, means that applications linking the shared libpython
+# to LIBS. This, in turn, means that applications linking the shared libtauthon
 # don't need to link LIBS explicitly. The default should be only changed
 # on systems where this approach causes problems.
 AC_SUBST(SHLIBS)
@@ -2998,7 +2998,7 @@ then
 fi
 AC_MSG_RESULT($with_doc_strings)
 
-# Check for Python-specific malloc support
+# Check for Tauthon-specific malloc support
 AC_MSG_CHECKING(for --with-tsc)
 AC_ARG_WITH(tsc,
 	    AS_HELP_STRING([--with(out)-tsc],[enable/disable timestamp counter profile]),[
@@ -3011,7 +3011,7 @@ else AC_MSG_RESULT(no)
 fi],
 [AC_MSG_RESULT(no)])
 
-# Check for Python-specific malloc support
+# Check for Tauthon-specific malloc support
 AC_MSG_CHECKING(for --with-pymalloc)
 AC_ARG_WITH(pymalloc,
             AS_HELP_STRING([--with(out)-pymalloc], [disable/enable specialized mallocs]))
@@ -3022,7 +3022,7 @@ fi
 if test "$with_pymalloc" != "no"
 then
     AC_DEFINE(WITH_PYMALLOC, 1, 
-     [Define if you want to compile in Python-specific mallocs])
+     [Define if you want to compile in Tauthon-specific mallocs])
 fi
 AC_MSG_RESULT($with_pymalloc)
 
@@ -3048,7 +3048,7 @@ if test "$withval" != no
 then 
   AC_DEFINE(WANT_WCTYPE_FUNCTIONS, 1,
   [Define if you want wctype.h functions to be used instead of the
-   one supplied by Python itself. (see Include/unicodectype.h).]) 
+   one supplied by Tauthon itself. (see Include/unicodectype.h).]) 
   AC_MSG_RESULT(yes)
 else AC_MSG_RESULT(no)
 fi],
@@ -3097,7 +3097,7 @@ then
         [Defined when any dynamic module loading is enabled.])
 fi
 
-# MACHDEP_OBJS can be set to platform-specific object files needed by Python
+# MACHDEP_OBJS can be set to platform-specific object files needed by Tauthon
 
 AC_SUBST(MACHDEP_OBJS)
 AC_MSG_CHECKING(MACHDEP_OBJS)
@@ -3242,7 +3242,7 @@ AC_CHECK_LIB(c, inet_aton, [$ac_cv_prog_TRUE],
 )
 
 # On Tru64, chflags seems to be present, but calling it will
-# exit Python
+# exit Tauthon
 AC_CACHE_CHECK([for chflags], [ac_cv_have_chflags], [dnl
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <sys/stat.h>
@@ -3882,7 +3882,7 @@ then
 fi
 
 # Some ARM platforms use a mixed-endian representation for doubles.
-# While Python doesn't currently have full support for these platforms
+# While Tauthon doesn't currently have full support for these platforms
 # (see e.g., issue 1762561), we can at least make sure that float <-> string
 # conversions work.
 AC_MSG_CHECKING(whether C doubles are ARM mixed-endian IEEE 754 binary64)
@@ -4082,10 +4082,10 @@ then
   [define to 1 if your sem_getvalue is broken.])
 fi
 
-# determine what size digit to use for Python's longs
-AC_MSG_CHECKING([digit size for Python's longs])
+# determine what size digit to use for Tauthon's longs
+AC_MSG_CHECKING([digit size for Tauthon's longs])
 AC_ARG_ENABLE(big-digits,
-AS_HELP_STRING([--enable-big-digits@<:@=BITS@:>@],[use big digits for Python longs [[BITS=30]]]),
+AS_HELP_STRING([--enable-big-digits@<:@=BITS@:>@],[use big digits for Tauthon longs [[BITS=30]]]),
 [case $enable_big_digits in
 yes)
   enable_big_digits=30 ;;
@@ -4257,7 +4257,7 @@ then
 fi
 
 # check where readline lives
-# save the value of LIBS so we don't actually link Python with readline
+# save the value of LIBS so we don't actually link Tauthon with readline
 LIBS_no_readline=$LIBS
 
 # On some systems we need to link readline to a termcap compatible

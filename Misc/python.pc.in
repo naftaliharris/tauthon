@@ -3,11 +3,11 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: Python
-Description: Python library
+Name: Tauthon
+Description: Tauthon library
 Requires: 
 Version: @VERSION@
 Libs.private: @LIBS@
-Libs: -L${libdir} -lpython@VERSION@
-Cflags: -I${includedir}/python@VERSION@ 
+Libs: -L${libdir} -ltauthon@VERSION@
+Cflags: -I${includedir}/tauthon@VERSION@ 
 

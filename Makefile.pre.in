@@ -1,4 +1,4 @@
-# Top-level Makefile for Python
+# Top-level Makefile for Tauthon
 #
 # As distributed, this file is called Makefile.pre.in; it is processed
 # into the real Makefile by running the script ./configure, which
@@ -11,7 +11,7 @@
 #	make test
 #	make install
 #
-# If you have a previous version of Python installed that you don't
+# If you have a previous version of Tauthon installed that you don't
 # want to overwrite, you can use "make altinstall" instead of "make
 # install".  Refer to the "Installing" section in the README file for
 # additional details.
@@ -52,7 +52,7 @@ GNULD=          @GNULD@
 # Shell used by make (some versions default to the login shell, which is bad)
 SHELL=		/bin/sh
 
-# Use this to make a link between python$(VERSION) and python in $(BINDIR)
+# Use this to make a link between tauthon$(VERSION) and tauthon in $(BINDIR)
 LN=		@LN@
 
 # Portable install script (configure doesn't always guess right)
@@ -113,11 +113,11 @@ CONFINCLUDEDIR=	$(exec_prefix)/include
 SCRIPTDIR=	$(prefix)/lib
 
 # Detailed destination directories
-BINLIBDEST=	$(LIBDIR)/python$(VERSION)
-LIBDEST=	$(SCRIPTDIR)/python$(VERSION)
-INCLUDEPY=	$(INCLUDEDIR)/python$(VERSION)
-CONFINCLUDEPY=	$(CONFINCLUDEDIR)/python$(VERSION)
-LIBP=		$(LIBDIR)/python$(VERSION)
+BINLIBDEST=	$(LIBDIR)/tauthon$(VERSION)
+LIBDEST=	$(SCRIPTDIR)/tauthon$(VERSION)
+INCLUDEPY=	$(INCLUDEDIR)/tauthon$(VERSION)
+CONFINCLUDEPY=	$(CONFINCLUDEDIR)/tauthon$(VERSION)
+LIBP=		$(LIBDIR)/tauthon$(VERSION)
 
 # Symbols used for using shared libraries
 SO=		@SO@
@@ -130,7 +130,7 @@ DESTSHARED=	$(BINLIBDEST)/lib-dynload
 EXE=		@EXEEXT@
 BUILDEXE=	@BUILDEXEEXT@
 
-# Short name and location for Mac OS X Python framework
+# Short name and location for Mac OS X Tauthon framework
 UNIVERSALSDK=@UNIVERSALSDK@
 PYTHONFRAMEWORK=	@PYTHONFRAMEWORK@
 PYTHONFRAMEWORKDIR=	@PYTHONFRAMEWORKDIR@
@@ -145,7 +145,7 @@ MACOSX_DEPLOYMENT_TARGET=@CONFIGURE_MACOSX_DEPLOYMENT_TARGET@
 # Options to enable prebinding (for fast startup prior to Mac OS X 10.3)
 OTHER_LIBTOOL_OPT=@OTHER_LIBTOOL_OPT@
 
-# Environment to run shared python without installed libraries
+# Environment to run shared tauthon without installed libraries
 RUNSHARED=       @RUNSHARED@
 
 # ensurepip options
@@ -196,8 +196,8 @@ LIBOBJDIR=	Python/
 LIBOBJS=	@LIBOBJS@
 UNICODE_OBJS=   @UNICODE_OBJS@
 
-PYTHON=		tauthon$(EXE)
-BUILDPYTHON=	tauthon$(BUILDEXE)
+TAUTHON=		tauthon$(EXE)
+BUILDTAUTHON=	tauthon$(BUILDEXE)
 
 PYTHON_FOR_REGEN=@PYTHON_FOR_REGEN@
 PYTHON_FOR_BUILD=@PYTHON_FOR_BUILD@
@@ -216,7 +216,7 @@ PROFILE_TASK=-m test.regrtest --pgo -x test_asyncore test_gdb test_multiprocessi
 # report files for gcov / lcov coverage report
 COVERAGE_INFO=	$(abs_builddir)/coverage.info
 COVERAGE_REPORT=$(abs_builddir)/lcov-report
-COVERAGE_REPORT_OPTIONS=--no-branch-coverage --title "CPython lcov report"
+COVERAGE_REPORT_OPTIONS=--no-branch-coverage --title "Tauthon lcov report"
 
 # === Definitions added by makesetup ===
 
@@ -386,7 +386,7 @@ OBJECT_OBJS=	\
 
 
 ##########################################################################
-# objects that get linked into the Python library
+# objects that get linked into the Tauthon library
 LIBRARY_OBJS=	\
 		Modules/getbuildinfo.o \
 		$(PARSER_OBJS) \
@@ -401,13 +401,13 @@ LIBRARY_OBJS=	\
 
 # Default target
 all:		@DEF_MAKE_ALL_RULE@
-build_all:	check-clean-src $(BUILDPYTHON) oldsharedmods sharedmods gdbhooks
+build_all:	check-clean-src $(BUILDTAUTHON) oldsharedmods sharedmods gdbhooks
 
 # Check that the source is clean when building out of source.
 check-clean-src:
 	@if test -n "$(VPATH)" -a -f "$(srcdir)/Modules/python.o"; then \
 		echo "Error: The source directory ($(srcdir)) is not clean" ; \
-		echo "Building Python out of the source tree (in $(abs_builddir)) requires a clean source tree ($(abs_srcdir))" ; \
+		echo "Building Tauthon out of the source tree (in $(abs_builddir)) requires a clean source tree ($(abs_srcdir))" ; \
 		echo "Try to run: make -C \"$(srcdir)\" clean" ; \
 		exit 1; \
 	fi
@@ -437,7 +437,7 @@ build_all_generate_profile:
 
 run_profile_task:
 	: # FIXME: can't run for a cross build
-	$(LLVM_PROF_FILE) $(RUNSHARED) ./$(BUILDPYTHON) $(PROFILE_TASK) || true
+	$(LLVM_PROF_FILE) $(RUNSHARED) ./$(BUILDTAUTHON) $(PROFILE_TASK) || true
 
 build_all_merge_profile:
 	$(LLVM_PROF_MERGER)
@@ -486,12 +486,12 @@ coverage-report: regen-grammar
 
 
 # Build the interpreter
-$(BUILDPYTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY)
+$(BUILDTAUTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY)
 		$(LINKCC) $(LDFLAGS) $(LINKFORSHARED) -o $@ \
 			Modules/python.o \
 			$(BLDLIBRARY) $(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST)
 
-platform: $(BUILDPYTHON) pybuilddir.txt
+platform: $(BUILDTAUTHON) pybuilddir.txt
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) -c 'import sys ; from sysconfig import get_platform ; print get_platform()+"-"+sys.version[0:3]' >platform
 
 # Create build directory and generate the sysconfig build-time data there.
@@ -501,7 +501,7 @@ platform: $(BUILDPYTHON) pybuilddir.txt
 # problems by creating a dummy pybuilddir.txt just to allow interpreter
 # initialization to succeed.  It will be overwritten by generate-posix-vars
 # or removed in case of failure.
-pybuilddir.txt: $(BUILDPYTHON)
+pybuilddir.txt: $(BUILDTAUTHON)
 	@echo "none" > ./pybuilddir.txt
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) -S -m sysconfig --generate-posix-vars ;\
 	if test $$? -ne 0 ; then \
@@ -518,7 +518,7 @@ Modules/_math.o: Modules/_math.c Modules/_math.h
 # Under GNU make, MAKEFLAGS are sorted and normalized; the 's' for
 # -s, --silent or --quiet is always the first char.
 # Under BSD make, MAKEFLAGS might be " -s -v x=y".
-sharedmods: $(BUILDPYTHON) pybuilddir.txt Modules/_math.o
+sharedmods: $(BUILDTAUTHON) pybuilddir.txt Modules/_math.o
 	@case "$$MAKEFLAGS" in \
 	    *\ -s*|s*) quiet="-q";; \
 	    *) quiet="";; \
@@ -539,7 +539,7 @@ $(LIBRARY): $(LIBRARY_OBJS)
 	$(AR) $(ARFLAGS) $@ $(MODOBJS)
 	$(RANLIB) $@
 
-libpython$(VERSION).so: $(LIBRARY_OBJS)
+libtauthon$(VERSION).so: $(LIBRARY_OBJS)
 	if test $(INSTSONAME) != $(LDLIBRARY); then \
 		$(BLDSHARED) -Wl,-h$(INSTSONAME) -o $(INSTSONAME) $(LIBRARY_OBJS) $(MODLIBS) $(SHLIBS) $(LIBC) $(LIBM) $(LDLAST); \
 		$(LN) -f $(INSTSONAME) $@; \
@@ -547,23 +547,23 @@ libpython$(VERSION).so: $(LIBRARY_OBJS)
 		$(BLDSHARED) -o $@ $(LIBRARY_OBJS) $(MODLIBS) $(SHLIBS) $(LIBC) $(LIBM) $(LDLAST); \
 	fi
 
-libpython$(VERSION).dylib: $(LIBRARY_OBJS)
-	 $(CC) -dynamiclib -Wl,-single_module $(LDFLAGS) -undefined dynamic_lookup -Wl,-install_name,$(prefix)/lib/libpython$(VERSION).dylib -Wl,-compatibility_version,$(VERSION) -Wl,-current_version,$(VERSION) -o $@ $(LIBRARY_OBJS) $(SHLIBS) $(LIBC) $(LIBM) $(LDLAST); \
+libtauthon$(VERSION).dylib: $(LIBRARY_OBJS)
+	 $(CC) -dynamiclib -Wl,-single_module $(LDFLAGS) -undefined dynamic_lookup -Wl,-install_name,$(prefix)/lib/libtauthon$(VERSION).dylib -Wl,-compatibility_version,$(VERSION) -Wl,-current_version,$(VERSION) -o $@ $(LIBRARY_OBJS) $(SHLIBS) $(LIBC) $(LIBM) $(LDLAST); \
 
 
-libpython$(VERSION).sl: $(LIBRARY_OBJS)
+libtauthon$(VERSION).sl: $(LIBRARY_OBJS)
 	$(LDSHARED) -o $@ $(LIBRARY_OBJS) $(MODLIBS) $(SHLIBS) $(LIBC) $(LIBM) $(LDLAST)
 
-# Copy up the gdb python hooks into a position where they can be automatically
+# Copy up the gdb tauthon hooks into a position where they can be automatically
 # loaded by gdb during Lib/test/test_gdb.py
 #
 # Distributors are likely to want to install this somewhere else e.g. relative
 # to the stripped DWARF data for the shared library.
-gdbhooks: $(BUILDPYTHON)-gdb.py
+gdbhooks: $(BUILDTAUTHON)-gdb.py
 
 SRC_GDB_HOOKS=$(srcdir)/Tools/gdb/libpython.py
-$(BUILDPYTHON)-gdb.py: $(SRC_GDB_HOOKS)
-	$(INSTALL_DATA) $(SRC_GDB_HOOKS) $(BUILDPYTHON)-gdb.py
+$(BUILDTAUTHON)-gdb.py: $(SRC_GDB_HOOKS)
+	$(INSTALL_DATA) $(SRC_GDB_HOOKS) $(BUILDTAUTHON)-gdb.py
 
 # This rule is here for OPENSTEP/Rhapsody/MacOSX. It builds a temporary
 # minimal framework (not including the Lib directory and such) in the current
@@ -587,9 +587,9 @@ $(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK): \
 	$(LN) -fsn Versions/Current/Headers $(PYTHONFRAMEWORKDIR)/Headers
 	$(LN) -fsn Versions/Current/Resources $(PYTHONFRAMEWORKDIR)/Resources
 
-# This rule builds the Cygwin Python DLL and import library if configured
+# This rule builds the Cygwin Tauthon DLL and import library if configured
 # for a shared core library; otherwise, this rule is a noop.
-$(DLLLIBRARY) libpython$(VERSION).dll.a: $(LIBRARY_OBJS)
+$(DLLLIBRARY) libtauthon$(VERSION).dll.a: $(LIBRARY_OBJS)
 	if test -n "$(DLLLIBRARY)"; then \
 		$(LDSHARED) -Wl,--out-implib=$@ -o $(DLLLIBRARY) $^ \
 			$(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST); \
@@ -854,7 +854,7 @@ $(LIBRARY_OBJS) $(MODOBJS) Modules/python.o: $(PYTHON_HEADERS)
 
 TESTOPTS=	-l $(EXTRATESTOPTS)
 TESTPROG=	$(srcdir)/Lib/test/regrtest.py
-TESTPYTHON=	$(RUNSHARED) ./$(BUILDPYTHON) -Wd -3 -E -tt $(TESTPYTHONOPTS)
+TESTPYTHON=	$(RUNSHARED) ./$(BUILDTAUTHON) -Wd -3 -E -tt $(TESTPYTHONOPTS)
 test:		@DEF_MAKE_RULE@ platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
 		-$(TESTPYTHON) $(TESTPROG) $(TESTOPTS)
@@ -877,7 +877,7 @@ testuniversal:	@DEF_MAKE_RULE@ platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
 		-$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
 		$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
-		$(RUNSHARED) /usr/libexec/oah/translate ./$(BUILDPYTHON) -E -tt $(TESTPROG) -uall $(TESTOPTS)
+		$(RUNSHARED) /usr/libexec/oah/translate ./$(BUILDTAUTHON) -E -tt $(TESTPROG) -uall $(TESTOPTS)
 
 
 # Like testall, but with a single pass only
@@ -889,7 +889,7 @@ buildbottest:	build_all platform
 		$(TESTPYTHON) -R $(TESTPROG) -uall --slowest -rwW $(TESTOPTS)
 
 pythoninfo: build_all
-		$(RUNSHARED) ./$(BUILDPYTHON) -m test.pythoninfo
+		$(RUNSHARED) ./$(BUILDTAUTHON) -m test.pythoninfo
 
 QUICKTESTOPTS=	$(TESTOPTS) -x test_subprocess test_io test_lib2to3 \
 		test_multibytecodec test_urllib2_localnet test_itertools \
@@ -910,10 +910,10 @@ memtest:	@DEF_MAKE_RULE@ platform
 # SSL tests
 .PHONY: multisslcompile multissltest
 multisslcompile: build_all
-	$(RUNSHARED) ./$(BUILDPYTHON) Tools/ssl/multissltests.py --compile-only
+	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py --compile-only
 
 multissltest: build_all
-	$(RUNSHARED) ./$(BUILDPYTHON) Tools/ssl/multissltests.py
+	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py
 
 # Install everything
 install:	@FRAMEWORKINSTALLFIRST@ commoninstall bininstall maninstall @FRAMEWORKINSTALLLAST@
@@ -965,33 +965,33 @@ $(DESTSHARED):
 
 
 # Install the interpreter by creating a symlink chain:
-#  $(PYTHON) -> python2 -> python$(VERSION))
+#  $(TAUTHON) -> tauthon2 -> tauthon$(VERSION))
 # Also create equivalent chains for other installed files
 bininstall:	altbininstall
 	if test ! -d $(DESTDIR)$(LIBPC); then \
 		echo "Creating directory $(LIBPC)"; \
 		$(INSTALL) -d -m $(DIRMODE) $(DESTDIR)$(LIBPC); \
 	fi
-	-if test -f $(DESTDIR)$(BINDIR)/$(PYTHON) -o -h $(DESTDIR)$(BINDIR)/$(PYTHON); \
-	then rm -f $(DESTDIR)$(BINDIR)/$(PYTHON); \
+	-if test -f $(DESTDIR)$(BINDIR)/$(TAUTHON) -o -h $(DESTDIR)$(BINDIR)/$(TAUTHON); \
+	then rm -f $(DESTDIR)$(BINDIR)/$(TAUTHON); \
 	else true; \
 	fi
-	(cd $(DESTDIR)$(BINDIR); $(LN) -s python2$(EXE) $(PYTHON))
-	-rm -f $(DESTDIR)$(BINDIR)/python2$(EXE)
-	(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)$(EXE) python2$(EXE))
+	(cd $(DESTDIR)$(BINDIR); $(LN) -s tauthon2$(EXE) $(TAUTHON))
+	-rm -f $(DESTDIR)$(BINDIR)/tauthon2$(EXE)
+	(cd $(DESTDIR)$(BINDIR); $(LN) -s tauthon$(VERSION)$(EXE) tauthon2$(EXE))
 	-rm -f $(DESTDIR)$(BINDIR)/python2-config
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)-config python2-config)
 	-rm -f $(DESTDIR)$(BINDIR)/python-config
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s python2-config python-config)
 	-test -d $(DESTDIR)$(LIBPC) || $(INSTALL) -d -m $(DIRMODE) $(DESTDIR)$(LIBPC)
-	-rm -f $(DESTDIR)$(LIBPC)/python2.pc
-	(cd $(DESTDIR)$(LIBPC); $(LN) -s python-$(VERSION).pc python2.pc)
-	-rm -f $(DESTDIR)$(LIBPC)/python.pc
-	(cd $(DESTDIR)$(LIBPC); $(LN) -s python2.pc python.pc)
+	-rm -f $(DESTDIR)$(LIBPC)/tauthon2.pc
+	(cd $(DESTDIR)$(LIBPC); $(LN) -s tauthon-$(VERSION).pc tauthon2.pc)
+	-rm -f $(DESTDIR)$(LIBPC)/tauthon.pc
+	(cd $(DESTDIR)$(LIBPC); $(LN) -s tauthon2.pc tauthon.pc)
 
 # Install the interpreter with $(VERSION) affixed
 # This goes into $(exec_prefix)
-altbininstall:	$(BUILDPYTHON)
+altbininstall:	$(BUILDTAUTHON)
 	@for i in $(BINDIR) $(LIBDIR); \
 	do \
 		if test ! -d $(DESTDIR)$$i; then \
@@ -1000,7 +1000,7 @@ altbininstall:	$(BUILDPYTHON)
 		else	true; \
 		fi; \
 	done
-	$(INSTALL_PROGRAM) $(BUILDPYTHON) $(DESTDIR)$(BINDIR)/python$(VERSION)$(EXE)
+	$(INSTALL_PROGRAM) $(BUILDTAUTHON) $(DESTDIR)$(BINDIR)/tauthon$(VERSION)$(EXE)
 	if test -f $(LDLIBRARY); then \
 		if test -n "$(DLLLIBRARY)" ; then \
 			$(INSTALL_SHARED) $(DLLLIBRARY) $(DESTDIR)$(BINDIR); \
@@ -1024,14 +1024,14 @@ altmaninstall:
 		fi; \
 	done
 	$(INSTALL_DATA) $(srcdir)/Misc/python.man \
-		$(DESTDIR)$(MANDIR)/man1/python$(VERSION).1
+		$(DESTDIR)$(MANDIR)/man1/tauthon$(VERSION).1
 
 # Install the unversioned manual pages
 maninstall:	altmaninstall
-	-rm -f $(DESTDIR)$(MANDIR)/man1/python2.1
-	(cd $(DESTDIR)$(MANDIR)/man1; $(LN) -s python$(VERSION).1 python2.1)
-	-rm -f $(DESTDIR)$(MANDIR)/man1/python.1
-	(cd $(DESTDIR)$(MANDIR)/man1; $(LN) -s python2.1 python.1)
+	-rm -f $(DESTDIR)$(MANDIR)/man1/tauthon2.1
+	(cd $(DESTDIR)$(MANDIR)/man1; $(LN) -s tauthon$(VERSION).1 tauthon2.1)
+	-rm -f $(DESTDIR)$(MANDIR)/man1/tauthon.1
+	(cd $(DESTDIR)$(MANDIR)/man1; $(LN) -s tauthon2.1 tauthon.1)
 
 # Install the library
 PLATDIR=	@PLATDIR@
@@ -1167,7 +1167,7 @@ $(srcdir)/Lib/$(PLATDIR):
 	if [ -n "$(MULTIARCH)" ]; then export MULTIARCH; MULTIARCH=$(MULTIARCH); fi; \
 	export PYTHON_FOR_BUILD; \
 	if [ "$(build)" = "$(host)" ]; then \
-	  PYTHON_FOR_BUILD="$(BUILDPYTHON)"; \
+	  PYTHON_FOR_BUILD="$(BUILDTAUTHON)"; \
 	else \
 	  PYTHON_FOR_BUILD="$(PYTHON_FOR_BUILD)"; \
 	fi; \
@@ -1176,7 +1176,7 @@ $(srcdir)/Lib/$(PLATDIR):
 python-config: $(srcdir)/Misc/python-config.in
 	# Substitution happens here, as the completely-expanded BINDIR
 	# is not available in configure
-	sed -e "s,@EXENAME@,$(BINDIR)/python$(VERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config
+	sed -e "s,@EXENAME@,$(BINDIR)/tauthon$(VERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config
 
 # Install the include files
 INCLDIRSTOMAKE=$(INCLUDEDIR) $(CONFINCLUDEDIR) $(INCLUDEPY) $(CONFINCLUDEPY)
@@ -1231,7 +1231,7 @@ libainstall:	@DEF_MAKE_RULE@ python-config
 	$(INSTALL_DATA) Modules/Setup $(DESTDIR)$(LIBPL)/Setup
 	$(INSTALL_DATA) Modules/Setup.local $(DESTDIR)$(LIBPL)/Setup.local
 	$(INSTALL_DATA) Modules/Setup.config $(DESTDIR)$(LIBPL)/Setup.config
-	$(INSTALL_DATA) Misc/python.pc $(DESTDIR)$(LIBPC)/python-$(VERSION).pc
+	$(INSTALL_DATA) Misc/python.pc $(DESTDIR)$(LIBPC)/tauthon-$(VERSION).pc
 	$(INSTALL_SCRIPT) $(srcdir)/Modules/makesetup $(DESTDIR)$(LIBPL)/makesetup
 	$(INSTALL_SCRIPT) $(srcdir)/install-sh $(DESTDIR)$(LIBPL)/install-sh
 	$(INSTALL_SCRIPT) python-config $(DESTDIR)$(BINDIR)/python$(VERSION)-config
@@ -1274,12 +1274,12 @@ sharedinstall: sharedmods
 	-rm $(DESTDIR)$(DESTSHARED)/_sysconfigdata.py*
 
 # Here are a couple of targets for MacOSX again, to install a full
-# framework-based Python. frameworkinstall installs everything, the
+# framework-based Tauthon. frameworkinstall installs everything, the
 # subtargets install specific parts. Much of the actual work is offloaded to
 # the Makefile in Mac
 #
 #
-# This target is here for backward compatibility, previous versions of Python
+# This target is here for backward compatibility, previous versions of Tauthon
 # hadn't integrated framework installation in the normal install process.
 frameworkinstall: install
 
@@ -1305,7 +1305,7 @@ frameworkinstallstructure:	$(LDLIBRARY)
 		fi; \
 	done
 	$(LN) -fsn include/python$(VERSION) $(DESTDIR)$(prefix)/Headers
-	sed 's/%VERSION%/'"`$(RUNSHARED) ./$(BUILDPYTHON) -c 'import platform; print platform.python_version()'`"'/g' < $(RESSRCDIR)/Info.plist > $(DESTDIR)$(prefix)/Resources/Info.plist
+	sed 's/%VERSION%/'"`$(RUNSHARED) ./$(BUILDTAUTHON) -c 'import platform; print platform.python_version()'`"'/g' < $(RESSRCDIR)/Info.plist > $(DESTDIR)$(prefix)/Resources/Info.plist
 	$(LN) -fsn $(VERSION) $(DESTDIR)$(PYTHONFRAMEWORKINSTALLDIR)/Versions/Current
 	$(LN) -fsn Versions/Current/$(PYTHONFRAMEWORK) $(DESTDIR)$(PYTHONFRAMEWORKINSTALLDIR)/$(PYTHONFRAMEWORK)
 	$(LN) -fsn Versions/Current/Headers $(DESTDIR)$(PYTHONFRAMEWORKINSTALLDIR)/Headers
@@ -1316,16 +1316,16 @@ frameworkinstallstructure:	$(LDLIBRARY)
 # Install a number of symlinks to keep software that expects a normal unix
 # install (which includes python-config) happy.
 frameworkinstallmaclib:
-	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/python$(VERSION)/config/libpython$(VERSION).a"
-	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/python$(VERSION)/config/libpython$(VERSION).dylib"
-	ln -fs "../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/libpython$(VERSION).dylib"
+	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/tauthon$(VERSION)/config/libtauthon$(VERSION).a"
+	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/tauthon$(VERSION)/config/libtauthon$(VERSION).dylib"
+	ln -fs "../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/libtauthon$(VERSION).dylib"
 	cd Mac && $(MAKE) installmacsubtree DESTDIR="$(DESTDIR)"
 
 # This installs the IDE, the Launcher and other apps into /Applications
 frameworkinstallapps:
 	cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
 
-# This install the unix python and pythonw tools in /usr/local/bin
+# This install the unix tauthon and tauthonw tools in /usr/local/bin
 frameworkinstallunixtools:
 	cd Mac && $(MAKE) installunixtools DESTDIR="$(DESTDIR)"
 
@@ -1354,7 +1354,7 @@ Makefile.pre: Makefile.pre.in config.status
 config.status:	$(srcdir)/configure
 	$(SHELL) $(srcdir)/configure $(CONFIG_ARGS)
 
-.PRECIOUS: config.status $(BUILDPYTHON) Makefile Makefile.pre
+.PRECIOUS: config.status $(BUILDTAUTHON) Makefile Makefile.pre
 
 # Some make's put the object file in the current directory
 .c.o:
@@ -1362,7 +1362,7 @@ config.status:	$(srcdir)/configure
 
 # Run reindent on the library
 reindent:
-	./$(BUILDPYTHON) $(srcdir)/Tools/scripts/reindent.py -r $(srcdir)/Lib
+	./$(BUILDTAUTHON) $(srcdir)/Tools/scripts/reindent.py -r $(srcdir)/Lib
 
 # Rerun configure with the same options as it was run last time,
 # provided the config.status script exists
@@ -1411,7 +1411,7 @@ profile-removal:
 	find . -name '*.dyn' -exec rm -f {} ';'
 
 clobber: clean profile-removal
-	-rm -f $(BUILDPYTHON) $(PGEN) $(LIBRARY) $(LDLIBRARY) $(DLLLIBRARY) \
+	-rm -f $(BUILDTAUTHON) $(PGEN) $(LIBRARY) $(LDLIBRARY) $(DLLLIBRARY) \
 		tags TAGS \
 		config.cache config.log pyconfig.h Modules/config.c
 	-rm -rf build platform
@@ -1427,7 +1427,7 @@ distclean: clobber
 	-rm -f core Makefile Makefile.pre config.status \
 		Modules/Setup Modules/Setup.local Modules/Setup.config \
 		Modules/ld_so_aix Modules/python.exp Misc/python.pc
-	-rm -f python*-gdb.py
+	-rm -f tauthon*-gdb.py
 	-rm -f pybuilddir.txt
 	# Issue #28258: set LC_ALL to avoid issues with Estonian locale.
 	# Expansion is performed here by shell (spawned by make) itself before
@@ -1475,7 +1475,7 @@ funny:
 
 # Perform some verification checks on any modified files.
 patchcheck:
-	$(RUNSHARED) ./$(BUILDPYTHON) $(srcdir)/Tools/scripts/patchcheck.py
+	$(RUNSHARED) ./$(BUILDTAUTHON) $(srcdir)/Tools/scripts/patchcheck.py
 
 # Dependencies
 

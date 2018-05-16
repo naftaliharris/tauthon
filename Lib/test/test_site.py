@@ -253,7 +253,7 @@ class HelperFunctionsTests(unittest.TestCase):
         elif os.sep == '/':
             # OS X, Linux, FreeBSD, etc
             self.assertEqual(len(dirs), 2)
-            wanted = os.path.join('xoxo', 'lib', 'python' + sys.version[:3],
+            wanted = os.path.join('xoxo', 'lib', 'tauthon' + sys.version[:3],
                                   'site-packages')
             self.assertEqual(dirs[0], wanted)
             wanted = os.path.join('xoxo', 'lib', 'site-python')

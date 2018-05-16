@@ -1,12 +1,12 @@
-.TH PYTHON "1"
+.TH TAUTHON "1"
 
 .\" To view this file while editing, run it through groff:
 .\"   groff -Tascii -man python.man | less
 
 .SH NAME
-python \- an interpreted, interactive, object-oriented programming language
+tauthon \- an interpreted, interactive, object-oriented programming language
 .SH SYNOPSIS
-.B python
+.B tauthon
 [
 .B \-B
 ]
@@ -85,25 +85,25 @@ python \- an interpreted, interactive, object-oriented programming language
 .I arguments
 ]
 .SH DESCRIPTION
-Python is an interpreted, interactive, object-oriented programming
+Tauthon is an interpreted, interactive, object-oriented programming
 language that combines remarkable power with very clear syntax.
-For an introduction to programming in Python, see the Python Tutorial.
-The Python Library Reference documents built-in and standard types,
+For an introduction to programming in Tauthon, see the Tauthon Tutorial.
+The Tauthon Library Reference documents built-in and standard types,
 constants, functions and modules.
-Finally, the Python Reference Manual describes the syntax and
+Finally, the Tauthon Reference Manual describes the syntax and
 semantics of the core language in (perhaps too) much detail.
 (These documents may be located via the
 .B "INTERNET RESOURCES"
 below; they may be installed on your system as well.)
 .PP
-Python's basic power can be extended with your own modules written in
+Tauthon's basic power can be extended with your own modules written in
 C or C++.
 On most systems such modules may be dynamically loaded.
-Python is also adaptable as an extension language for existing
+Tauthon is also adaptable as an extension language for existing
 applications.
 See the internal documentation for hints.
 .PP
-Documentation for installed Python modules and packages can be 
+Documentation for installed Tauthon modules and packages can be 
 viewed by running the 
 .B pydoc
 program.  
@@ -156,7 +156,7 @@ Discard docstrings in addition to the \fB-O\fP optimizations.
 .B \-R
 Turn on "hash randomization", so that the hash() values of str, bytes and
 datetime objects are "salted" with an unpredictable pseudo-random value.
-Although they remain constant within an individual Python process, they are
+Although they remain constant within an individual Tauthon process, they are
 not predictable between repeated invocations of Python.
 .IP
 This is intended to provide protection against a denial of service
@@ -205,10 +205,10 @@ searching for a module.  Also provides information on module cleanup
 at exit.
 .TP
 .B \-V ", " \-\-version
-Prints the Python version number of the executable and exits.
+Prints the Tauthon version number of the executable and exits.
 .TP
 .BI "\-W " argument
-Warning control.  Python sometimes prints warning message to
+Warning control.  Tauthon sometimes prints warning message to
 .IR sys.stderr .
 A typical warning message has the following form:
 .IB file ":" line ": " category ": " message.
@@ -222,7 +222,7 @@ Invalid
 .B \-W
 options are ignored (a warning message is printed about invalid
 options when the first warning is issued).  Warnings can also be
-controlled from within a Python program using the
+controlled from within a Tauthon program using the
 .I warnings
 module.
 
@@ -290,17 +290,17 @@ from that file;
 when called with
 .B \-c
 .IR command ,
-it executes the Python statement(s) given as
+it executes the Tauthon statement(s) given as
 .IR command .
 Here
 .I command
 may contain multiple statements separated by newlines.
-Leading whitespace is significant in Python statements!
+Leading whitespace is significant in Tauthon statements!
 In non-interactive mode, the entire input is parsed before it is
 executed.
 .PP
 If available, the script name and additional arguments thereafter are
-passed to the script in the Python variable
+passed to the script in the Tauthon variable
 .IR sys.argv ,
 which is a list of strings (you must first
 .I import sys
@@ -313,7 +313,7 @@ is used,
 .I sys.argv[0]
 contains the string
 .I '-c'.
-Note that options interpreted by the Python interpreter itself
+Note that options interpreted by the Tauthon interpreter itself
 are not placed in
 .IR sys.argv .
 .PP
@@ -338,23 +338,23 @@ These are subject to difference depending on local installation
 conventions; ${prefix} and ${exec_prefix} are installation-dependent
 and should be interpreted as for GNU software; they may be the same.
 The default for both is \fI/usr/local\fP.
-.IP \fI${exec_prefix}/bin/python\fP
+.IP \fI${exec_prefix}/bin/tauthon\fP
 Recommended location of the interpreter.
 .PP
-.I ${prefix}/lib/python<version>
+.I ${prefix}/lib/tauthon<version>
 .br
-.I ${exec_prefix}/lib/python<version>
+.I ${exec_prefix}/lib/tauthon<version>
 .RS
 Recommended locations of the directories containing the standard
 modules.
 .RE
 .PP
-.I ${prefix}/include/python<version>
+.I ${prefix}/include/tauthon<version>
 .br
-.I ${exec_prefix}/include/python<version>
+.I ${exec_prefix}/include/tauthon<version>
 .RS
 Recommended locations of the directories containing the include files
-needed for developing Python extensions and embedding the
+needed for developing Tauthon extensions and embedding the
 interpreter.
 .RE
 .IP \fI~/.pythonrc.py\fP
@@ -362,9 +362,9 @@ User-specific initialization file loaded by the \fIuser\fP module;
 not used by default or by most applications.
 .SH ENVIRONMENT VARIABLES
 .IP PYTHONHOME
-Change the location of the standard Python libraries.  By default, the
-libraries are searched in ${prefix}/lib/python<version> and
-${exec_prefix}/lib/python<version>, where ${prefix} and ${exec_prefix}
+Change the location of the standard Tauthon libraries.  By default, the
+libraries are searched in ${prefix}/lib/tauthon<version> and
+${exec_prefix}/lib/tauthon<version>, where ${prefix} and ${exec_prefix}
 are installation-dependent directories, both defaulting to
 \fI/usr/local\fP.  When $PYTHONHOME is set to a single directory, its value
 replaces both ${prefix} and ${exec_prefix}.  To specify different values
@@ -375,15 +375,15 @@ The format is the same as the shell's $PATH: one or more directory
 pathnames separated by colons.
 Non-existent directories are silently ignored.
 The default search path is installation dependent, but generally
-begins with ${prefix}/lib/python<version> (see PYTHONHOME above).
+begins with ${prefix}/lib/tauthon<version> (see PYTHONHOME above).
 The default search path is always appended to $PYTHONPATH.
 If a script argument is given, the directory containing the script is
 inserted in the path in front of $PYTHONPATH.
-The search path can be manipulated from within a Python program as the
+The search path can be manipulated from within a Tauthon program as the
 variable
 .IR sys.path .
 .IP PYTHONSTARTUP
-If this is the name of a readable file, the Python commands in that
+If this is the name of a readable file, the Tauthon commands in that
 file are executed before the first prompt is displayed in interactive
 mode.
 The file is executed in the same name space where interactive commands
@@ -445,7 +445,7 @@ bytes and datetime objects.
 If PYTHONHASHSEED is set to an integer value, it is used as a fixed seed for
 generating the hash() of the types covered by the hash randomization.  Its
 purpose is to allow repeatable hashing, such as for selftests for the
-interpreter itself, or to allow a cluster of python processes to share hash
+interpreter itself, or to allow a cluster of tauthon processes to share hash
 values.
 
 The integer must be a decimal number in the range [0,4294967295].  Specifying
@@ -454,19 +454,19 @@ disabled.
 .SH AUTHOR
 The Python Software Foundation: https://www.python.org/psf/
 .SH INTERNET RESOURCES
-Main website:  https://www.python.org/
+Main website:  https://github.com/naftaliharris/tauthon/
+.br
+Original website:  https://www.python.org/
 .br
 Documentation:  https://docs.python.org/2/
 .br
 Developer resources:  https://docs.python.org/devguide/
 .br
-Downloads:  https://www.python.org/downloads/
-.br
 Module repository:  https://pypi.python.org/
 .br
 Newsgroups:  comp.lang.python, comp.lang.python.announce
 .SH LICENSING
-Python is distributed under an Open Source license.  See the file
-"LICENSE" in the Python source distribution for information on terms &
-conditions for accessing and otherwise using Python and for a
+Tauthon is distributed under an Open Source license.  See the file
+"LICENSE" in the Tauthon source distribution for information on terms &
+conditions for accessing and otherwise using Tauthon and for a
 DISCLAIMER OF ALL WARRANTIES.

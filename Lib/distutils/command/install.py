@@ -41,23 +41,23 @@ else:
 
 INSTALL_SCHEMES = {
     'unix_prefix': {
-        'purelib': '$base/lib/python$py_version_short/site-packages',
-        'platlib': '$platbase/lib/python$py_version_short/site-packages',
-        'headers': '$base/include/python$py_version_short/$dist_name',
+        'purelib': '$base/lib/tauthon$py_version_short/site-packages',
+        'platlib': '$platbase/lib/tauthon$py_version_short/site-packages',
+        'headers': '$base/include/tauthon$py_version_short/$dist_name',
         'scripts': '$base/bin',
         'data'   : '$base',
         },
     'unix_home': {
-        'purelib': '$base/lib/python',
-        'platlib': '$base/lib/python',
-        'headers': '$base/include/python/$dist_name',
+        'purelib': '$base/lib/tauthon',
+        'platlib': '$base/lib/tauthon',
+        'headers': '$base/include/tauthon/$dist_name',
         'scripts': '$base/bin',
         'data'   : '$base',
         },
     'unix_user': {
         'purelib': '$usersite',
         'platlib': '$usersite',
-        'headers': '$userbase/include/python$py_version_short/$dist_name',
+        'headers': '$userbase/include/tauthon$py_version_short/$dist_name',
         'scripts': '$userbase/bin',
         'data'   : '$userbase',
         },
@@ -65,7 +65,7 @@ INSTALL_SCHEMES = {
     'nt_user': {
         'purelib': '$usersite',
         'platlib': '$usersite',
-        'headers': '$userbase/Python$py_version_nodot/Include/$dist_name',
+        'headers': '$userbase/Tauthon$py_version_nodot/Include/$dist_name',
         'scripts': '$userbase/Scripts',
         'data'   : '$userbase',
         },
@@ -79,7 +79,7 @@ INSTALL_SCHEMES = {
     'os2_home': {
         'purelib': '$usersite',
         'platlib': '$usersite',
-        'headers': '$userbase/include/python$py_version_short/$dist_name',
+        'headers': '$userbase/include/tauthon$py_version_short/$dist_name',
         'scripts': '$userbase/bin',
         'data'   : '$userbase',
         },
@@ -117,7 +117,7 @@ class install (Command):
 
         # Or, explicitly set the installation scheme
         ('install-purelib=', None,
-         "installation directory for pure Python module distributions"),
+         "installation directory for pure Tauthon module distributions"),
         ('install-platlib=', None,
          "installation directory for non-pure module distributions"),
         ('install-lib=', None,
@@ -127,7 +127,7 @@ class install (Command):
         ('install-headers=', None,
          "installation directory for C/C++ headers"),
         ('install-scripts=', None,
-         "installation directory for Python scripts"),
+         "installation directory for Tauthon scripts"),
         ('install-data=', None,
          "installation directory for data files"),
 
@@ -137,8 +137,8 @@ class install (Command):
         ('compile', 'c', "compile .py to .pyc [default]"),
         ('no-compile', None, "don't compile .py files"),
         ('optimize=', 'O',
-         "also compile with optimization: -O1 for \"python -O\", "
-         "-O2 for \"python -OO\", and -O0 to disable [default: -O0]"),
+         "also compile with optimization: -O1 for \"tauthon -O\", "
+         "-O2 for \"tauthon -OO\", and -O0 to disable [default: -O0]"),
 
         # Miscellaneous control options
         ('force', 'f',
@@ -234,7 +234,7 @@ class install (Command):
     # -- Option finalizing methods -------------------------------------
     # (This is rather more involved than for most commands,
     # because this is where the policy for installing third-
-    # party Python modules on various platforms given a wide
+    # party Tauthon modules on various platforms given a wide
     # array of user input is decided.  Yes, it's quite complex!)
 
     def finalize_options (self):
@@ -242,9 +242,9 @@ class install (Command):
         # This method (and its pliant slaves, like 'finalize_unix()',
         # 'finalize_other()', and 'select_scheme()') is where the default
         # installation directories for modules, extension modules, and
-        # anything else we care to install from a Python module
+        # anything else we care to install from a Tauthon module
         # distribution.  Thus, this code makes a pretty important policy
-        # statement about how third-party stuff is added to a Python
+        # statement about how third-party stuff is added to a Tauthon
         # installation!  Note that the actual work of installation is done
         # by the relatively simple 'install_*' commands; they just take
         # their orders from the installation directory options determined
@@ -596,7 +596,7 @@ class install (Command):
             not (self.path_file and self.install_path_file) and
             install_lib not in sys_path):
             log.debug(("modules installed to '%s', which is not in "
-                       "Python's module search path (sys.path) -- "
+                       "Tauthon's module search path (sys.path) -- "
                        "you'll have to change the search path yourself"),
                        self.install_lib)
 
@@ -645,7 +645,7 @@ class install (Command):
     # -- Predicates for sub-command list -------------------------------
 
     def has_lib (self):
-        """Return true if the current distribution has any Python
+        """Return true if the current distribution has any Tauthon
         modules to install."""
         return (self.distribution.has_pure_modules() or
                 self.distribution.has_ext_modules())
