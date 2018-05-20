@@ -2427,7 +2427,7 @@ cwr_next(cwrobject *co)
             }
             Py_DECREF(old_result);
         }
-        /* Now, we've got the only copy so we can update it in-place CPython's
+        /* Now, we've got the only copy so we can update it in-place Tauthon's
            empty tuple is a singleton and cached in PyTuple's freelist. */
         assert(r == 0 || Py_REFCNT(result) == 1);
 

@@ -1469,10 +1469,10 @@ _PySys_Init(void)
                          PyInt_FromLong(PY_VERSION_HEX));
     svnversion_init();
     SET_SYS_FROM_STRING("subversion",
-                         Py_BuildValue("(ssz)", "CPython", branch,
+                         Py_BuildValue("(ssz)", "Tauthon", branch,
                                       svn_revision));
     SET_SYS_FROM_STRING("_git",
-                        Py_BuildValue("(szz)", "CPython", _Py_gitidentifier(),
+                        Py_BuildValue("(szz)", "Tauthon", _Py_gitidentifier(),
                                       _Py_gitversion()));
     SET_SYS_FROM_STRING("dont_write_bytecode",
                          PyBool_FromLong(Py_DontWriteBytecodeFlag));
