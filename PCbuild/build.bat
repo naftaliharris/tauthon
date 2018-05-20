@@ -3,7 +3,7 @@ goto Run
 :Usage
 echo.%~nx0 [flags and arguments] [quoted MSBuild options]
 echo.
-echo.Build CPython from the command line.  Requires the appropriate
+echo.Build Tauthon from the command line.  Requires the appropriate
 echo.version(s) of Microsoft Visual Studio to be installed (see readme.txt).
 echo.
 echo.After the flags recognized by this script, up to 9 arguments to be passed
