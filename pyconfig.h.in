@@ -1013,7 +1013,7 @@
 /* Define if you want to build an interpreter with many run-time checks. */
 #undef Py_DEBUG
 
-/* Defined if Python is built as a shared library. */
+/* Defined if Tauthon is built as a shared library. */
 #undef Py_ENABLE_SHARED
 
 /* Define as the size of the unicode type. */
@@ -1126,7 +1126,7 @@
 #endif
 
 
-/* Define if you want to use MacPython modules on MacOSX in unix-Python. */
+/* Define if you want to use MacTauthon modules on MacOSX in unix-Tauthon. */
 #undef USE_TOOLBOX_OBJECT_GLUE
 
 /* Define if a va_list is an array of some kind */
@@ -1136,7 +1136,7 @@
 #undef WANT_SIGFPE_HANDLER
 
 /* Define if you want wctype.h functions to be used instead of the one
-   supplied by Python itself. (see Include/unicodectype.h). */
+   supplied by Tauthon itself. (see Include/unicodectype.h). */
 #undef WANT_WCTYPE_FUNCTIONS
 
 /* Define if WINDOW in curses.h offers a field _flags. */
@@ -1157,7 +1157,7 @@
    library plus accessory files). */
 #undef WITH_NEXT_FRAMEWORK
 
-/* Define if you want to compile in Python-specific mallocs */
+/* Define if you want to compile in Tauthon-specific mallocs */
 #undef WITH_PYMALLOC
 
 /* Define if you want to compile in rudimentary thread support */
