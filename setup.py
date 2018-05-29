@@ -257,7 +257,7 @@ class PyBuildExt(build_ext):
         # a small set of useful ones.
         compiler = os.environ.get('CC')
         # it's important to get CFLAGS from the environment for proper extension PGO support
-        cflags = os.environ.get('CFLAGS')
+        cflags = os.environ.get('CFLAGS', sysconfig.get_config_vars('CFLAGS')[0])
         args = {}
         # unfortunately, distutils doesn't let us provide separate C and C++
         # compilers
