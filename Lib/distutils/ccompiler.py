@@ -14,7 +14,7 @@ from distutils.errors import (CompileError, LinkError, UnknownFileError,
 from distutils.spawn import spawn
 from distutils.file_util import move_file
 from distutils.dir_util import mkpath
-from distutils.dep_util import newer_group
+from distutils.dep_util import newer_group, newer
 from distutils.util import split_quoted, execute
 from distutils import log
 # following import is for backward compatibility
@@ -571,7 +571,9 @@ class CCompiler:
                 src, ext = build[obj]
             except KeyError:
                 continue
-            self._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
+            if newer(src, obj):
+                # some extensions share source files so we need to avoid compiling the same source multiple times
+                self._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
 
         # Return *all* object filenames, not just the ones we just built.
         return objects

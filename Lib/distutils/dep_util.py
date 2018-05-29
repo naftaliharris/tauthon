@@ -11,7 +11,7 @@ from stat import ST_MTIME
 from distutils.errors import DistutilsFileError
 
 def newer(source, target):
-    """Tells if the target is newer than the source.
+    """Tells if the source is newer than the target.
 
     Return true if 'source' exists and is more recently modified than
     'target', or if 'source' exists and 'target' doesn't.

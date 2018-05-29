@@ -256,11 +256,13 @@ class PyBuildExt(build_ext):
         # those environment variables passed into the setup.py phase.  Here's
         # a small set of useful ones.
         compiler = os.environ.get('CC')
+        # it's important to get CFLAGS from the environment for proper extension PGO support
+        cflags = os.environ.get('CFLAGS')
         args = {}
         # unfortunately, distutils doesn't let us provide separate C and C++
         # compilers
         if compiler is not None:
-            (ccshared,cflags) = sysconfig.get_config_vars('CCSHARED','CFLAGS')
+            (ccshared,) = sysconfig.get_config_vars('CCSHARED')
             args['compiler_so'] = compiler + ' ' + ccshared + ' ' + cflags
         self.compiler.set_executables(**args)
 
