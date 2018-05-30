@@ -1460,7 +1460,7 @@ Optional Features:
                           Build fat binary against Mac OS X SDK
   --enable-framework[=INSTALLDIR]
                           Build (MacOSX|Darwin) framework
-  --enable-shared         disable/enable building shared python library
+  --enable-shared         disable/enable building shared tauthon library
   --enable-profiling      enable C-level code profiling
   --enable-optimizations  Enable expensive optimizations (PGO, etc). Disabled
                           by default.
@@ -1468,7 +1468,7 @@ Optional Features:
   --enable-ipv6           Enable ipv6 (with ipv4) support
   --disable-ipv6          Disable ipv6 support
   --enable-big-digits[=BITS]
-                          use big digits for Python longs [[BITS=30]]
+                          use big digits for Tauthon longs [[BITS=30]]
   --enable-unicode[=ucs[24]]
                           Enable Unicode strings (default is ucs2)
 
@@ -1485,7 +1485,7 @@ Optional Packages:
   --without-gcc           never use gcc
   --with-icc              build with icc
   --with-cxx-main=<compiler>
-                          compile main() and link python executable with C++
+                          compile main() and link tauthon executable with C++
                           compiler
   --with-suffix=.exe      set executable suffix
   --with-pydebug          build with Py_DEBUG defined
@@ -3381,7 +3381,7 @@ $as_echo "#define _BSD_SOURCE 1" >>confdefs.h
   # From the perspective of Solaris, _XOPEN_SOURCE is not so much a
   # request to enable features supported by the standard as a request
   # to disable features not supported by the standard.  The best way
-  # for Python to use Solaris is simply to leave _XOPEN_SOURCE out
+  # for Tauthon to use Solaris is simply to leave _XOPEN_SOURCE out
   # entirely and define __EXTENSIONS__ instead.
   SunOS/*)
     define_xopen_source=no;;
@@ -5324,7 +5324,7 @@ $as_echo "$LIBRARY" >&6; }
 # (defined in the Makefiles). On Cygwin LDLIBRARY is the import library,
 # DLLLIBRARY is the shared (i.e., DLL) library.
 #
-# RUNSHARED is used to run shared python without installed libraries
+# RUNSHARED is used to run shared tauthon without installed libraries
 #
 # INSTSONAME is the name of the shared library that will be use to install
 # on the system - some systems like version suffix, others don't
@@ -5341,10 +5341,10 @@ DLLLIBRARY=''
 LDLIBRARYDIR=''
 RUNSHARED=''
 
-# LINKCC is the command that links the python executable -- default is $(CC).
+# LINKCC is the command that links the tauthon executable -- default is $(CC).
 # If CXX is set, and if it is needed to link a main function that was
 # compiled with CXX, LINKCC is CXX instead. Always using CXX is undesirable:
-# python might then depend on the C++ runtime
+# tauthon might then depend on the C++ runtime
 # This is altered for AIX in order to build the export list before
 # linking.
 
@@ -5450,7 +5450,7 @@ $as_echo_n "checking LDLIBRARY... " >&6; }
 # MacOSX framework builds need more magic. LDLIBRARY is the dynamic
 # library that we build, but we do not want to link against it (we
 # will find it with a -framework option). For this reason there is an
-# extra variable BLDLIBRARY against which Python and the extension
+# extra variable BLDLIBRARY against which Tauthon and the extension
 # modules are linked, BLDLIBRARY. This is normally the same as
 # LDLIBRARY, but empty for MacOSX framework builds.
 if test "$enable_framework"
@@ -5985,7 +5985,7 @@ fi
 # Optimizer/debugger flags
 # ------------------------
 # (The following bit of code is complicated enough - please keep things
-# indented properly.  Just pretend you're editing Python code. ;-)
+# indented properly.  Just pretend you're editing Tauthon code. ;-)
 
 # There are two parallel sets of case statements below, one that checks to
 # see if OPT was set and one that does BASECFLAGS setting based upon
@@ -6048,7 +6048,7 @@ UNIVERSAL_ARCH_FLAGS=
 # tweak BASECFLAGS based on compiler and platform
 case $GCC in
 yes)
-    # Python violates C99 rules, by casting between incompatible
+    # Tauthon violates C99 rules, by casting between incompatible
     # pointer types. GCC may generate bad code as a result of that,
     # so use -fno-strict-aliasing if supported.
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC accepts -fno-strict-aliasing" >&5
@@ -8562,7 +8562,7 @@ _ACEOF
 # LDSHARED is the ld *command* used to create shared library
 # -- "cc -G" on SunOS 5.x, "ld -shared" on IRIX 5
 # (Shared libraries in this instance are shared modules to be loaded into
-# Python, as opposed to building Python itself as a shared library.)
+# Tauthon, as opposed to building Tauthon itself as a shared library.)
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking LDSHARED" >&5
 $as_echo_n "checking LDSHARED... " >&6; }
 if test -z "$LDSHARED"
@@ -8603,7 +8603,7 @@ then
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
-			# No framework. Ignore undefined symbols, assuming they come from Python
+			# No framework. Ignore undefined symbols, assuming they come from Tauthon
 			LDSHARED="$LDSHARED -undefined suppress"
 			LDCXXSHARED="$LDCXXSHARED -undefined suppress"
 		fi ;;
@@ -8616,14 +8616,14 @@ then
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
-			# No framework, use the Python app as bundle-loader
+			# No framework, use the Tauthon app as bundle-loader
 			BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDTAUTHON)'
-			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
+			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
 		fi ;;
 	Darwin/*)
 		# Use -undefined dynamic_lookup whenever possible (10.3 and later).
-		# This allows an extension to be used in any Python
+		# This allows an extension to be used in any Tauthon
 
 		dep_target_major=`echo ${MACOSX_DEPLOYMENT_TARGET} | \
 				sed 's/\([0-9]*\)\.\([0-9]*\).*/\1/'`
@@ -8641,10 +8641,10 @@ then
 				LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 				LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			else
-				# No framework, use the Python app as bundle-loader
+				# No framework, use the Tauthon app as bundle-loader
 				BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDTAUTHON)'
-				LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
-				LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+				LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
+				LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/tauthon$(VERSION)$(EXE)'
 			fi
 		else
 			# building for OS X 10.3 and later
@@ -8750,7 +8750,7 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $CCSHARED" >&5
 $as_echo "$CCSHARED" >&6; }
 # LINKFORSHARED are the flags passed to the $(CC) command that links
-# the python executable -- this is only needed for a few systems
+# the tauthon executable -- this is only needed for a few systems
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking LINKFORSHARED" >&5
 $as_echo_n "checking LINKFORSHARED... " >&6; }
 if test -z "$LINKFORSHARED"
@@ -8770,7 +8770,7 @@ then
 		# that dynamically loaded extension modules have access to it.
 		# -prebind is no longer used, because it actually seems to give a
 		# slowdown in stead of a speedup, maybe due to the large number of
-		# dynamic loads Python does.
+		# dynamic loads Tauthon does.
 
 		LINKFORSHARED="$extra_undefs"
 		if test "$enable_framework"
@@ -8828,12 +8828,12 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $CFLAGSFORSHARED" >&5
 $as_echo "$CFLAGSFORSHARED" >&6; }
 
-# SHLIBS are libraries (except -lc and -lm) to link to the python shared
+# SHLIBS are libraries (except -lc and -lm) to link to the tauthon shared
 # library (with --enable-shared).
 # For platforms on which shared libraries are not allowed to have unresolved
 # symbols, this must be set to $(LIBS) (expanded by make). We do this even
 # if it is not required, since it creates a dependency of the shared library
-# to LIBS. This, in turn, means that applications linking the shared libpython
+# to LIBS. This, in turn, means that applications linking the shared libtauthon
 # don't need to link LIBS explicitly. The default should be only changed
 # on systems where this approach causes problems.
 
@@ -10415,7 +10415,7 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $with_doc_strings" >&5
 $as_echo "$with_doc_strings" >&6; }
 
-# Check for Python-specific malloc support
+# Check for Tauthon-specific malloc support
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-tsc" >&5
 $as_echo_n "checking for --with-tsc... " >&6; }
 
@@ -10438,7 +10438,7 @@ $as_echo "no" >&6; }
 fi
 
 
-# Check for Python-specific malloc support
+# Check for Tauthon-specific malloc support
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-pymalloc" >&5
 $as_echo_n "checking for --with-pymalloc... " >&6; }
 
@@ -10566,7 +10566,7 @@ $as_echo "#define HAVE_DYNAMIC_LOADING 1" >>confdefs.h
 
 fi
 
-# MACHDEP_OBJS can be set to platform-specific object files needed by Python
+# MACHDEP_OBJS can be set to platform-specific object files needed by Tauthon
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking MACHDEP_OBJS" >&5
@@ -11126,7 +11126,7 @@ fi
 
 
 # On Tru64, chflags seems to be present, but calling it will
-# exit Python
+# exit Tauthon
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for chflags" >&5
 $as_echo_n "checking for chflags... " >&6; }
 if ${ac_cv_have_chflags+:} false; then :
@@ -13004,7 +13004,7 @@ $as_echo "#define DOUBLE_IS_BIG_ENDIAN_IEEE754 1" >>confdefs.h
 fi
 
 # Some ARM platforms use a mixed-endian representation for doubles.
-# While Python doesn't currently have full support for these platforms
+# While Tauthon doesn't currently have full support for these platforms
 # (see e.g., issue 1762561), we can at least make sure that float <-> string
 # conversions work.
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether C doubles are ARM mixed-endian IEEE 754 binary64" >&5
@@ -13371,9 +13371,9 @@ $as_echo "#define HAVE_BROKEN_SEM_GETVALUE 1" >>confdefs.h
 
 fi
 
-# determine what size digit to use for Python's longs
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking digit size for Python's longs" >&5
-$as_echo_n "checking digit size for Python's longs... " >&6; }
+# determine what size digit to use for Tauthon's longs
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking digit size for Tauthon's longs" >&5
+$as_echo_n "checking digit size for Tauthon's longs... " >&6; }
 # Check whether --enable-big-digits was given.
 if test "${enable_big_digits+set}" = set; then :
   enableval=$enable_big_digits; case $enable_big_digits in
@@ -13908,7 +13908,7 @@ $as_echo "#define HAVE_GETC_UNLOCKED 1" >>confdefs.h
 fi
 
 # check where readline lives
-# save the value of LIBS so we don't actually link Python with readline
+# save the value of LIBS so we don't actually link Tauthon with readline
 LIBS_no_readline=$LIBS
 
 # On some systems we need to link readline to a termcap compatible

@@ -209,9 +209,10 @@ TCLTK_INCLUDES=	@TCLTK_INCLUDES@
 TCLTK_LIBS=	@TCLTK_LIBS@
 
 # The task to run while instrument when building the profile-opt target
-# We exclude unittests with -x that take a rediculious amount of time to
-# run in the instrumented training build or do not provide much value.
-PROFILE_TASK=-m test.regrtest --pgo -x test_asyncore test_gdb test_multiprocessing test_subprocess
+# We exclude unittests with -x that take a ridiculous amount of time to
+# run in the instrumented training build, do not provide much value
+# or fail randomly when run in parallel (test_epoll, test_selectors).
+PROFILE_TASK=-m test.regrtest --pgo -w $(EXTRATESTOPTS) -x test_asyncore test_gdb test_multiprocessing test_subprocess test_epoll test_selectors
 
 # report files for gcov / lcov coverage report
 COVERAGE_INFO=	$(abs_builddir)/coverage.info
@@ -437,7 +438,7 @@ build_all_generate_profile:
 
 run_profile_task:
 	: # FIXME: can't run for a cross build
-	$(LLVM_PROF_FILE) $(RUNSHARED) ./$(BUILDTAUTHON) $(PROFILE_TASK) || true
+	$(LLVM_PROF_FILE) _PYTHONNOSITEPACKAGES=1 $(RUNSHARED) ./$(BUILDTAUTHON) -E $(PROFILE_TASK)
 
 build_all_merge_profile:
 	$(LLVM_PROF_MERGER)
