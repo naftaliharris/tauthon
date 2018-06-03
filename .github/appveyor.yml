@@ -1,4 +1,4 @@
-version: 2.7build{build}
+version: 2.8build{build}
 clone_depth: 5
 branches:
   only:
@@ -30,6 +30,6 @@ build_script:
   - cmd: PCbuild\build.bat -e
   - cmd: PCbuild\python.exe -m test.pythoninfo
 test_script:
-  - cmd: PCbuild\rt.bat -q -uall -u-cpu -rwW --slowest -j2
+  - cmd: PCbuild\rt.bat -q -uall -u-cpu -w -j3 -x test_concurrent_futures test_multiprocessing test_selectors
 environment:
   HOST_PYTHON: C:\Python36\python.exe

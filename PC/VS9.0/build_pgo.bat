@@ -31,9 +31,9 @@ rem build the instrumented version
 call build -p %platf% -c PGInstrument
 
 rem remove .pyc files, .pgc files and execute the job
-%PGI%\python.exe rmpyc.py %clrpath%
+%PGI%\tauthon.exe rmpyc.py %clrpath%
 del %PGI%\*.pgc
-%PGI%\python.exe %job%
+%PGI%\tauthon.exe %job%
 
 rem finally build the optimized version
 if exist %PGO% del /s /q %PGO%

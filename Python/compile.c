@@ -485,6 +485,8 @@ compiler_enter_scope(struct compiler *c, identifier name,
                      int scope_type, void *key, int lineno)
 {
     struct compiler_unit *u;
+    PyObject *tuple, *cname, *zero;
+    int res;
 
     u = (struct compiler_unit *)PyObject_Malloc(sizeof(
                                             struct compiler_unit));
@@ -517,16 +519,14 @@ compiler_enter_scope(struct compiler *c, identifier name,
             if (!__class__)
                 return 0;
         }
-        PyObject *tuple, *name, *zero;
-        int res;
         assert(u->u_scope_type == COMPILER_SCOPE_CLASS);
         assert(PyDict_Size(u->u_cellvars) == 0);
-        name = __class__;
-        if (!name) {
+        cname = __class__;
+        if (!cname) {
             compiler_unit_free(u);
             return 0;
         }
-        tuple = _PyCode_ConstantKey(name);
+        tuple = _PyCode_ConstantKey(cname);
         if (!tuple) {
             compiler_unit_free(u);
             return 0;
@@ -1305,10 +1305,12 @@ compiler_mod(struct compiler *c, mod_ty mod)
 static int
 get_ref_type(struct compiler *c, PyObject *name)
 {
+    int scope;
+
     if (c->u->u_scope_type == COMPILER_SCOPE_CLASS &&
         !strcmp(PyString_AS_STRING(name), "__class__"))
         return CELL;
-    int scope = PyST_GetScope(c->u->u_ste, name);
+    scope = PyST_GetScope(c->u->u_ste, name);
     if (scope == 0) {
         char buf[350];
         PyOS_snprintf(buf, sizeof(buf),

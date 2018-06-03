@@ -1,5 +1,5 @@
 /*
- * Helper program for killing lingering python[_d].exe processes before
+ * Helper program for killing lingering tauthon[_d].exe processes before
  * building, thus attempting to avoid build failures due to files being
  * locked.
  */
@@ -12,13 +12,13 @@
 #pragma comment(lib, "psapi")
 
 #ifdef _DEBUG
-#define PYTHON_EXE          (L"python_d.exe")
-#define PYTHON_EXE_LEN      (12)
+#define TAUTHON_EXE          (L"tauthon_d.exe")
+#define TAUTHON_EXE_LEN      (13)
 #define KILL_PYTHON_EXE     (L"kill_python_d.exe")
 #define KILL_PYTHON_EXE_LEN (17)
 #else
-#define PYTHON_EXE          (L"python.exe")
-#define PYTHON_EXE_LEN      (10)
+#define TAUTHON_EXE          (L"tauthon.exe")
+#define TAUTHON_EXE_LEN      (11)
 #define KILL_PYTHON_EXE     (L"kill_python.exe")
 #define KILL_PYTHON_EXE_LEN (15)
 #endif
@@ -77,7 +77,7 @@ main(int argc, char **argv)
 
     /*
      * Take a snapshot of system processes.  Enumerate over the snapshot,
-     * looking for python processes.  When we find one, verify it lives
+     * looking for tauthon processes.  When we find one, verify it lives
      * in the same directory we live in.  If it does, kill it.  If we're
      * unable to kill it, treat this as a fatal error and return 1.
      * 
@@ -105,18 +105,18 @@ main(int argc, char **argv)
 
         /*
          * XXX TODO: if we really wanted to be fancy, we could check the 
-         * modules for all processes (not just the python[_d].exe ones)
-         * and see if any of our DLLs are loaded (i.e. python30[_d].dll),
+         * modules for all processes (not just the tauthon[_d].exe ones)
+         * and see if any of our DLLs are loaded (i.e. tauthon30[_d].dll),
          * as that would also inhibit our ability to rebuild the solution.
          * Not worth loosing sleep over though; for now, a simple check 
-         * for just the python executable should be sufficient.
+         * for just the tauthon executable should be sufficient.
          */
 
-        if (_wcsnicmp(pe.szExeFile, PYTHON_EXE, PYTHON_EXE_LEN))
-            /* This isn't a python process. */
+        if (_wcsnicmp(pe.szExeFile, TAUTHON_EXE, TAUTHON_EXE_LEN))
+            /* This isn't a tauthon process. */
             continue;
 
-        /* It's a python process, so figure out which directory it's in... */
+        /* It's a tauthon process, so figure out which directory it's in... */
         hsm = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pe.th32ProcessID);
         if (hsm == INVALID_HANDLE_VALUE)
             /* 
@@ -136,15 +136,15 @@ main(int argc, char **argv)
         }
 
         do {
-            if (_wcsnicmp(me.szModule, PYTHON_EXE, PYTHON_EXE_LEN))
-                /* Wrong module, we're looking for python[_d].exe... */
+            if (_wcsnicmp(me.szModule, TAUTHON_EXE, TAUTHON_EXE_LEN))
+                /* Wrong module, we're looking for tauthon[_d].exe... */
                 continue;
 
             if (_wcsnicmp(path, me.szExePath, len))
                 /* Process doesn't live in our directory. */
                 break;
 
-            /* Python process residing in the right directory, kill it!  */
+            /* Tauthon process residing in the right directory, kill it!  */
             hp = OpenProcess(dac, FALSE, pe.th32ProcessID);
             if (!hp) {
                 printf("OpenProcess failed: %d\n", GetLastError());

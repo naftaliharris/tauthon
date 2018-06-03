@@ -31,6 +31,6 @@
 	/>
 	<UserMacro
 		Name="PythonExe"
-		Value="$(SolutionDir)python_d.exe"
+		Value="$(SolutionDir)tauthon_d.exe"
 	/>
 </VisualStudioPropertySheet>

@@ -38,11 +38,11 @@
 	/>
 	<UserMacro
 		Name="PyDllName"
-		Value="python27"
+		Value="tauthon28"
 	/>
 	<UserMacro
 		Name="PythonExe"
-		Value="$(SolutionDir)\python.exe"
+		Value="$(SolutionDir)\tauthon.exe"
 	/>
 	<UserMacro
 		Name="externalsDir"

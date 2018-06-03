@@ -41,6 +41,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     Py_ssize_t nargs;
     int isclass = 0;   /* initialize to prevent gcc warning */
     int meta_from_kws = 0;
+    PyObject *margs;
 
     /* A metaclass is used in two ways during class creation:
      *
@@ -204,7 +205,6 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
             Py_INCREF(meta2);
         }
 
-        PyObject *margs;
         margs = PyTuple_Pack(3, name, bases, ns);
         if (margs != NULL) {
             cls = PyEval_CallObjectWithKeywords(meta2, margs, mkw);
