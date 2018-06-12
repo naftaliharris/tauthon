@@ -3897,15 +3897,17 @@ PyEval_EvalCodeEx28(PyCodeObject *co, PyObject *globals, PyObject *locals,
     if (co->co_flags & (CO_GENERATOR | CO_COROUTINE)) {
         PyObject *gen;
         PyObject *coro_wrapper = tstate->coroutine_wrapper;
+	PyObject *coro_wrap_rep, *co_rep;
+
         int is_coro = co->co_flags & CO_COROUTINE;
 
         if (is_coro && tstate->in_coroutine_wrapper) {
             assert(coro_wrapper != NULL);
 
-            PyObject *coro_wrap_rep = PyObject_Repr(coro_wrapper);
+            coro_wrap_rep = PyObject_Repr(coro_wrapper);
             if (coro_wrap_rep == NULL)
                 goto fail;
-            PyObject *co_rep = PyObject_Repr((PyObject *)co);
+            co_rep = PyObject_Repr((PyObject *)co);
             if (co_rep == NULL) {
                 Py_DECREF(coro_wrap_rep);
                 goto fail;
@@ -3966,12 +3968,12 @@ fail: /* Jump here from prelude on failure */
 
 PyObject *
 PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals,
-           PyObject **args, int argcount, PyObject **kws, int kwcount,
-           PyObject **defs, int defcount, PyObject *closure)
+           PyObject **args, int argc, PyObject **kwds, int kwdc,
+           PyObject **defs, int defc, PyObject *closure)
 {
     return PyEval_EvalCodeEx28(co, globals, locals,
-                               args, argcount, kws, kwcount,
-                               defs, defcount, NULL, closure);
+                               args, argc, kwds, kwdc,
+                               defs, defc, NULL, closure);
 }
 
 static PyObject *

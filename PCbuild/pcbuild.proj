@@ -24,7 +24,7 @@
     </Projects>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <!-- pythonXY.dll -->
+    <!-- tauthonXY.dll -->
     <!--
     Parallel build is explicitly disabled for this project because it
     causes many conflicts between pythoncore and projects that depend
@@ -34,7 +34,7 @@
     <Projects Include="pythoncore.vcxproj">
       <BuildInParallel>false</BuildInParallel>
     </Projects>
-    <!-- python[w].exe -->
+    <!-- tauthon[w].exe -->
     <Projects Include="python.vcxproj;pythonw.vcxproj" />
     <!-- Extension modules -->
     <ExtensionModules Include="_ctypes;_elementtree;_msi;_multiprocessing;pyexpat;select;unicodedata;winsound" />

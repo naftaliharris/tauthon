@@ -25,7 +25,7 @@ echo.      to build if this flag is not present
 echo.  -m  Enable parallel build
 echo.  -M  Disable parallel build (disabled by default)
 echo.  -v  Increased output messages
-echo.  -k  Attempt to kill any running Pythons before building (usually done
+echo.  -k  Attempt to kill any running Tauthons before building (usually done
 echo.      automatically by the pythoncore project)
 echo.  --pgo          Build with Profile-Guided Optimization.  This flag
 echo.                 overrides -c and -d

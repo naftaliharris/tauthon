@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="python"
+	Name="tauthon"
 	ProjectGUID="{B11D750F-CD1F-4A96-85CE-E69A5C5259F9}"
 	TargetFrameworkVersion="131072"
 	>
@@ -62,7 +62,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -135,7 +135,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -209,7 +209,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python_d.exe"
+				OutputFile="$(OutDir)\tauthon_d.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -284,7 +284,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python_d.exe"
+				OutputFile="$(OutDir)\tauthon_d.exe"
 				SubSystem="1"
 				StackReserveSize="2100000"
 				BaseAddress="0x1d000000"
@@ -356,7 +356,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -430,7 +430,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -504,7 +504,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"
@@ -578,7 +578,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\python.exe"
+				OutputFile="$(OutDir)\tauthon.exe"
 				SubSystem="1"
 				StackReserveSize="2000000"
 				BaseAddress="0x1d000000"

@@ -9,7 +9,7 @@ rem  -r  Target Rebuild instead of Build
 rem  -t  Set the target manually (Build, Rebuild, or Clean)
 rem  -d  Set the configuration to Debug
 rem  -e  Pull in external libraries using get_externals.bat
-rem  -k  Attempt to kill any running Pythons before building
+rem  -k  Attempt to kill any running Tauthons before building
 
 setlocal
 set platf=Win32
@@ -43,8 +43,8 @@ if '%platf%'=='x64' (
 )
 rem Can't use builddir until we're in a new command...
 if '%platf%'=='x64' (
-    rem Needed for buliding OpenSSL
-    set HOST_PYTHON=%builddir%python%dbg_ext%.exe
+    rem Needed for building OpenSSL
+    set HOST_PYTHON=%builddir%tauthon%dbg_ext%.exe
 )
 
 rem Setup the environment
