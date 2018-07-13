@@ -1776,6 +1776,7 @@ validate_expr_stmt(node *tree)
                    || strcmp(s, "^=") == 0
                    || strcmp(s, "<<=") == 0
                    || strcmp(s, ">>=") == 0
+                   || strcmp(s, ":=") == 0
                    || strcmp(s, "**=") == 0);
             if (!res)
                 err_string("illegal augmented assignment operator");

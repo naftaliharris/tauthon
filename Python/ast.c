@@ -524,6 +524,8 @@ ast_for_augassign(struct compiling *c, const node *n)
                 return Mult;
         case '@':
             return MatMult;
+	case ':':
+	    return Asgn;
         default:
             PyErr_Format(PyExc_SystemError, "invalid augassign: %s", STR(n));
             return (operator_ty)0;
@@ -2434,7 +2436,7 @@ ast_for_expr_stmt(struct compiling *c, const node *n)
                 | ('=' (yield_expr|testlist))*)
        testlist: test (',' test)* [',']
        augassign: '+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^='
-                | '<<=' | '>>=' | '**=' | '//='
+                | '<<=' | '>>=' | '**=' | '//=' | ':='
        test: ... here starts the operator precedence dance
      */
 

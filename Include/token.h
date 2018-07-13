@@ -69,6 +69,7 @@ extern "C" {
 #define NONLOCAL        56
 #define ERRORTOKEN	57
 #define N_TOKENS	58
+#define COLONEQUAL	59
 
 /* Special definitions for cooperation with parser */
 

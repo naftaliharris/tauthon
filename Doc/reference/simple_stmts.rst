@@ -262,7 +262,7 @@ operation and an assignment statement:
    augmented_assignment_stmt: `augtarget` `augop` (`expression_list` | `yield_expression`)
    augtarget: `identifier` | `attributeref` | `subscription` | `slicing`
    augop: "+=" | "-=" | "*=" | "@=" | "/=" | "//=" | "%=" | "**="
-        : | ">>=" | "<<=" | "&=" | "^=" | "|="
+        : | ">>=" | "<<=" | "&=" | "^=" | "|=" | ":="
 
 (See section :ref:`primaries` for the syntax definitions for the last three
 symbols.)

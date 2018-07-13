@@ -1860,6 +1860,27 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             break;
         }
 
+        TARGET_NOARG(INPLACE_ASSIGN)
+        {
+	    /*
+	     * We look like an augmented assign, except as a special
+	     *  case our value is not dependent on the target.
+	     *  So discard it and prepare to supply a value
+	     *  for the actual assignment which follows.
+	     */
+            w = POP();
+            v = TOP();
+            Py_DECREF(v);
+	    SET_TOP(w);
+	    /*
+	     * TBD, when we make augmented assigns into expressions
+            Py_INCREF(w);
+            PUSH(w);
+	    */
+	    FAST_DISPATCH();
+            break;
+        }
+
 
      
         TARGET_WITH_IMPL_NOARG(SLICE, _slice)

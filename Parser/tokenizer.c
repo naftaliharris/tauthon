@@ -1158,6 +1158,11 @@ PyToken_TwoChars(int c1, int c2)
         case '=':               return ATEQUAL;
         }
         break;
+    case ':':
+        switch (c2) {
+        case '=':               return COLONEQUAL;
+        }
+        break;
     }
     return OP;
 }

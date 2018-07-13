@@ -1065,6 +1065,7 @@ class CodeGenerator:
         '&=' : 'INPLACE_AND',
         '^=' : 'INPLACE_XOR',
         '|=' : 'INPLACE_OR',
+        ':=' : 'INPLACE_ASGN',
         }
 
     def visitAugName(self, node, mode):

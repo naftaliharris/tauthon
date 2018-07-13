@@ -852,6 +852,7 @@ opcode_stack_effect(int opcode, int oparg)
         case INPLACE_AND:
         case INPLACE_XOR:
         case INPLACE_OR:
+        case INPLACE_ASSIGN:
             return -1;
         case BREAK_LOOP:
             return 0;
@@ -2739,6 +2740,8 @@ inplace_binop(struct compiler *c, operator_ty op)
         return INPLACE_AND;
     case FloorDiv:
         return INPLACE_FLOOR_DIVIDE;
+    case Asgn:
+	return INPLACE_ASSIGN;
     default:
         PyErr_Format(PyExc_SystemError,
             "inplace binary op %d should not be possible", op);
