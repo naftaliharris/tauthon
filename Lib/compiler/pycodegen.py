@@ -1046,10 +1046,12 @@ class CodeGenerator:
 
     def visitAugAssign(self, node):
         self.set_lineno(node)
-        aug_node = wrap_aug(node.node)
-        self.visit(aug_node, "load")
+	aug_node = wrap_aug(node.node)
+	if node.op != ':=':
+	    self.visit(aug_node, "load")
         self.visit(node.expr)
         self.emit(self._augmented_opcode[node.op])
+	self.emit('DUP_TOP')
         self.visit(aug_node, "store")
 
     _augmented_opcode = {

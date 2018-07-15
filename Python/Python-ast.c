@@ -76,12 +76,6 @@ static char *Assign_fields[]={
         "targets",
         "value",
 };
-static PyTypeObject *AugAssign_type;
-static char *AugAssign_fields[]={
-        "target",
-        "op",
-        "value",
-};
 static PyTypeObject *Print_type;
 static char *Print_fields[]={
         "dest",
@@ -198,6 +192,12 @@ static PyTypeObject *UnaryOp_type;
 static char *UnaryOp_fields[]={
         "op",
         "operand",
+};
+static PyTypeObject *AugAssign_type;
+static char *AugAssign_fields[]={
+        "target",
+        "op",
+        "value",
 };
 static PyTypeObject *Lambda_type;
 static char *Lambda_fields[]={
@@ -759,8 +759,6 @@ static int init_types(void)
         if (!Delete_type) return 0;
         Assign_type = make_type("Assign", stmt_type, Assign_fields, 2);
         if (!Assign_type) return 0;
-        AugAssign_type = make_type("AugAssign", stmt_type, AugAssign_fields, 3);
-        if (!AugAssign_type) return 0;
         Print_type = make_type("Print", stmt_type, Print_fields, 3);
         if (!Print_type) return 0;
         For_type = make_type("For", stmt_type, For_fields, 4);
@@ -812,6 +810,8 @@ static int init_types(void)
         if (!BinOp_type) return 0;
         UnaryOp_type = make_type("UnaryOp", expr_type, UnaryOp_fields, 2);
         if (!UnaryOp_type) return 0;
+        AugAssign_type = make_type("AugAssign", expr_type, AugAssign_fields, 3);
+        if (!AugAssign_type) return 0;
         Lambda_type = make_type("Lambda", expr_type, Lambda_fields, 2);
         if (!Lambda_type) return 0;
         IfExp_type = make_type("IfExp", expr_type, IfExp_fields, 3);
@@ -1265,38 +1265,6 @@ Assign(asdl_seq * targets, expr_ty value, int lineno, int col_offset, PyArena
 }
 
 stmt_ty
-AugAssign(expr_ty target, operator_ty op, expr_ty value, int lineno, int
-          col_offset, PyArena *arena)
-{
-        stmt_ty p;
-        if (!target) {
-                PyErr_SetString(PyExc_ValueError,
-                                "field target is required for AugAssign");
-                return NULL;
-        }
-        if (!op) {
-                PyErr_SetString(PyExc_ValueError,
-                                "field op is required for AugAssign");
-                return NULL;
-        }
-        if (!value) {
-                PyErr_SetString(PyExc_ValueError,
-                                "field value is required for AugAssign");
-                return NULL;
-        }
-        p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
-        if (!p)
-                return NULL;
-        p->kind = AugAssign_kind;
-        p->v.AugAssign.target = target;
-        p->v.AugAssign.op = op;
-        p->v.AugAssign.value = value;
-        p->lineno = lineno;
-        p->col_offset = col_offset;
-        return p;
-}
-
-stmt_ty
 Print(expr_ty dest, asdl_seq * values, bool nl, int lineno, int col_offset,
       PyArena *arena)
 {
@@ -1728,6 +1696,38 @@ UnaryOp(unaryop_ty op, expr_ty operand, int lineno, int col_offset, PyArena
         p->kind = UnaryOp_kind;
         p->v.UnaryOp.op = op;
         p->v.UnaryOp.operand = operand;
+        p->lineno = lineno;
+        p->col_offset = col_offset;
+        return p;
+}
+
+expr_ty
+AugAssign(expr_ty target, operator_ty op, expr_ty value, int lineno, int
+          col_offset, PyArena *arena)
+{
+        expr_ty p;
+        if (!target) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field target is required for AugAssign");
+                return NULL;
+        }
+        if (!op) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field op is required for AugAssign");
+                return NULL;
+        }
+        if (!value) {
+                PyErr_SetString(PyExc_ValueError,
+                                "field value is required for AugAssign");
+                return NULL;
+        }
+        p = (expr_ty)PyArena_Malloc(arena, sizeof(*p));
+        if (!p)
+                return NULL;
+        p->kind = AugAssign_kind;
+        p->v.AugAssign.target = target;
+        p->v.AugAssign.op = op;
+        p->v.AugAssign.value = value;
         p->lineno = lineno;
         p->col_offset = col_offset;
         return p;
@@ -2600,25 +2600,6 @@ ast2obj_stmt(void* _o)
                         goto failed;
                 Py_DECREF(value);
                 break;
-        case AugAssign_kind:
-                result = PyType_GenericNew(AugAssign_type, NULL, NULL);
-                if (!result) goto failed;
-                value = ast2obj_expr(o->v.AugAssign.target);
-                if (!value) goto failed;
-                if (PyObject_SetAttrString(result, "target", value) == -1)
-                        goto failed;
-                Py_DECREF(value);
-                value = ast2obj_operator(o->v.AugAssign.op);
-                if (!value) goto failed;
-                if (PyObject_SetAttrString(result, "op", value) == -1)
-                        goto failed;
-                Py_DECREF(value);
-                value = ast2obj_expr(o->v.AugAssign.value);
-                if (!value) goto failed;
-                if (PyObject_SetAttrString(result, "value", value) == -1)
-                        goto failed;
-                Py_DECREF(value);
-                break;
         case Print_kind:
                 result = PyType_GenericNew(Print_type, NULL, NULL);
                 if (!result) goto failed;
@@ -2978,6 +2959,25 @@ ast2obj_expr(void* _o)
                 value = ast2obj_expr(o->v.UnaryOp.operand);
                 if (!value) goto failed;
                 if (PyObject_SetAttrString(result, "operand", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                break;
+        case AugAssign_kind:
+                result = PyType_GenericNew(AugAssign_type, NULL, NULL);
+                if (!result) goto failed;
+                value = ast2obj_expr(o->v.AugAssign.target);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "target", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_operator(o->v.AugAssign.op);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "op", value) == -1)
+                        goto failed;
+                Py_DECREF(value);
+                value = ast2obj_expr(o->v.AugAssign.value);
+                if (!value) goto failed;
+                if (PyObject_SetAttrString(result, "value", value) == -1)
                         goto failed;
                 Py_DECREF(value);
                 break;
@@ -4493,55 +4493,6 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                 if (*out == NULL) goto failed;
                 return 0;
         }
-        isinstance = PyObject_IsInstance(obj, (PyObject*)AugAssign_type);
-        if (isinstance == -1) {
-                return 1;
-        }
-        if (isinstance) {
-                expr_ty target;
-                operator_ty op;
-                expr_ty value;
-
-                if (PyObject_HasAttrString(obj, "target")) {
-                        int res;
-                        tmp = PyObject_GetAttrString(obj, "target");
-                        if (tmp == NULL) goto failed;
-                        res = obj2ast_expr(tmp, &target, arena);
-                        if (res != 0) goto failed;
-                        Py_XDECREF(tmp);
-                        tmp = NULL;
-                } else {
-                        PyErr_SetString(PyExc_TypeError, "required field \"target\" missing from AugAssign");
-                        return 1;
-                }
-                if (PyObject_HasAttrString(obj, "op")) {
-                        int res;
-                        tmp = PyObject_GetAttrString(obj, "op");
-                        if (tmp == NULL) goto failed;
-                        res = obj2ast_operator(tmp, &op, arena);
-                        if (res != 0) goto failed;
-                        Py_XDECREF(tmp);
-                        tmp = NULL;
-                } else {
-                        PyErr_SetString(PyExc_TypeError, "required field \"op\" missing from AugAssign");
-                        return 1;
-                }
-                if (PyObject_HasAttrString(obj, "value")) {
-                        int res;
-                        tmp = PyObject_GetAttrString(obj, "value");
-                        if (tmp == NULL) goto failed;
-                        res = obj2ast_expr(tmp, &value, arena);
-                        if (res != 0) goto failed;
-                        Py_XDECREF(tmp);
-                        tmp = NULL;
-                } else {
-                        PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from AugAssign");
-                        return 1;
-                }
-                *out = AugAssign(target, op, value, lineno, col_offset, arena);
-                if (*out == NULL) goto failed;
-                return 0;
-        }
         isinstance = PyObject_IsInstance(obj, (PyObject*)Print_type);
         if (isinstance == -1) {
                 return 1;
@@ -5825,6 +5776,55 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
                         return 1;
                 }
                 *out = UnaryOp(op, operand, lineno, col_offset, arena);
+                if (*out == NULL) goto failed;
+                return 0;
+        }
+        isinstance = PyObject_IsInstance(obj, (PyObject*)AugAssign_type);
+        if (isinstance == -1) {
+                return 1;
+        }
+        if (isinstance) {
+                expr_ty target;
+                operator_ty op;
+                expr_ty value;
+
+                if (PyObject_HasAttrString(obj, "target")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "target");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &target, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"target\" missing from AugAssign");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "op")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "op");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_operator(tmp, &op, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"op\" missing from AugAssign");
+                        return 1;
+                }
+                if (PyObject_HasAttrString(obj, "value")) {
+                        int res;
+                        tmp = PyObject_GetAttrString(obj, "value");
+                        if (tmp == NULL) goto failed;
+                        res = obj2ast_expr(tmp, &value, arena);
+                        if (res != 0) goto failed;
+                        Py_XDECREF(tmp);
+                        tmp = NULL;
+                } else {
+                        PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from AugAssign");
+                        return 1;
+                }
+                *out = AugAssign(target, op, value, lineno, col_offset, arena);
                 if (*out == NULL) goto failed;
                 return 0;
         }
@@ -7931,8 +7931,6 @@ init_ast(void)
             return;
         if (PyDict_SetItemString(d, "Assign", (PyObject*)Assign_type) < 0)
             return;
-        if (PyDict_SetItemString(d, "AugAssign", (PyObject*)AugAssign_type) <
-            0) return;
         if (PyDict_SetItemString(d, "Print", (PyObject*)Print_type) < 0) return;
         if (PyDict_SetItemString(d, "For", (PyObject*)For_type) < 0) return;
         if (PyDict_SetItemString(d, "AsyncFor", (PyObject*)AsyncFor_type) < 0)
@@ -7969,6 +7967,8 @@ init_ast(void)
         if (PyDict_SetItemString(d, "BinOp", (PyObject*)BinOp_type) < 0) return;
         if (PyDict_SetItemString(d, "UnaryOp", (PyObject*)UnaryOp_type) < 0)
             return;
+        if (PyDict_SetItemString(d, "AugAssign", (PyObject*)AugAssign_type) <
+            0) return;
         if (PyDict_SetItemString(d, "Lambda", (PyObject*)Lambda_type) < 0)
             return;
         if (PyDict_SetItemString(d, "IfExp", (PyObject*)IfExp_type) < 0) return;
