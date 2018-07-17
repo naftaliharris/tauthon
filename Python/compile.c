@@ -752,6 +752,7 @@ opcode_stack_effect(int opcode, int oparg)
         case DUP_TOP:
             return 1;
         case ROT_FOUR:
+        case ROT_FIVE:
             return 0;
 
         case UNARY_POSITIVE:
@@ -3726,6 +3727,7 @@ compiler_augassign(struct compiler *c, expr_ty s)
     expr_ty e;
     expr_ty auge;
     int op = s->v.AugAssign.op;
+    slice_ty sp;
 
     assert(s->kind == AugAssign_kind);
 
@@ -3762,7 +3764,8 @@ compiler_augassign(struct compiler *c, expr_ty s)
         break;
 
     case Subscript_kind:
-        auge = Subscript(e->v.Subscript.value, e->v.Subscript.slice,
+	sp = e->v.Subscript.slice;
+        auge = Subscript(e->v.Subscript.value, sp,
                          AugLoad, e->lineno, e->col_offset, c->c_arena);
         if (auge == NULL) {
             return 0;
@@ -3773,10 +3776,15 @@ compiler_augassign(struct compiler *c, expr_ty s)
 
 	/*
 	 * Similar to Attribute_kind above, but different stack format:
-	 * ob idx val -> val ob idx val
+	 * ob idx1 [idx2] val -> val ob idx1 [idx2] val
 	 */
 	ADDOP(c, DUP_TOP);
-	ADDOP(c, ROT_FOUR);
+	if ((sp->kind == Slice_kind) &&
+		sp->v.Slice.upper && sp->v.Slice.lower) {
+	    ADDOP(c, ROT_FIVE);
+	} else {
+	    ADDOP(c, ROT_FOUR);
+	}
         auge->v.Subscript.ctx = AugStore;
         VISIT(c, expr, auge);
         break;

@@ -176,8 +176,14 @@ The Python compiler currently generates the following bytecode instructions.
 
 .. opcode:: ROT_FOUR ()
 
-   Lifts second, third and forth stack item one position up, moves top down to
+   Lifts second, third and fourth stack item one position up, moves top down to
    position four.
+
+
+.. opcode:: ROT_FIVE ()
+
+   Lifts second, third, fourth and fifth stack item one position up,
+   moves top down to position five.
 
 
 .. opcode:: DUP_TOP ()

@@ -929,11 +929,13 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define SECOND()          (stack_pointer[-2])
 #define THIRD()           (stack_pointer[-3])
 #define FOURTH()          (stack_pointer[-4])
+#define FIFTH()           (stack_pointer[-5])
 #define PEEK(n)           (stack_pointer[-(n)])
 #define SET_TOP(v)        (stack_pointer[-1] = (v))
 #define SET_SECOND(v)     (stack_pointer[-2] = (v))
 #define SET_THIRD(v)      (stack_pointer[-3] = (v))
 #define SET_FOURTH(v)     (stack_pointer[-4] = (v))
+#define SET_FIFTH(v)      (stack_pointer[-5] = (v))
 #define SET_VALUE(n, v)   (stack_pointer[-(n)] = (v))
 #define BASIC_STACKADJ(n) (stack_pointer += n)
 #define BASIC_PUSH(v)     (*stack_pointer++ = (v))
@@ -1278,7 +1280,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
 
         TARGET_NOARG(ROT_FOUR)
-         {
+        {
             u = TOP();
             v = SECOND();
             w = THIRD();
@@ -1287,6 +1289,21 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             SET_SECOND(w);
             SET_THIRD(x);
             SET_FOURTH(u);
+            FAST_DISPATCH();
+        }
+
+        TARGET_NOARG(ROT_FIVE)
+        {
+            u = TOP();
+            v = SECOND();
+            w = THIRD();
+            x = FOURTH();
+            t = FIFTH();
+            SET_TOP(v);
+            SET_SECOND(w);
+            SET_THIRD(x);
+            SET_FOURTH(t);
+            SET_FIFTH(u);
             FAST_DISPATCH();
         }
 
