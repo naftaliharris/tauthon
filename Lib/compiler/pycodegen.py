@@ -1050,7 +1050,8 @@ class CodeGenerator:
 	if node.op != ':=':
 	    self.visit(aug_node, "load")
         self.visit(node.expr)
-        self.emit(self._augmented_opcode[node.op])
+	if node.op != ':=':
+	    self.emit(self._augmented_opcode[node.op])
 	self.emit('DUP_TOP')
         self.visit(aug_node, "store")
 
@@ -1067,7 +1068,6 @@ class CodeGenerator:
         '&=' : 'INPLACE_AND',
         '^=' : 'INPLACE_XOR',
         '|=' : 'INPLACE_OR',
-        ':=' : 'INPLACE_ASGN',
         }
 
     def visitAugName(self, node, mode):
