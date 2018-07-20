@@ -2588,7 +2588,15 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case Expr_kind:
         if (c->c_interactive && c->c_nestlevel <= 1) {
             VISIT(c, expr, s->v.Expr.value);
-            ADDOP(c, PRINT_EXPR);
+	    if (s->v.Expr.value->kind == AugAssign_kind) {
+		/*
+		 * For historical compatibility, don't print values
+		 *  of augmented assign ops
+		 */
+		ADDOP(c, POP_TOP);
+	    } else {
+		ADDOP(c, PRINT_EXPR);
+	    }
         }
         else if (s->v.Expr.value->kind != Str_kind &&
                  s->v.Expr.value->kind != Num_kind) {
