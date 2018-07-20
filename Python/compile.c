@@ -3784,11 +3784,14 @@ compiler_augassign(struct compiler *c, expr_ty s)
 
 	/*
 	 * Similar to Attribute_kind above, but different stack format:
-	 * ob idx1 [idx2] val -> val ob idx1 [idx2] val
+	 *  ob idx1 [idx2] val -> val ob idx1 [idx2] val
+	 * (Note that a:b:c extended slice flattens a:b:c to a single
+	 *  single object, so the stack is in "ob idx1 val" format.)
 	 */
 	ADDOP(c, DUP_TOP);
 	if ((sp->kind == Slice_kind) &&
-		sp->v.Slice.upper && sp->v.Slice.lower) {
+		sp->v.Slice.upper && sp->v.Slice.lower &&
+		!sp->v.Slice.step) {
 	    ADDOP(c, ROT_FIVE);
 	} else {
 	    ADDOP(c, ROT_FOUR);
