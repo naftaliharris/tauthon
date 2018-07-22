@@ -25,10 +25,10 @@ class AugAssignTest(unittest.TestCase):
             self.assertEqual(x, 3.0)
 
     def test_with_unpacking(self):
-	x = 1
-	b = 2
-	self.assertEqual((x, b += 3), (1, 5))
-	self.assertEqual(b, 5)
+        x = 1
+        b = 2
+        self.assertEqual((x, b += 3), (1, 5))
+        self.assertEqual(b, 5)
 
     def testInList(self):
         x = [2]
