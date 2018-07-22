@@ -609,15 +609,15 @@ class Transformer:
         return self.testlist(nodelist)
 
     def test(self, nodelist):
-	# if_test [augassign (yield_expr|test)]
-	if len(nodelist) == 1:
+        # if_test [augassign (yield_expr|test)]
+        if len(nodelist) == 1:
             return self.com_node(nodelist[0])
 
-	lval = self.com_augassign(nodelist[0])
-	op = self.com_augassign_op(nodelist[1])
+        lval = self.com_augassign(nodelist[0])
+        op = self.com_augassign_op(nodelist[1])
         en = nodelist[2]
         exprNode = self.lookup_node(en)(en[1:])
-	return AugAssign(lval, op[1], exprNode, lineno=op[2])
+        return AugAssign(lval, op[1], exprNode, lineno=op[2])
 
     def if_test(self, nodelist):
 
