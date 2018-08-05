@@ -947,16 +947,28 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                           assert(STACK_LEVEL() <= co->co_stacksize); }
 #define POP()           ((void)(lltrace && prtrace(TOP(), "pop")), \
                          BASIC_POP())
-#define STACKADJ(n)     { (void)(BASIC_STACKADJ(n), \
+
+#define STACK_GROW(n)   { \
+                          assert((n) >= 0); \
+                          (void)(BASIC_STACKADJ(n), \
                           lltrace && prtrace(TOP(), "stackadj")); \
-                          assert(STACK_LEVEL() <= co->co_stacksize); }
+                          assert(STACK_LEVEL() <= co->co_stacksize); \
+                        }
+#define STACK_SHRINK(n) { \
+                          assert((n) >= 0); \
+                          assert((n) <= STACK_LEVEL()); \
+                          (void)(lltrace && prtrace(TOP(), "stackadj")); \
+                          (void)(BASIC_STACKADJ(-(n))); \
+                        }
+
 #define EXT_POP(STACK_POINTER) ((void)(lltrace && \
                                 prtrace((STACK_POINTER)[-1], "ext_pop")), \
                                 *--(STACK_POINTER))
 #else
 #define PUSH(v)                BASIC_PUSH(v)
 #define POP()                  BASIC_POP()
-#define STACKADJ(n)            BASIC_STACKADJ(n)
+#define STACK_GROW(n)          BASIC_STACKADJ(n)
+#define STACK_SHRINK(n)        BASIC_STACKADJ(-(n))
 #define EXT_POP(STACK_POINTER) (*--(STACK_POINTER))
 #endif
 
@@ -1324,7 +1336,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 Py_INCREF(x);
                 w = SECOND();
                 Py_INCREF(w);
-                STACKADJ(2);
+                STACK_GROW(2);
                 SET_TOP(x);
                 SET_SECOND(w);
                 FAST_DISPATCH();
@@ -1335,7 +1347,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 Py_INCREF(w);
                 v = THIRD();
                 Py_INCREF(v);
-                STACKADJ(3);
+                STACK_GROW(3);
                 SET_TOP(x);
                 SET_SECOND(w);
                 SET_THIRD(v);
@@ -1383,7 +1395,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 err = 0;
                 DISPATCH();
             }
-            STACKADJ(-1);
+            STACK_SHRINK(1);
             break;
         }
 
@@ -1877,6 +1889,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             break;
         }
 
+
+
         TARGET_WITH_IMPL_NOARG(SLICE, _slice)
         TARGET_WITH_IMPL_NOARG(SLICE_1, _slice)
         TARGET_WITH_IMPL_NOARG(SLICE_2, _slice)
@@ -1957,7 +1971,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             w = TOP();
             v = SECOND();
             u = THIRD();
-            STACKADJ(-3);
+            STACK_SHRINK(3);
             /* v[w] = u */
             err = PyObject_SetItem(v, w, u);
             Py_DECREF(u);
@@ -1971,7 +1985,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         {
             w = TOP();
             v = SECOND();
-            STACKADJ(-2);
+            STACK_SHRINK(2);
             /* del v[w] */
             err = PyObject_DelItem(v, w);
             Py_DECREF(v);
@@ -2305,7 +2319,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             w = TOP();
             v = SECOND();
             u = THIRD();
-            STACKADJ(-3);
+            STACK_SHRINK(3);
             READ_TIMESTAMP(intr0);
             err = exec_statement(f, u, v, w);
             READ_TIMESTAMP(intr1);
@@ -2448,7 +2462,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 }
             } else if (unpack_iterable(v, oparg,
                                        stack_pointer + oparg)) {
-                STACKADJ(oparg);
+                STACK_GROW(oparg);
             } else {
                 /* unpack_iterable() raised an exception */
                 why = WHY_EXCEPTION;
@@ -2463,7 +2477,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             w = GETITEM(names, oparg);
             v = TOP();
             u = SECOND();
-            STACKADJ(-2);
+            STACK_SHRINK(2);
             err = PyObject_SetAttr(v, w, u); /* v.w = u */
             Py_DECREF(v);
             Py_DECREF(u);
@@ -2697,7 +2711,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                         err = PySet_Add(x, w);
                     Py_DECREF(w);
                 }
-                STACKADJ(-oparg);
+                STACK_SHRINK(oparg);
                 if (err != 0) {
                     Py_DECREF(x);
                     break;
@@ -2721,7 +2735,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             w = TOP();     /* key */
             u = SECOND();  /* value */
             v = THIRD();   /* dict */
-            STACKADJ(-2);
+            STACK_SHRINK(2);
             assert (PyDict_CheckExact(v));
             err = PyDict_SetItem(v, w, u);  /* v[w] = u */
             Py_DECREF(u);
@@ -2734,7 +2748,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         {
             w = TOP();     /* key */
             u = SECOND();  /* value */
-            STACKADJ(-2);
+            STACK_SHRINK(2);
             v = stack_pointer[-oparg];  /* dict */
             assert (PyDict_CheckExact(v));
             err = PyDict_SetItem(v, w, u);  /* v[w] = u */
@@ -2939,7 +2953,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         {
             w = TOP();
             if (w == Py_True) {
-                STACKADJ(-1);
+                STACK_SHRINK(1);
                 Py_DECREF(w);
                 FAST_DISPATCH();
             }
@@ -2949,7 +2963,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             }
             err = PyObject_IsTrue(w);
             if (err > 0) {
-                STACKADJ(-1);
+                STACK_SHRINK(1);
                 Py_DECREF(w);
                 err = 0;
             }
@@ -2964,7 +2978,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         {
             w = TOP();
             if (w == Py_False) {
-                STACKADJ(-1);
+                STACK_SHRINK(1);
                 Py_DECREF(w);
                 FAST_DISPATCH();
             }
@@ -2978,7 +2992,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 JUMPTO(oparg);
             }
             else if (err == 0) {
-                STACKADJ(-1);
+                STACK_SHRINK(1);
                 Py_DECREF(w);
             }
             else
@@ -3015,7 +3029,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 PREDICT(FOR_ITER);
                 DISPATCH();
             }
-            STACKADJ(-1);
+            STACK_SHRINK(1);
             break;
         }
 
@@ -3258,7 +3272,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 /* There was an exception and a true return */
                 v = SECOND();
                 w = THIRD();
-                STACKADJ(-2);
+                STACK_SHRINK(2);
                 Py_INCREF(Py_None);
                 SET_TOP(Py_None);
                 Py_DECREF(u);
