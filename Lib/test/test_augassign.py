@@ -79,6 +79,15 @@ class AugAssignTest(unittest.TestCase):
         self.assertEqual(x, [1, 2, 1, 2, 3])
         self.assertTrue(x is y)
 
+	x = [1, 2]
+	x += 3, 4
+	self.assertEqual(x, [1, 2, 3, 4])
+
+	z = x := 1, y := 10
+	self.assertEqual(z, [1, 10])
+	z = (x += 1), (y += 1)
+	self.assertEqual(z, [2, 11])
+
     def testCustomMethods1(self):
 
         class aug_test:
