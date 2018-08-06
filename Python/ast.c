@@ -493,6 +493,9 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
 static operator_ty
 ast_for_augassign(struct compiling *c, const node *n)
 {
+    if (TYPE(n) == COLONEQUAL) {
+	return Asgn;
+    }
     REQ(n, augassign);
     n = CHILD(n, 0);
     switch (STR(n)[0]) {
@@ -524,10 +527,9 @@ ast_for_augassign(struct compiling *c, const node *n)
                 return Mult;
         case '@':
             return MatMult;
-	case ':':
-	    return Asgn;
         default:
-            PyErr_Format(PyExc_SystemError, "invalid augassign: %s", STR(n));
+            PyErr_Format(PyExc_SystemError,
+		"invalid augassign: %s", STR(n));
             return (operator_ty)0;
     }
 }
@@ -2133,16 +2135,24 @@ ast_for_expr(struct compiling *c, const node *n)
 
     case test:
 
-	if (TYPE(CHILD(n, 1)) == augassign) {
+	/* Augmented assignment and assignment expressions are
+	  roughly the same, except for operator precedence.
+	  That has been decided at this point, so we can
+	  bring them together.
+	 */
+	if ((TYPE(CHILD(n, 1)) == augassign) ||
+		(TYPE(CHILD(n, 1)) == COLONEQUAL)) {
 	    expr_ty expr1, expr2;
 	    operator_ty newoperator;
 	    node *ch = CHILD(n, 0);
 
-	    expr1 = ast_for_testlist(c, ch);
-	    if (!expr1)
+	    expr1 = ast_for_expr(c, ch);
+	    if (!expr1) {
 		return NULL;
-	    if(!set_context(c, expr1, Store, ch))
+	    }
+	    if (!set_context(c, expr1, Store, ch)) {
 		return NULL;
+	    }
 	    /* set_context checks that most expressions are not the left
 	      side.  Augmented assignments can only have a name, a
 	      subscript, or an attribute on the left, though, so we have
@@ -2161,8 +2171,10 @@ ast_for_expr(struct compiling *c, const node *n)
 
 	    ch = CHILD(n, 2);
 	    if (TYPE(ch) == testlist) {
+		/* List concat, "a = []. a += 2,3" */
 		expr2 = ast_for_testlist(c, ch);
 	    } else {
+		/* Simple augmented op, "a = 1. a += 2" */
 		expr2 = ast_for_expr(c, ch);
 	    }
 	    if (!expr2) {
@@ -2177,15 +2189,20 @@ ast_for_expr(struct compiling *c, const node *n)
 	    return AugAssign(expr1,
 		newoperator, expr2, LINENO(n), n->n_col_offset,
 		c->c_arena);
+	} else {
+
+	    /* vvv Fallthrough vvv */
+
 	}
 
-	/* Fallthrough */
-
     case if_test:
-	if (NCH(n) > 1)
+	if (NCH(n) > 1) {
 	    return ast_for_ifexpr(c, n);
+	} else {
 
-	/* Fallthrough */
+	    /* vvv Fallthrough vvv */
+
+	}
 
     case or_test:
     case and_test:

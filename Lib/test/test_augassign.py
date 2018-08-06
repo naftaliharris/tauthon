@@ -7,16 +7,16 @@ import unittest
 class AugAssignTest(unittest.TestCase):
     def testBasic(self):
         x = 2
-        self.assertEqual(x += 1, 3)
-        self.assertEqual(x *= 2, 6)
-        self.assertEqual(x **= 2, 36)
-        self.assertEqual(x -= 8, 28)
-        self.assertEqual(x //= 5, 5)
-        self.assertEqual(x %= 3, 2)
-        self.assertEqual(x &= 2, 2)
-        self.assertEqual(x |= 5, 7)
-        self.assertEqual(x ^= 1, 6)
-        self.assertEqual(x /= 2, 3)
+        self.assertEqual((x += 1), 3)
+        self.assertEqual((x *= 2), 6)
+        self.assertEqual((x **= 2), 36)
+        self.assertEqual((x -= 8), 28)
+        self.assertEqual((x //= 5), 5)
+        self.assertEqual((x %= 3), 2)
+        self.assertEqual((x &= 2), 2)
+        self.assertEqual((x |= 5), 7)
+        self.assertEqual((x ^= 1), 6)
+        self.assertEqual((x /= 2), 3)
         if 1/2 == 0:
             # classic division
             self.assertEqual(x, 3)
@@ -32,16 +32,16 @@ class AugAssignTest(unittest.TestCase):
 
     def testInList(self):
         x = [2]
-        self.assertEqual(x[0] += 1, 3)
-        self.assertEqual(x[0] *= 2, 6)
-        self.assertEqual(x[0] **= 2, 36)
-        self.assertEqual(x[0] -= 8, 28)
-        self.assertEqual(x[0] //= 5, 5)
-        self.assertEqual(x[0] %= 3, 2)
-        self.assertEqual(x[0] &= 2, 2)
-        self.assertEqual(x[0] |= 5, 7)
-        self.assertEqual(x[0] ^= 1, 6)
-        self.assertEqual(x[0] /= 2, 3)
+        self.assertEqual((x[0] += 1), 3)
+        self.assertEqual((x[0] *= 2), 6)
+        self.assertEqual((x[0] **= 2), 36)
+        self.assertEqual((x[0] -= 8), 28)
+        self.assertEqual((x[0] //= 5), 5)
+        self.assertEqual((x[0] %= 3), 2)
+        self.assertEqual((x[0] &= 2), 2)
+        self.assertEqual((x[0] |= 5), 7)
+        self.assertEqual((x[0] ^= 1), 6)
+        self.assertEqual((x[0] /= 2), 3)
         if 1/2 == 0:
             self.assertEqual(x[0], 3)
         else:
@@ -49,16 +49,16 @@ class AugAssignTest(unittest.TestCase):
 
     def testInDict(self):
         x = {0: 2}
-        self.assertEqual(x[0] += 1, 3)
-        self.assertEqual(x[0] *= 2, 6)
-        self.assertEqual(x[0] **= 2, 36)
-        self.assertEqual(x[0] -= 8, 28)
-        self.assertEqual(x[0] //= 5, 5)
-        self.assertEqual(x[0] %= 3, 2)
-        self.assertEqual(x[0] &= 2, 2)
-        self.assertEqual(x[0] |= 5, 7)
-        self.assertEqual(x[0] ^= 1, 6)
-        self.assertEqual(x[0] /= 2, 3)
+        self.assertEqual((x[0] += 1), 3)
+        self.assertEqual((x[0] *= 2), 6)
+        self.assertEqual((x[0] **= 2), 36)
+        self.assertEqual((x[0] -= 8), 28)
+        self.assertEqual((x[0] //= 5), 5)
+        self.assertEqual((x[0] %= 3), 2)
+        self.assertEqual((x[0] &= 2), 2)
+        self.assertEqual((x[0] |= 5), 7)
+        self.assertEqual((x[0] ^= 1), 6)
+        self.assertEqual((x[0] /= 2), 3)
         if 1/2 == 0:
             self.assertEqual(x[0], 3)
         else:
@@ -66,15 +66,15 @@ class AugAssignTest(unittest.TestCase):
 
     def testSequences(self):
         x = [1,2]
-        self.assertEqual(x += [3,4], [1, 2, 3, 4])
-        self.assertEqual(x *= 2, [1, 2, 3, 4, 1, 2, 3, 4])
+        self.assertEqual((x += [3,4]), [1, 2, 3, 4])
+        self.assertEqual((x *= 2), [1, 2, 3, 4, 1, 2, 3, 4])
 
         self.assertEqual(x, [1, 2, 3, 4, 1, 2, 3, 4])
 
         x = [1, 2, 3]
         y = x
-        self.assertEqual(x[1:2] *= 2, [2, 2])
-        self.assertEqual(y[1:2] += [1], [2, 1])
+        self.assertEqual((x[1:2] *= 2), [2, 2])
+        self.assertEqual((y[1:2] += [1]), [2, 1])
 
         self.assertEqual(x, [1, 2, 1, 2, 3])
         self.assertTrue(x is y)

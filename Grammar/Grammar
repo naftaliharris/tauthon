@@ -95,9 +95,12 @@ old_test: or_test | old_lambdef
 old_lambdef: 'lambda' [varargslist] ':' old_test
 
 augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
-            '<<=' | '>>=' | '**=' | '//=' | ':=')
+            '<<=' | '>>=' | '**=' | '//=')
 
-test: if_test [augassign (yield_expr|test)]
+test: if_test [
+    (augassign (yield_expr|testlist)) |
+    (':=' (yield_expr|test))
+    ]
 if_test: or_test ['if' or_test 'else' if_test] | lambdef
 or_test: and_test ('or' and_test)*
 and_test: not_test ('and' not_test)*
