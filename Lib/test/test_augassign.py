@@ -47,6 +47,18 @@ class AugAssignTest(unittest.TestCase):
         else:
             self.assertEqual(x[0], 3.0)
 
+        self.assertEqual((x[0] := 9), 9)
+        self.assertEqual(x[0], 9)
+	x = [1, 2, 3, 4, 5]
+	self.assertEqual(x[1:3] := [8, 9], [8, 9])
+	self.assertEqual(x, [1, 8, 9, 4, 5])
+
+	x = list(range(10))
+	self.assertEqual(x[2:6:2] := [9, 10], [9, 10])
+	self.assertEqual(x, [0, 1, 9, 3, 10, 5, 6, 7, 8, 9])
+	self.assertEqual(x[2:4] := [10, 11, 12], [10, 11, 12])
+	self.assertEqual(x, [0, 1, 10, 11, 12, 10, 5, 6, 7, 8, 9])
+
     def testInDict(self):
         x = {0: 2}
         self.assertEqual((x[0] += 1), 3)
@@ -63,6 +75,7 @@ class AugAssignTest(unittest.TestCase):
             self.assertEqual(x[0], 3)
         else:
             self.assertEqual(x[0], 3.0)
+        self.assertEqual((x[0] := 9), 9)
 
     def testSequences(self):
         x = [1,2]
@@ -84,9 +97,9 @@ class AugAssignTest(unittest.TestCase):
 	self.assertEqual(x, [1, 2, 3, 4])
 
 	z = x := 1, y := 10
-	self.assertEqual(z, [1, 10])
+	self.assertEqual(z, (1, 10))
 	z = (x += 1), (y += 1)
-	self.assertEqual(z, [2, 11])
+	self.assertEqual(z, (2, 11))
 
     def testCustomMethods1(self):
 
