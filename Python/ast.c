@@ -460,6 +460,9 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
         case IfExp_kind:
             expr_name = "conditional expression";
             break;
+	case AugAssign_kind:
+            expr_name = "augmented assignment";
+            break;
         default:
             PyErr_Format(PyExc_SystemError,
                          "unexpected expression in assignment %d (line %d)",
