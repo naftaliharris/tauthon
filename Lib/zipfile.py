@@ -193,6 +193,9 @@ def _EndRecData64(fpin, offset, endrec):
     endrec[_ECD_DISK_START] = disk_dir
     endrec[_ECD_ENTRIES_THIS_DISK] = dircount
     endrec[_ECD_ENTRIES_TOTAL] = dircount2
+    if _ECD_SIZE >= len(endrec):
+        sys.stderr.write("%s from %s idx %d too long\n" %
+            (endrec, fpin, _ECD_SIZE))
     endrec[_ECD_SIZE] = dirsize
     endrec[_ECD_OFFSET] = diroffset
     return endrec
