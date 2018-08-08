@@ -460,6 +460,9 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
         case IfExp_kind:
             expr_name = "conditional expression";
             break;
+	case AugAssign_kind:
+            expr_name = "augmented assignment";
+            break;
         default:
             PyErr_Format(PyExc_SystemError,
                          "unexpected expression in assignment %d (line %d)",
@@ -493,6 +496,9 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
 static operator_ty
 ast_for_augassign(struct compiling *c, const node *n)
 {
+    if (TYPE(n) == COLONEQUAL) {
+	return Asgn;
+    }
     REQ(n, augassign);
     n = CHILD(n, 0);
     switch (STR(n)[0]) {
@@ -525,7 +531,8 @@ ast_for_augassign(struct compiling *c, const node *n)
         case '@':
             return MatMult;
         default:
-            PyErr_Format(PyExc_SystemError, "invalid augassign: %s", STR(n));
+            PyErr_Format(PyExc_SystemError,
+		"invalid augassign: %s", STR(n));
             return (operator_ty)0;
     }
 }
@@ -2085,7 +2092,10 @@ static expr_ty
 ast_for_expr(struct compiling *c, const node *n)
 {
     /* handle the full range of simple expressions
-       test: or_test ['if' or_test 'else' test] | lambdef
+       test: if_test [augassign (yield_expr|test)]
+       augassign: '+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^='
+                | '<<=' | '>>=' | '**=' | '//=' | ':='
+       if_test: or_test ['if' or_test 'else' test] | lambdef
        or_test: and_test ('or' and_test)*
        and_test: not_test ('and' not_test)*
        not_test: 'not' not_test | comparison
@@ -2116,137 +2126,210 @@ ast_for_expr(struct compiling *c, const node *n)
 
  loop:
     switch (TYPE(n)) {
-        case test:
-        case old_test:
-            if (TYPE(CHILD(n, 0)) == lambdef ||
-                TYPE(CHILD(n, 0)) == old_lambdef)
-                return ast_for_lambdef(c, CHILD(n, 0));
-            else if (NCH(n) > 1)
-                return ast_for_ifexpr(c, n);
-            /* Fallthrough */
-        case or_test:
-        case and_test:
-            if (NCH(n) == 1) {
-                n = CHILD(n, 0);
-                goto loop;
-            }
-            seq = asdl_seq_new((NCH(n) + 1) / 2, c->c_arena);
-            if (!seq)
-                return NULL;
-            for (i = 0; i < NCH(n); i += 2) {
-                expr_ty e = ast_for_expr(c, CHILD(n, i));
-                if (!e)
-                    return NULL;
-                asdl_seq_SET(seq, i / 2, e);
-            }
-            if (!strcmp(STR(CHILD(n, 1)), "and"))
-                return BoolOp(And, seq, LINENO(n), n->n_col_offset,
-                              c->c_arena);
-            assert(!strcmp(STR(CHILD(n, 1)), "or"));
-            return BoolOp(Or, seq, LINENO(n), n->n_col_offset, c->c_arena);
-        case not_test:
-            if (NCH(n) == 1) {
-                n = CHILD(n, 0);
-                goto loop;
-            }
-            else {
-                expr_ty expression = ast_for_expr(c, CHILD(n, 1));
-                if (!expression)
-                    return NULL;
 
-                return UnaryOp(Not, expression, LINENO(n), n->n_col_offset,
-                               c->c_arena);
-            }
-        case comparison:
-            if (NCH(n) == 1) {
-                n = CHILD(n, 0);
-                goto loop;
-            }
-            else {
-                expr_ty expression;
-                asdl_int_seq *ops;
-                asdl_seq *cmps;
-                ops = asdl_int_seq_new(NCH(n) / 2, c->c_arena);
-                if (!ops)
-                    return NULL;
-                cmps = asdl_seq_new(NCH(n) / 2, c->c_arena);
-                if (!cmps) {
-                    return NULL;
-                }
-                for (i = 1; i < NCH(n); i += 2) {
-                    cmpop_ty newoperator;
+    case lambdef:
+	return ast_for_lambdef(c, n);
 
-                    newoperator = ast_for_comp_op(c, CHILD(n, i));
-                    if (!newoperator) {
-                        return NULL;
-                    }
+    case old_test:
+	if (TYPE(CHILD(n, 0)) == lambdef ||
+	    TYPE(CHILD(n, 0)) == old_lambdef)
+	    return ast_for_lambdef(c, CHILD(n, 0));
+	/* vvv fall into vvv */
 
-                    expression = ast_for_expr(c, CHILD(n, i + 1));
-                    if (!expression) {
-                        return NULL;
-                    }
+    case test:
 
-                    asdl_seq_SET(ops, i / 2, newoperator);
-                    asdl_seq_SET(cmps, i / 2, expression);
-                }
-                expression = ast_for_expr(c, CHILD(n, 0));
-                if (!expression) {
-                    return NULL;
-                }
+	/* Augmented assignment and assignment expressions are
+	  roughly the same, except for operator precedence.
+	  That has been decided at this point, so we can
+	  bring them together.
+	 */
+	if ((TYPE(CHILD(n, 1)) == augassign) ||
+		(TYPE(CHILD(n, 1)) == COLONEQUAL)) {
+	    expr_ty expr1, expr2;
+	    operator_ty newoperator;
+	    node *ch = CHILD(n, 0);
 
-                return Compare(expression, ops, cmps, LINENO(n),
-                               n->n_col_offset, c->c_arena);
-            }
-            break;
+	    expr1 = ast_for_expr(c, ch);
+	    if (!expr1) {
+		return NULL;
+	    }
+	    if (!set_context(c, expr1, Store, ch)) {
+		return NULL;
+	    }
+	    /* set_context checks that most expressions are not the left
+	      side.  Augmented assignments can only have a name, a
+	      subscript, or an attribute on the left, though, so we have
+	      to explicitly check for those.
+	     */
+	    switch (expr1->kind) {
+		case Name_kind:
+		case Attribute_kind:
+		case Subscript_kind:
+		    break;
+		default:
+		    ast_error(ch,
+		     "illegal expression for augmented assignment");
+		    return NULL;
+	    }
 
-        /* The next five cases all handle BinOps.  The main body of code
-           is the same in each case, but the switch turned inside out to
-           reuse the code for each type of operator.
-         */
-        case expr:
-        case xor_expr:
-        case and_expr:
-        case shift_expr:
-        case arith_expr:
-        case term:
-            if (NCH(n) == 1) {
-                n = CHILD(n, 0);
-                goto loop;
-            }
-            return ast_for_binop(c, n);
-        case yield_expr: {
-            node *an = NULL;
-            node *en = NULL;
-            int is_from = 0;
-            expr_ty exp = NULL;
-            if (NCH(n) > 1)
-                an = CHILD(n, 1); /* yield_arg */
-            if (an) {
-                en = CHILD(an, NCH(an) - 1);
-                if (NCH(an) == 2) {
-                    is_from = 1;
-                    exp = ast_for_expr(c, en);
-                }
-                else
-                    exp = ast_for_testlist(c, en);
-                if (!exp)
-                    return NULL;
-            }
-            if (is_from)
-                return YieldFrom(exp, LINENO(n), n->n_col_offset, c->c_arena);
-            return Yield(exp, LINENO(n), n->n_col_offset, c->c_arena);
-        }
-        case factor:
-            if (NCH(n) == 1) {
-                n = CHILD(n, 0);
-                goto loop;
-            }
-            return ast_for_factor(c, n);
-        case power:
-            return ast_for_power(c, n);
-        default:
-            PyErr_Format(PyExc_SystemError, "unhandled expr: %d", TYPE(n));
-            return NULL;
+	    ch = CHILD(n, 2);
+	    if (TYPE(ch) == testlist) {
+		/* List concat, "a = []. a += 2,3" */
+		expr2 = ast_for_testlist(c, ch);
+	    } else {
+		/* Simple augmented op, "a = 1. a += 2" */
+		expr2 = ast_for_expr(c, ch);
+	    }
+	    if (!expr2) {
+		return NULL;
+	    }
+
+	    newoperator = ast_for_augassign(c, CHILD(n, 1));
+	    if (!newoperator) {
+		return NULL;
+	    }
+
+	    return AugAssign(expr1,
+		newoperator, expr2, LINENO(n), n->n_col_offset,
+		c->c_arena);
+	} else {
+
+	    /* vvv Fallthrough vvv */
+
+	}
+
+    case if_test:
+	if (NCH(n) > 1) {
+	    return ast_for_ifexpr(c, n);
+	} else {
+
+	    /* vvv Fallthrough vvv */
+
+	}
+
+    case or_test:
+    case and_test:
+	if (NCH(n) == 1) {
+	    n = CHILD(n, 0);
+	    goto loop;
+	}
+	seq = asdl_seq_new((NCH(n) + 1) / 2, c->c_arena);
+	if (!seq)
+	    return NULL;
+	for (i = 0; i < NCH(n); i += 2) {
+	    expr_ty e = ast_for_expr(c, CHILD(n, i));
+	    if (!e)
+		return NULL;
+	    asdl_seq_SET(seq, i / 2, e);
+	}
+	if (!strcmp(STR(CHILD(n, 1)), "and"))
+	    return BoolOp(And, seq, LINENO(n), n->n_col_offset,
+			  c->c_arena);
+	assert(!strcmp(STR(CHILD(n, 1)), "or"));
+	return BoolOp(Or, seq, LINENO(n), n->n_col_offset, c->c_arena);
+    case not_test:
+	if (NCH(n) == 1) {
+	    n = CHILD(n, 0);
+	    goto loop;
+	}
+	else {
+	    expr_ty expression = ast_for_expr(c, CHILD(n, 1));
+	    if (!expression)
+		return NULL;
+
+	    return UnaryOp(Not, expression, LINENO(n), n->n_col_offset,
+			   c->c_arena);
+	}
+    case comparison:
+	if (NCH(n) == 1) {
+	    n = CHILD(n, 0);
+	    goto loop;
+	}
+	else {
+	    expr_ty expression;
+	    asdl_int_seq *ops;
+	    asdl_seq *cmps;
+	    ops = asdl_int_seq_new(NCH(n) / 2, c->c_arena);
+	    if (!ops)
+		return NULL;
+	    cmps = asdl_seq_new(NCH(n) / 2, c->c_arena);
+	    if (!cmps) {
+		return NULL;
+	    }
+	    for (i = 1; i < NCH(n); i += 2) {
+		cmpop_ty newoperator;
+
+		newoperator = ast_for_comp_op(c, CHILD(n, i));
+		if (!newoperator) {
+		    return NULL;
+		}
+
+		expression = ast_for_expr(c, CHILD(n, i + 1));
+		if (!expression) {
+		    return NULL;
+		}
+
+		asdl_seq_SET(ops, i / 2, newoperator);
+		asdl_seq_SET(cmps, i / 2, expression);
+	    }
+	    expression = ast_for_expr(c, CHILD(n, 0));
+	    if (!expression) {
+		return NULL;
+	    }
+
+	    return Compare(expression, ops, cmps, LINENO(n),
+			   n->n_col_offset, c->c_arena);
+	}
+	break;
+
+    /* The next five cases all handle BinOps.  The main body of code
+       is the same in each case, but the switch turned inside out to
+       reuse the code for each type of operator.
+     */
+    case expr:
+    case xor_expr:
+    case and_expr:
+    case shift_expr:
+    case arith_expr:
+    case term:
+	if (NCH(n) == 1) {
+	    n = CHILD(n, 0);
+	    goto loop;
+	}
+	return ast_for_binop(c, n);
+    case yield_expr: {
+	node *an = NULL;
+	node *en = NULL;
+	int is_from = 0;
+	expr_ty exp = NULL;
+	if (NCH(n) > 1)
+	    an = CHILD(n, 1); /* yield_arg */
+	if (an) {
+	    en = CHILD(an, NCH(an) - 1);
+	    if (NCH(an) == 2) {
+		is_from = 1;
+		exp = ast_for_expr(c, en);
+	    }
+	    else
+		exp = ast_for_testlist(c, en);
+	    if (!exp)
+		return NULL;
+	}
+	if (is_from)
+	    return YieldFrom(exp, LINENO(n), n->n_col_offset, c->c_arena);
+	return Yield(exp, LINENO(n), n->n_col_offset, c->c_arena);
+    }
+    case factor:
+	if (NCH(n) == 1) {
+	    n = CHILD(n, 0);
+	    goto loop;
+	}
+	return ast_for_factor(c, n);
+    case power:
+	return ast_for_power(c, n);
+    default:
+	PyErr_Format(PyExc_SystemError, "unhandled expr: %d", TYPE(n));
+	return NULL;
     }
     /* should never get here unless if error is set */
     return NULL;
@@ -2430,11 +2513,8 @@ static stmt_ty
 ast_for_expr_stmt(struct compiling *c, const node *n)
 {
     REQ(n, expr_stmt);
-    /* expr_stmt: testlist (augassign (yield_expr|testlist)
-                | ('=' (yield_expr|testlist))*)
+    /* expr_stmt: testlist ('=' (yield_expr|testlist))*
        testlist: test (',' test)* [',']
-       augassign: '+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^='
-                | '<<=' | '>>=' | '**=' | '//='
        test: ... here starts the operator precedence dance
      */
 
@@ -2444,47 +2524,8 @@ ast_for_expr_stmt(struct compiling *c, const node *n)
             return NULL;
 
         return Expr(e, LINENO(n), n->n_col_offset, c->c_arena);
-    }
-    else if (TYPE(CHILD(n, 1)) == augassign) {
-        expr_ty expr1, expr2;
-        operator_ty newoperator;
-        node *ch = CHILD(n, 0);
 
-        expr1 = ast_for_testlist(c, ch);
-        if (!expr1)
-            return NULL;
-        if(!set_context(c, expr1, Store, ch))
-            return NULL;
-        /* set_context checks that most expressions are not the left side.
-          Augmented assignments can only have a name, a subscript, or an
-          attribute on the left, though, so we have to explicitly check for
-          those. */
-        switch (expr1->kind) {
-            case Name_kind:
-            case Attribute_kind:
-            case Subscript_kind:
-                break;
-            default:
-                ast_error(ch, "illegal expression for augmented assignment");
-                return NULL;
-        }
-
-        ch = CHILD(n, 2);
-        if (TYPE(ch) == testlist)
-            expr2 = ast_for_testlist(c, ch);
-        else
-            expr2 = ast_for_expr(c, ch);
-        if (!expr2)
-            return NULL;
-
-        newoperator = ast_for_augassign(c, CHILD(n, 1));
-        if (!newoperator)
-            return NULL;
-
-        return AugAssign(expr1, newoperator, expr2, LINENO(n), n->n_col_offset,
-                         c->c_arena);
-    }
-    else {
+    } else {
         int i;
         asdl_seq *targets;
         node *value;

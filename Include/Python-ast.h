@@ -17,7 +17,7 @@ typedef enum _boolop { And=1, Or=2 } boolop_ty;
 
 typedef enum _operator { Add=1, Sub=2, Mult=3, MatMult=4, Div=5, Mod=6, Pow=7,
                          LShift=8, RShift=9, BitOr=10, BitXor=11, BitAnd=12,
-                         FloorDiv=13 } operator_ty;
+                         FloorDiv=13, Asgn=14 } operator_ty;
 
 typedef enum _unaryop { Invert=1, Not=2, UAdd=3, USub=4 } unaryop_ty;
 
@@ -64,13 +64,13 @@ struct _mod {
 };
 
 enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
-                  Return_kind=4, Delete_kind=5, Assign_kind=6,
-                  AugAssign_kind=7, Print_kind=8, For_kind=9, AsyncFor_kind=10,
-                  While_kind=11, If_kind=12, With_kind=13, AsyncWith_kind=14,
-                  Raise_kind=15, TryExcept_kind=16, TryFinally_kind=17,
-                  Assert_kind=18, Import_kind=19, ImportFrom_kind=20,
-                  Exec_kind=21, Global_kind=22, Nonlocal_kind=23, Expr_kind=24,
-                  Pass_kind=25, Break_kind=26, Continue_kind=27};
+                  Return_kind=4, Delete_kind=5, Assign_kind=6, Print_kind=7,
+                  For_kind=8, AsyncFor_kind=9, While_kind=10, If_kind=11,
+                  With_kind=12, AsyncWith_kind=13, Raise_kind=14,
+                  TryExcept_kind=15, TryFinally_kind=16, Assert_kind=17,
+                  Import_kind=18, ImportFrom_kind=19, Exec_kind=20,
+                  Global_kind=21, Nonlocal_kind=22, Expr_kind=23, Pass_kind=24,
+                  Break_kind=25, Continue_kind=26};
 struct _stmt {
         enum _stmt_kind kind;
         union {
@@ -112,12 +112,6 @@ struct _stmt {
                         asdl_seq *targets;
                         expr_ty value;
                 } Assign;
-                
-                struct {
-                        expr_ty target;
-                        operator_ty op;
-                        expr_ty value;
-                } AugAssign;
                 
                 struct {
                         expr_ty dest;
@@ -216,13 +210,13 @@ struct _stmt {
         int col_offset;
 };
 
-enum _expr_kind {BoolOp_kind=1, BinOp_kind=2, UnaryOp_kind=3, Lambda_kind=4,
-                  IfExp_kind=5, Dict_kind=6, Set_kind=7, ListComp_kind=8,
-                  SetComp_kind=9, DictComp_kind=10, GeneratorExp_kind=11,
-                  Await_kind=12, Yield_kind=13, YieldFrom_kind=14,
-                  Compare_kind=15, Call_kind=16, Repr_kind=17, Num_kind=18,
-                  Str_kind=19, Attribute_kind=20, Subscript_kind=21,
-                  Name_kind=22, List_kind=23, Tuple_kind=24};
+enum _expr_kind {BoolOp_kind=1, BinOp_kind=2, UnaryOp_kind=3, AugAssign_kind=4,
+                  Lambda_kind=5, IfExp_kind=6, Dict_kind=7, Set_kind=8,
+                  ListComp_kind=9, SetComp_kind=10, DictComp_kind=11,
+                  GeneratorExp_kind=12, Await_kind=13, Yield_kind=14,
+                  YieldFrom_kind=15, Compare_kind=16, Call_kind=17,
+                  Repr_kind=18, Num_kind=19, Str_kind=20, Attribute_kind=21,
+                  Subscript_kind=22, Name_kind=23, List_kind=24, Tuple_kind=25};
 struct _expr {
         enum _expr_kind kind;
         union {
@@ -241,6 +235,12 @@ struct _expr {
                         unaryop_ty op;
                         expr_ty operand;
                 } UnaryOp;
+                
+                struct {
+                        expr_ty target;
+                        operator_ty op;
+                        expr_ty value;
+                } AugAssign;
                 
                 struct {
                         arguments_ty args;
@@ -467,9 +467,6 @@ stmt_ty _Py_Delete(asdl_seq * targets, int lineno, int col_offset, PyArena
 #define Assign(a0, a1, a2, a3, a4) _Py_Assign(a0, a1, a2, a3, a4)
 stmt_ty _Py_Assign(asdl_seq * targets, expr_ty value, int lineno, int
                    col_offset, PyArena *arena);
-#define AugAssign(a0, a1, a2, a3, a4, a5) _Py_AugAssign(a0, a1, a2, a3, a4, a5)
-stmt_ty _Py_AugAssign(expr_ty target, operator_ty op, expr_ty value, int
-                      lineno, int col_offset, PyArena *arena);
 #define Print(a0, a1, a2, a3, a4, a5) _Py_Print(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_Print(expr_ty dest, asdl_seq * values, bool nl, int lineno, int
                   col_offset, PyArena *arena);
@@ -535,6 +532,9 @@ expr_ty _Py_BinOp(expr_ty left, operator_ty op, expr_ty right, int lineno, int
 #define UnaryOp(a0, a1, a2, a3, a4) _Py_UnaryOp(a0, a1, a2, a3, a4)
 expr_ty _Py_UnaryOp(unaryop_ty op, expr_ty operand, int lineno, int col_offset,
                     PyArena *arena);
+#define AugAssign(a0, a1, a2, a3, a4, a5) _Py_AugAssign(a0, a1, a2, a3, a4, a5)
+expr_ty _Py_AugAssign(expr_ty target, operator_ty op, expr_ty value, int
+                      lineno, int col_offset, PyArena *arena);
 #define Lambda(a0, a1, a2, a3, a4) _Py_Lambda(a0, a1, a2, a3, a4)
 expr_ty _Py_Lambda(arguments_ty args, expr_ty body, int lineno, int col_offset,
                    PyArena *arena);

@@ -1757,35 +1757,10 @@ validate_expr_stmt(node *tree)
                && is_odd(nch)
                && validate_testlist(CHILD(tree, 0)));
 
-    if (res && nch == 3
-        && TYPE(CHILD(tree, 1)) == augassign) {
-        res = validate_numnodes(CHILD(tree, 1), 1, "augassign")
-                && validate_yield_or_testlist(CHILD(tree, 2));
+    for (j = 1; res && (j < nch); j += 2)
+        res = validate_equal(CHILD(tree, j))
+               && validate_yield_or_testlist(CHILD(tree, j + 1));
 
-        if (res) {
-            char *s = STR(CHILD(CHILD(tree, 1), 0));
-
-            res = (strcmp(s, "+=") == 0
-                   || strcmp(s, "-=") == 0
-                   || strcmp(s, "*=") == 0
-                   || strcmp(s, "/=") == 0
-                   || strcmp(s, "//=") == 0
-                   || strcmp(s, "%=") == 0
-                   || strcmp(s, "&=") == 0
-                   || strcmp(s, "|=") == 0
-                   || strcmp(s, "^=") == 0
-                   || strcmp(s, "<<=") == 0
-                   || strcmp(s, ">>=") == 0
-                   || strcmp(s, "**=") == 0);
-            if (!res)
-                err_string("illegal augmented assignment operator");
-        }
-    }
-    else {
-        for (j = 1; res && (j < nch); j += 2)
-            res = validate_equal(CHILD(tree, j))
-                   && validate_yield_or_testlist(CHILD(tree, j + 1));
-    }
     return (res);
 }
 
@@ -2343,22 +2318,81 @@ validate_except_clause(node *tree)
 
 
 static int
+validate_yield_or_test(node *tree)
+{
+    if (TYPE(tree) == yield_expr) {
+        return validate_yield_expr(tree);
+    } else {
+        return validate_test(tree);
+    }
+}
+
+static int validate_if_test(node *tree);
+
+static int
 validate_test(node *tree)
 {
     int nch = NCH(tree);
     int res = validate_ntype(tree, test) && is_odd(nch);
 
-    if (res && (TYPE(CHILD(tree, 0)) == lambdef))
+    if (res) {
+        res = validate_if_test(CHILD(tree, 0));
+    }
+
+    if (res && (nch == 3)) {
+	node *ch = CHILD(tree, 1);
+
+	if (TYPE(ch) == COLONEQUAL) {
+	    res = validate_yield_or_test(CHILD(tree, 2));
+
+	} else if (TYPE(ch) == augassign) {
+	    res = validate_numnodes(CHILD(tree, 1), 1, "augassign")
+		    && validate_yield_or_testlist(CHILD(tree, 2));
+
+	    if (res) {
+		char *s = STR(CHILD(CHILD(tree, 1), 0));
+
+		res = (strcmp(s, "+=") == 0
+		       || strcmp(s, "-=") == 0
+		       || strcmp(s, "*=") == 0
+		       || strcmp(s, "/=") == 0
+		       || strcmp(s, "//=") == 0
+		       || strcmp(s, "%=") == 0
+		       || strcmp(s, "&=") == 0
+		       || strcmp(s, "|=") == 0
+		       || strcmp(s, "^=") == 0
+		       || strcmp(s, "<<=") == 0
+		       || strcmp(s, ">>=") == 0
+		       || strcmp(s, "**=") == 0);
+		if (!res)
+		    err_string("illegal augmented assignment operator");
+	    }
+	}
+    }
+
+    return (res);
+}
+
+static int
+validate_if_test(node *tree)
+{
+    int nch = NCH(tree);
+    int res = validate_ntype(tree, if_test);
+
+    if (res && (TYPE(CHILD(tree, 0)) == lambdef)) {
         res = ((nch == 1)
                && validate_lambdef(CHILD(tree, 0)));
-    else if (res) {
-        res = validate_or_test(CHILD(tree, 0));
-        res = (res && (nch == 1 || (nch == 5 &&
-            validate_name(CHILD(tree, 1), "if") &&
-            validate_or_test(CHILD(tree, 2)) &&
-            validate_name(CHILD(tree, 3), "else") &&
-            validate_test(CHILD(tree, 4)))));
+        return res;
     }
+
+    if (res) {
+        res = validate_or_test(CHILD(tree, 0));
+    }
+    res = (res && (nch == 1 || (nch == 5 &&
+        validate_name(CHILD(tree, 1), "if") &&
+        validate_or_test(CHILD(tree, 2)) &&
+        validate_name(CHILD(tree, 3), "else") &&
+        validate_if_test(CHILD(tree, 4)))));
     return (res);
 }
 

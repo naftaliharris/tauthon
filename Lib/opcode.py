@@ -49,6 +49,7 @@ def_op('ROT_TWO', 2)
 def_op('ROT_THREE', 3)
 def_op('DUP_TOP', 4)
 def_op('ROT_FOUR', 5)
+def_op('ROT_FIVE', 6)
 
 def_op('NOP', 9)
 def_op('UNARY_POSITIVE', 10)
@@ -57,7 +58,6 @@ def_op('UNARY_NOT', 12)
 def_op('UNARY_CONVERT', 13)
 
 def_op('UNARY_INVERT', 15)
-
 def_op('BINARY_MATRIX_MULTIPLY', 16)
 def_op('INPLACE_MATRIX_MULTIPLY', 17)
 
@@ -81,19 +81,16 @@ def_op('STORE_SLICE+0', 40)
 def_op('STORE_SLICE+1', 41)
 def_op('STORE_SLICE+2', 42)
 def_op('STORE_SLICE+3', 43)
-
 def_op('WITH_CLEANUP_FINISH', 44)
 def_op('GET_AITER', 45)
 def_op('GET_ANEXT', 46)
 def_op('BEFORE_ASYNC_WITH', 47)
 def_op('GET_YIELD_FROM_ITER', 48)
 def_op('GET_AWAITABLE', 49)
-
 def_op('DELETE_SLICE+0', 50)
 def_op('DELETE_SLICE+1', 51)
 def_op('DELETE_SLICE+2', 52)
 def_op('DELETE_SLICE+3', 53)
-
 def_op('STORE_MAP', 54)
 def_op('INPLACE_ADD', 55)
 def_op('INPLACE_SUBTRACT', 56)
@@ -110,7 +107,6 @@ def_op('BINARY_OR', 66)
 def_op('INPLACE_POWER', 67)
 def_op('GET_ITER', 68)
 def_op('YIELD_FROM', 69)
-
 def_op('PRINT_EXPR', 70)
 def_op('PRINT_ITEM', 71)
 def_op('PRINT_NEWLINE', 72)

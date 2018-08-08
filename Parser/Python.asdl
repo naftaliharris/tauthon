@@ -25,7 +25,6 @@ module Python version "$Revision$"
 
 	      | Delete(expr* targets)
 	      | Assign(expr* targets, expr value)
-	      | AugAssign(expr target, operator op, expr value)
 
 	      -- not sure if bool is allowed, can always use int
  	      | Print(expr? dest, expr* values, bool nl)
@@ -65,6 +64,7 @@ module Python version "$Revision$"
 	expr = BoolOp(boolop op, expr* values)
 	     | BinOp(expr left, operator op, expr right)
 	     | UnaryOp(unaryop op, expr operand)
+	     | AugAssign(expr target, operator op, expr value)
 	     | Lambda(arguments args, expr body)
 	     | IfExp(expr test, expr body, expr orelse)
 	     | Dict(expr* keys, expr* values)
@@ -106,7 +106,7 @@ module Python version "$Revision$"
 	boolop = And | Or 
 
 	operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
-                 | RShift | BitOr | BitXor | BitAnd | FloorDiv
+                 | RShift | BitOr | BitXor | BitAnd | FloorDiv | Asgn
 
 	unaryop = Invert | Not | UAdd | USub
 

@@ -1201,10 +1201,6 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         VISIT_SEQ(st, expr, s->v.Assign.targets);
         VISIT(st, expr, s->v.Assign.value);
         break;
-    case AugAssign_kind:
-        VISIT(st, expr, s->v.AugAssign.target);
-        VISIT(st, expr, s->v.AugAssign.value);
-        break;
     case Print_kind:
         if (s->v.Print.dest)
             VISIT(st, expr, s->v.Print.dest);
@@ -1473,6 +1469,10 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         break;
     case Tuple_kind:
         VISIT_SEQ(st, expr, e->v.Tuple.elts);
+        break;
+    case AugAssign_kind:
+        VISIT(st, expr, e->v.AugAssign.target);
+        VISIT(st, expr, e->v.AugAssign.value);
         break;
     }
     return 1;

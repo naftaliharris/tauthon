@@ -1065,6 +1065,73 @@ The ``|`` operator yields the bitwise (inclusive) OR of its arguments, which
 must be plain or long integers.  The arguments are converted to a common type.
 
 
+.. _augassign:
+
+Augmented assignment expressions
+================================
+
+.. index::
+   pair: augmented; assignment
+   single: +=; augmented assignment
+   single: -=; augmented assignment
+   single: *=; augmented assignment
+   single: @=; augmented assignment
+   single: /=; augmented assignment
+   single: %=; augmented assignment
+   single: &=; augmented assignment
+   single: ^=; augmented assignment
+   single: |=; augmented assignment
+   single: **=; augmented assignment
+   single: //=; augmented assignment
+   single: >>=; augmented assignment
+   single: <<=; augmented assignment
+   single: :=; augmented assignment
+
+Augmented assignment is the combination, in a single expression, of a binary
+operation and an assignment operation:
+
+.. productionlist::
+   augmented_assignment: `augtarget` `augop` (`expression_list` | `yield_expression`)
+   augtarget: `identifier` | `attributeref` | `subscription` | `slicing`
+   augop: "+=" | "-=" | "*=" | "@=" | "/=" | "//=" | "%=" | "**="
+        : | ">>=" | "<<=" | "&=" | "^=" | "|=" | ":="
+
+(See section :ref:`primaries` for the syntax definitions for the last three
+symbols.)
+
+An augmented assignment evaluates the target (which, unlike normal assignment
+statements, cannot be an unpacking) and the expression list, performs the binary
+operation specific to the type of assignment on the two operands, and assigns
+the result to the original target.  The target is only evaluated once.
+The value of the expression is the value stored to the target.
+
+As a special case, the ``:=`` operation does not use the target's
+original value, and can thus be used to introduce a new variable.
+
+An augmented assignment expression like ``x += 1`` can
+be rewritten as ``x := x + 1``
+to achieve a similar, but not exactly equal effect. In the former
+version, ``x`` is only evaluated once. Also, when possible, the actual operation
+is performed *in-place*, meaning that rather than creating a new object and
+assigning that to the target, the old object is modified instead.
+
+With the exception of assigning to tuples and multiple targets in a single
+statement, the assignment done by augmented assignment expressions
+is handled the
+same way as normal assignments. Similarly, with the exception of the possible
+*in-place* behavior, the binary operation performed by augmented assignment is
+the same as the normal binary operations.
+
+For targets which are attribute references, the same :ref:`caveat about class
+and instance attributes <attr-target-note>` applies as for regular assignments.
+
+For compatibility with existing scripts, augmented assignment
+expressions do *not* auto-print their value when evaluated as
+the top-level expression of an interactive script.  Use the
+``print`` statement if you desire the resulting value to
+be printed.
+
+
 .. _comparisons:
 
 Comparisons

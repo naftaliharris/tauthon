@@ -173,7 +173,7 @@ static PyCodeObject *compiler_mod(struct compiler *, mod_ty);
 static int compiler_visit_stmt(struct compiler *, stmt_ty);
 static int compiler_visit_keyword(struct compiler *, keyword_ty);
 static int compiler_visit_expr(struct compiler *, expr_ty);
-static int compiler_augassign(struct compiler *, stmt_ty);
+static int compiler_augassign(struct compiler *, expr_ty);
 static int compiler_visit_slice(struct compiler *, slice_ty,
                                 expr_context_ty);
 
@@ -752,6 +752,7 @@ opcode_stack_effect(int opcode, int oparg)
         case DUP_TOP:
             return 1;
         case ROT_FOUR:
+        case ROT_FIVE:
             return 0;
 
         case UNARY_POSITIVE:
@@ -2532,8 +2533,6 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
                   (expr_ty)asdl_seq_GET(s->v.Assign.targets, i));
         }
         break;
-    case AugAssign_kind:
-        return compiler_augassign(c, s);
     case Print_kind:
         return compiler_print(c, s);
     case For_kind:
@@ -2589,7 +2588,15 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case Expr_kind:
         if (c->c_interactive && c->c_nestlevel <= 1) {
             VISIT(c, expr, s->v.Expr.value);
-            ADDOP(c, PRINT_EXPR);
+	    if (s->v.Expr.value->kind == AugAssign_kind) {
+		/*
+		 * For historical compatibility, don't print values
+		 *  of augmented assign ops
+		 */
+		ADDOP(c, POP_TOP);
+	    } else {
+		ADDOP(c, PRINT_EXPR);
+	    }
         }
         else if (s->v.Expr.value->kind != Str_kind &&
                  s->v.Expr.value->kind != Num_kind) {
@@ -3672,47 +3679,135 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
         return compiler_list(c, e);
     case Tuple_kind:
         return compiler_tuple(c, e);
+    case AugAssign_kind:
+        return compiler_augassign(c, e);
     }
     return 1;
 }
 
 static int
-compiler_augassign(struct compiler *c, stmt_ty s)
+compiler_augassign_simple(struct compiler *c, expr_ty s)
 {
     expr_ty e = s->v.AugAssign.target;
     expr_ty auge;
 
-    assert(s->kind == AugAssign_kind);
-
     switch (e->kind) {
     case Attribute_kind:
-        auge = Attribute(e->v.Attribute.value, e->v.Attribute.attr,
-                         AugLoad, e->lineno, e->col_offset, c->c_arena);
-        if (auge == NULL)
-            return 0;
-        VISIT(c, expr, auge);
         VISIT(c, expr, s->v.AugAssign.value);
-        ADDOP(c, inplace_binop(c, s->v.AugAssign.op));
-        auge->v.Attribute.ctx = AugStore;
+	ADDOP(c, DUP_TOP);
+	auge = Attribute(e->v.Attribute.value, e->v.Attribute.attr,
+		     Store, e->lineno, e->col_offset, c->c_arena);
+	if (auge == NULL) {
+	    return 0;
+	}
         VISIT(c, expr, auge);
         break;
+
     case Subscript_kind:
-        auge = Subscript(e->v.Subscript.value, e->v.Subscript.slice,
-                         AugLoad, e->lineno, e->col_offset, c->c_arena);
-        if (auge == NULL)
-            return 0;
-        VISIT(c, expr, auge);
         VISIT(c, expr, s->v.AugAssign.value);
-        ADDOP(c, inplace_binop(c, s->v.AugAssign.op));
+	ADDOP(c, DUP_TOP);
+        auge = Subscript(e->v.Subscript.value, e->v.Subscript.slice,
+		     Store, e->lineno, e->col_offset, c->c_arena);
+        if (auge == NULL) {
+            return 0;
+	}
+        VISIT(c, expr, auge);
+        break;
+
+    case Name_kind:
+	VISIT(c, expr, s->v.AugAssign.value);
+	ADDOP(c, DUP_TOP);
+        return compiler_nameop(c, e->v.Name.id, Store);
+
+    default:
+        PyErr_Format(PyExc_SystemError,
+            "invalid node type (%d) for augmented assignment",
+            e->kind);
+        return 0;
+    }
+    return 1;
+}
+
+/* N.B., augmented assignments are now *expressions* */
+static int
+compiler_augassign(struct compiler *c, expr_ty s)
+{
+    expr_ty e;
+    expr_ty auge;
+    int op = s->v.AugAssign.op;
+    slice_ty sp;
+
+    assert(s->kind == AugAssign_kind);
+
+    /*
+     * Simple assignment doesn't use value (just sets),
+     *  so has its own simpler code generation path.
+     */
+    if (op == Asgn) {
+	return compiler_augassign_simple(c, s);
+    }
+
+    e = s->v.AugAssign.target;
+    switch (e->kind) {
+
+    case Attribute_kind:
+	auge = Attribute(e->v.Attribute.value, e->v.Attribute.attr,
+			 AugLoad, e->lineno, e->col_offset, c->c_arena);
+	if (auge == NULL) {
+	    return 0;
+	}
+	VISIT(c, expr, auge);
+        VISIT(c, expr, s->v.AugAssign.value);
+	ADDOP(c, inplace_binop(c, op));
+	/*
+	 * Tuck the assigned value beneath the object whose
+	 *  attr is about to be assigned.
+	 * ob val -> val ob val
+	 */
+	ADDOP(c, DUP_TOP);
+	ADDOP(c, ROT_THREE);
+        auge->v.Attribute.ctx = AugStore;
+        VISIT(c, expr, auge);
+	/* Now just "val" is left, the assigned value */
+        break;
+
+    case Subscript_kind:
+	sp = e->v.Subscript.slice;
+        auge = Subscript(e->v.Subscript.value, sp,
+                         AugLoad, e->lineno, e->col_offset, c->c_arena);
+        if (auge == NULL) {
+            return 0;
+	}
+	VISIT(c, expr, auge);
+        VISIT(c, expr, s->v.AugAssign.value);
+	ADDOP(c, inplace_binop(c, op));
+
+	/*
+	 * Similar to Attribute_kind above, but different stack format:
+	 *  ob idx1 [idx2] val -> val ob idx1 [idx2] val
+	 * (Note that a:b:c extended slice flattens a:b:c to a single
+	 *  single object, so the stack is in "ob idx1 val" format.)
+	 */
+	ADDOP(c, DUP_TOP);
+	if ((sp->kind == Slice_kind) &&
+		sp->v.Slice.upper && sp->v.Slice.lower &&
+		!sp->v.Slice.step) {
+	    ADDOP(c, ROT_FIVE);
+	} else {
+	    ADDOP(c, ROT_FOUR);
+	}
         auge->v.Subscript.ctx = AugStore;
         VISIT(c, expr, auge);
         break;
+
     case Name_kind:
-        if (!compiler_nameop(c, e->v.Name.id, Load))
-            return 0;
-        VISIT(c, expr, s->v.AugAssign.value);
-        ADDOP(c, inplace_binop(c, s->v.AugAssign.op));
+	if (!compiler_nameop(c, e->v.Name.id, Load))
+	    return 0;
+	VISIT(c, expr, s->v.AugAssign.value);
+	ADDOP(c, inplace_binop(c, op));
+	ADDOP(c, DUP_TOP);
         return compiler_nameop(c, e->v.Name.id, Store);
+
     default:
         PyErr_Format(PyExc_SystemError,
             "invalid node type (%d) for augmented assignment",
