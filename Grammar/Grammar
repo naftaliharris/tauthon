@@ -43,10 +43,7 @@ stmt: simple_stmt | compound_stmt
 simple_stmt: small_stmt (';' small_stmt)* [';'] NEWLINE
 small_stmt: (expr_stmt | print_stmt  | del_stmt | pass_stmt | flow_stmt |
              import_stmt | global_stmt | nonlocal_stmt | exec_stmt | assert_stmt)
-expr_stmt: testlist (augassign (yield_expr|testlist) |
-                     ('=' (yield_expr|testlist))*)
-augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
-            '<<=' | '>>=' | '**=' | '//=')
+expr_stmt: testlist ('=' (yield_expr|testlist))*
 # For normal assignments, additional restrictions enforced by the interpreter
 print_stmt: 'print' ( [ test (',' test)* [','] ] |
                       '>>' test [ (',' test)+ [','] ] )
@@ -97,7 +94,14 @@ testlist_safe: old_test [(',' old_test)+ [',']]
 old_test: or_test | old_lambdef
 old_lambdef: 'lambda' [varargslist] ':' old_test
 
-test: or_test ['if' or_test 'else' test] | lambdef
+augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
+            '<<=' | '>>=' | '**=' | '//=')
+
+test: if_test [
+    (augassign (yield_expr|testlist)) |
+    (':=' (yield_expr|test))
+    ]
+if_test: or_test ['if' or_test 'else' if_test] | lambdef
 or_test: and_test ('or' and_test)*
 and_test: not_test ('and' not_test)*
 not_test: 'not' not_test | comparison

@@ -1,6 +1,9 @@
 This directory contains support tools for the Python compiler package,
 which is now part of the standard library.
 
+astgen.py	Tool which generates Lib/compiler/ast.py from
+		Tools/compiler/ast.txt
+
 compile.py	Demo that compiles a Python module into a .pyc file
 		using the pure-Python compiler code.
 

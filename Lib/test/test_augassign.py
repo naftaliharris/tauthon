@@ -7,16 +7,16 @@ import unittest
 class AugAssignTest(unittest.TestCase):
     def testBasic(self):
         x = 2
-        x += 1
-        x *= 2
-        x **= 2
-        x -= 8
-        x //= 5
-        x %= 3
-        x &= 2
-        x |= 5
-        x ^= 1
-        x /= 2
+        self.assertEqual((x += 1), 3)
+        self.assertEqual((x *= 2), 6)
+        self.assertEqual((x **= 2), 36)
+        self.assertEqual((x -= 8), 28)
+        self.assertEqual((x //= 5), 5)
+        self.assertEqual((x %= 3), 2)
+        self.assertEqual((x &= 2), 2)
+        self.assertEqual((x |= 5), 7)
+        self.assertEqual((x ^= 1), 6)
+        self.assertEqual((x /= 2), 3)
         if 1/2 == 0:
             # classic division
             self.assertEqual(x, 3)
@@ -25,56 +25,81 @@ class AugAssignTest(unittest.TestCase):
             self.assertEqual(x, 3.0)
 
     def test_with_unpacking(self):
-        self.assertRaises(SyntaxError, compile, "x, b += 3", "<test>", "exec")
+        x = 1
+        b = 2
+        self.assertEqual((x, b += 3), (1, 5))
+        self.assertEqual(b, 5)
 
     def testInList(self):
         x = [2]
-        x[0] += 1
-        x[0] *= 2
-        x[0] **= 2
-        x[0] -= 8
-        x[0] //= 5
-        x[0] %= 3
-        x[0] &= 2
-        x[0] |= 5
-        x[0] ^= 1
-        x[0] /= 2
+        self.assertEqual((x[0] += 1), 3)
+        self.assertEqual((x[0] *= 2), 6)
+        self.assertEqual((x[0] **= 2), 36)
+        self.assertEqual((x[0] -= 8), 28)
+        self.assertEqual((x[0] //= 5), 5)
+        self.assertEqual((x[0] %= 3), 2)
+        self.assertEqual((x[0] &= 2), 2)
+        self.assertEqual((x[0] |= 5), 7)
+        self.assertEqual((x[0] ^= 1), 6)
+        self.assertEqual((x[0] /= 2), 3)
         if 1/2 == 0:
             self.assertEqual(x[0], 3)
         else:
             self.assertEqual(x[0], 3.0)
+
+        self.assertEqual((x[0] := 9), 9)
+        self.assertEqual(x[0], 9)
+        x = [1, 2, 3, 4, 5]
+        self.assertEqual(x[1:3] := [8, 9], [8, 9])
+        self.assertEqual(x, [1, 8, 9, 4, 5])
+
+        x = list(range(10))
+        self.assertEqual(x[2:6:2] := [9, 10], [9, 10])
+        self.assertEqual(x, [0, 1, 9, 3, 10, 5, 6, 7, 8, 9])
+        self.assertEqual(x[2:4] := [10, 11, 12], [10, 11, 12])
+        self.assertEqual(x, [0, 1, 10, 11, 12, 10, 5, 6, 7, 8, 9])
 
     def testInDict(self):
         x = {0: 2}
-        x[0] += 1
-        x[0] *= 2
-        x[0] **= 2
-        x[0] -= 8
-        x[0] //= 5
-        x[0] %= 3
-        x[0] &= 2
-        x[0] |= 5
-        x[0] ^= 1
-        x[0] /= 2
+        self.assertEqual((x[0] += 1), 3)
+        self.assertEqual((x[0] *= 2), 6)
+        self.assertEqual((x[0] **= 2), 36)
+        self.assertEqual((x[0] -= 8), 28)
+        self.assertEqual((x[0] //= 5), 5)
+        self.assertEqual((x[0] %= 3), 2)
+        self.assertEqual((x[0] &= 2), 2)
+        self.assertEqual((x[0] |= 5), 7)
+        self.assertEqual((x[0] ^= 1), 6)
+        self.assertEqual((x[0] /= 2), 3)
         if 1/2 == 0:
             self.assertEqual(x[0], 3)
         else:
             self.assertEqual(x[0], 3.0)
+        self.assertEqual((x[0] := 9), 9)
 
     def testSequences(self):
         x = [1,2]
-        x += [3,4]
-        x *= 2
+        self.assertEqual((x += [3,4]), [1, 2, 3, 4])
+        self.assertEqual((x *= 2), [1, 2, 3, 4, 1, 2, 3, 4])
 
         self.assertEqual(x, [1, 2, 3, 4, 1, 2, 3, 4])
 
         x = [1, 2, 3]
         y = x
-        x[1:2] *= 2
-        y[1:2] += [1]
+        self.assertEqual((x[1:2] *= 2), [2, 2])
+        self.assertEqual((y[1:2] += [1]), [2, 1])
 
         self.assertEqual(x, [1, 2, 1, 2, 3])
         self.assertTrue(x is y)
+
+        x = [1, 2]
+        x += 3, 4
+        self.assertEqual(x, [1, 2, 3, 4])
+
+        z = x := 1, y := 10
+        self.assertEqual(z, (1, 10))
+        z = (x += 1), (y += 1)
+        self.assertEqual(z, (2, 11))
 
     def testCustomMethods1(self):
 
