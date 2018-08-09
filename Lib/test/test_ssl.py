@@ -1000,8 +1000,16 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(cm.exception.errno, errno.ENOENT)
         with self.assertRaises(ssl.SSLError) as cm:
             ctx.load_dh_params(CERTFILE)
+
         with support.temp_dir() as d:
             fname = os.path.join(d, u'dhpäräm.pem')
+            fsencoding = sys.getfilesystemencoding() or \
+                sys.getdefaultencoding()
+            try:
+                fname = fname.encode(fsencoding)
+            except:
+                raise unittest.SkipTest("only NT+ and systems with "
+                    "Unicode-friendly filesystem encoding")
             shutil.copy(DHFILE, fname)
             ctx.load_dh_params(fname)
 
