@@ -373,6 +373,25 @@ Support is optimized if Python's own :c:type:`Py_UNICODE` type is identical to
 the system's :c:type:`wchar_t`.
 
 
+File System Encoding
+""""""""""""""""""""
+
+To encode and decode file names and other environment strings,
+:c:data:`Py_FileSystemDefaultEncoding` should be used as the encoding
+(:pep:`383`). To encode file names to :class:`bytes` during
+argument parsing, the ``"O&"`` converter should be used, passing
+:c:func:`PyUnicode_FSConverter` as the conversion function:
+
+.. c:function:: int PyUnicode_FSConverter(PyObject* obj, void* result)
+
+   ParseTuple converter: encode :class:`unicode` objects to :class:`bytes`
+   using :c:data:`Py_FileSystemDefaultEncoding`; :class:`bytes` objects are
+   output as-is.  *result* must be a :c:type:`PyBytesObject*` which must be
+   released when it is no longer used.
+
+   .. versionadded:: 3.1
+
+
 wchar_t Support
 """""""""""""""
 
