@@ -355,6 +355,32 @@ Summary -- Release highlights
 .. _But with Tauthon, that code can now use some of the new features from Python 3.x.: https://www.naftaliharris.com/blog/why-making-python-2.8/
 
 
+Improved Modules
+================
+
+xml
+---
+
+* As mitigation against DTD and external entity retrieval, the
+  :mod:`xml.dom.minidom` and mod:`xml.sax` modules no longer process
+  external entities by default.
+  (Contributed by Christian Heimes in :issue:`17239`.)
+
+
+Porting to Tauthon 2.8.3
+========================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+Changes in the Python API
+-------------------------
+
+* :mod:`xml.dom.minidom` and mod:`xml.sax` modules no longer process
+  external entities by default.
+  (Contributed by Christian Heimes in :issue:`17239`.)
+
+
 Notable changes in Tauthon 2.8.3
 ================================
 
