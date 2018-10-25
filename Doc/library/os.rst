@@ -607,6 +607,21 @@ associated with a file object when required.  Note that using the file
 descriptor directly will bypass the file object methods, ignoring aspects such
 as internal buffering of data.
 
+.. data:: AT_SYMLINK_NOFOLLOW
+          AT_EACCESS
+          AT_FDCWD
+          AT_REMOVEDIR
+          AT_SYMLINK_FOLLOW
+          UTIME_NOW
+          UTIME_OMIT
+
+   These parameters are used as flags to the \*at family of functions.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: close(fd)
 
    Close file descriptor *fd*.
@@ -651,6 +666,19 @@ as internal buffering of data.
    Availability: Unix, Windows.
 
 
+.. function:: faccessat(dirfd, path, mode, flags=0)
+
+   Like :func:`access` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and can be constructed by ORing together zero or more
+   of these values: :data:`AT_SYMLINK_NOFOLLOW`, :data:`AT_EACCESS`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: fchmod(fd, mode)
 
    Change the mode of the file given by *fd* to the numeric *mode*.  See the docs
@@ -661,6 +689,18 @@ as internal buffering of data.
    .. versionadded:: 2.6
 
 
+.. function:: fchmodat(dirfd, path, mode, flags=0)
+
+   Like :func:`chmod` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: fchown(fd, uid, gid)
 
    Change the owner and group id of the file given by *fd* to the numeric *uid*
@@ -669,6 +709,18 @@ as internal buffering of data.
    Availability: Unix.
 
    .. versionadded:: 2.6
+
+
+.. function:: fchownat(dirfd, path, uid, gid, flags=0)
+
+   Like :func:`chown` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: fdatasync(fd)
@@ -706,6 +758,17 @@ as internal buffering of data.
 
    Availability: Unix, Windows.
 
+.. function:: fstatat(dirfd, path, flags=0)
+
+   Like :func:`stat` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
 
 .. function:: fstatvfs(fd)
 
@@ -735,10 +798,36 @@ as internal buffering of data.
    Availability: Unix.
 
 
+.. function:: futimesat(dirfd, path, (atime, mtime))
+              futimesat(dirfd, path, None)
+
+   Like :func:`utime` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: isatty(fd)
 
    Return ``True`` if the file descriptor *fd* is open and connected to a
    tty(-like) device, else ``False``.
+
+
+.. function:: linkat(srcfd, srcpath, dstfd, dstpath, flags=0)
+
+   Like :func:`link` but if *srcpath* is relative, it is taken as relative to *srcfd*
+   and if *dstpath* is relative, it is taken as relative to *dstfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_FOLLOW`.
+   If *srcpath* is relative and *srcfd* is the special value :data:`AT_FDCWD`, then
+   *srcpath* is interpreted relative to the current working directory. This
+   also applies for *dstpath*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: lseek(fd, pos, how)
@@ -764,6 +853,39 @@ as internal buffering of data.
    .. versionadded:: 2.5
 
 
+.. function:: mkdirat(dirfd, path, mode=0o777)
+
+   Like :func:`mkdir` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: mkfifoat(dirfd, path, mode=0o666)
+
+   Like :func:`mkfifo` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: mknodat(dirfd, path, mode=0o600, device=0)
+
+   Like :func:`mknod` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: open(file, flags[, mode])
 
    Open the file *file* and set various flags according to *flags* and possibly its
@@ -784,6 +906,17 @@ as internal buffering of data.
       built-in function :func:`open`, which returns a "file object" with
       :meth:`~file.read` and :meth:`~file.write` methods (and many more).  To
       wrap a file descriptor in a "file object", use :func:`fdopen`.
+
+
+.. function:: openat(dirfd, path, flags, mode=0o777)
+
+   Like :func:`open` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: openpty()
@@ -822,6 +955,41 @@ as internal buffering of data.
       :meth:`~file.readline` methods.
 
 
+.. function:: readlinkat(dirfd, path)
+
+   Like :func:`readlink` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: renameat(olddirfd, oldpath, newdirfd, newpath)
+
+   Like :func:`rename` but if *oldpath* is relative, it is taken as relative to
+   *olddirfd* and if *newpath* is relative, it is taken as relative to *newdirfd*.
+   If *oldpath* is relative and *olddirfd* is the special value :data:`AT_FDCWD`, then
+   *oldpath* is interpreted relative to the current working directory. This
+   also applies for *newpath*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: symlinkat(src, dstfd, dst)
+
+   Like :func:`symlink` but if *dst* is relative, it is taken as relative to *dstfd*.
+   If *dst* is relative and *dstfd* is the special value :data:`AT_FDCWD`, then *dst*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: tcgetpgrp(fd)
 
    Return the process group associated with the terminal given by *fd* (an open
@@ -845,6 +1013,38 @@ as internal buffering of data.
    exception is raised.
 
    Availability: Unix.
+
+
+.. function:: unlinkat(dirfd, path, flags=0)
+
+   Like :func:`unlink` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_REMOVEDIR`. If :data:`AT_REMOVEDIR` is
+   specified, :func:`unlinkat` behaves like :func:`rmdir`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: utimensat(dirfd, path, (atime_sec, atime_nsec), (mtime_sec, mtime_nsec), flags)
+              utimensat(dirfd, path, None, None, flags)
+
+   Updates the timestamps of a file with nanosecond precision.
+   The second form sets *atime* and *mtime* to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_NOW`, the corresponding
+   timestamp is updated to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_OMIT`, the corresponding
+   timestamp is not updated.
+   If *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: write(fd, str)

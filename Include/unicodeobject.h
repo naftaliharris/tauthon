@@ -1134,6 +1134,13 @@ PyAPI_FUNC(int) PyUnicode_EncodeDecimal(
     const char *errors          /* error handling */
     );
 
+/* --- File system encoding ---------------------------------------------- */
+
+/* ParseTuple converter: encode unicode objects to bytes; bytes objects are
+   output as-is. */
+
+PyAPI_FUNC(int) PyUnicode_FSConverter(PyObject*, void*);
+
 /* --- Methods & Slots ----------------------------------------------------
 
    These are capable of handling Unicode objects and strings on input

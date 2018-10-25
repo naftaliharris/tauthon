@@ -5346,6 +5346,65 @@ int PyUnicode_EncodeDecimal(Py_UNICODE *s,
     return -1;
 }
 
+
+/* --- File system encoding ---------------------------------------------- */
+int
+PyUnicode_FSConverter(PyObject* path, void* addr)
+{
+    PyObject *output = NULL;
+    Py_ssize_t size;
+    void *data;
+
+    if (PyBytes_Check(path)) {
+        output = path;
+        Py_INCREF(output);
+    }
+    else {
+#ifdef Py_USING_UNICODE
+        PyObject *u;
+
+        u = PyUnicode_FromObject(path);
+        if (u == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_Format(PyExc_TypeError,
+                    "must be string or unicode or text buffer, not %.50s",
+                    Py_TYPE(path)->tp_name);
+            return 0;
+        }
+
+        output = PyUnicode_AsEncodedString(u, Py_FileSystemDefaultEncoding,
+            NULL);
+        Py_DECREF(u);
+        if (output == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_SetString(PyExc_TypeError, "(encoding failed)");
+            return 0;
+        }
+        if (!PyBytes_Check(output)) {
+            Py_DECREF(output);
+            PyErr_SetString(PyExc_TypeError,
+                "(encoder failed to return a string)");
+            return 0;
+        }
+#else
+        PyErr_Format(PyExc_TypeError, "must be string<e>, not %.50s",
+            Py_TYPE(path)->tp_name);
+        return 0;
+#endif
+    }
+
+    size = PyBytes_GET_SIZE(output);
+    data = PyBytes_AS_STRING(output);
+    if ((size_t)size != strlen(data)) {
+        PyErr_SetString(PyExc_ValueError, "embedded null byte");
+        Py_DECREF(output);
+        return 0;
+    }
+    *(PyObject**)addr = output;
+    return 1;
+}
+
+
 /* --- Helpers ------------------------------------------------------------ */
 
 #include "stringlib/unicodedefs.h"
