@@ -342,7 +342,7 @@ $ CPPFLAGS="-I$(brew --prefix openssl)/include" LDFLAGS="-L$(brew --prefix opens
 $ make
 ```
 
-You can then run Tauthon with `./python` or `./python.exe`.
+You can then run Tauthon with `./tauthon` or `./tauthon.exe`.
 
 Install with
 ```
@@ -354,7 +354,7 @@ Backwards-incompatibilities
 ---------------------------
 
 There are a small handful of backwards incompatibilities introduced by
-Tauthon. Triggering these involves checking the python version, introspection of
+Tauthon. Triggering these involves checking the Python version, introspection of
 Python internals (including the AST), or depending on errors being raised from
 nonexistent new features.
 
