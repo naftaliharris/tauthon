@@ -2,6 +2,8 @@
 """
 This script is used to build "official" universal installers on macOS.
 
+NEW for 3.6.8 / 2.7.16:
+- also build and use Tk 8.6 for 10.6+ installers
 NEW for 3.6.5:
 - support Intel 64-bit-only () and 32-bit-only installer builds
 - build and link with private Tcl/Tk 8.6 for 10.9+ builds
@@ -20,8 +22,8 @@ Sphinx and dependencies are installed into a venv using the python3's pip
 so will fetch them from PyPI if necessary.  Since python3 is now used for
 Sphinx, build-installer.py should also be converted to use python3!
 
-For 10.9 or greater deployment targets, build-installer builds and links
-with its own copy of Tcl/Tk 8.5 and the rest of this paragraph does not
+For 10.6 or greater deployment targets, build-installer builds and links
+with its own copy of Tcl/Tk 8.6 and the rest of this paragraph does not
 apply.  Otherwise, build-installer requires an installed third-party version
 of Tcl/Tk 8.4 (for OS X 10.4 and 10.5 deployment targets) or Tcl/TK 8.5
 (for 10.6 or later) installed in /Library/Frameworks.  When installed,
@@ -188,9 +190,9 @@ USAGE = textwrap.dedent("""\
 EXPECTED_SHARED_LIBS = {}
 
 # Are we building and linking with our own copy of Tcl/TK?
-#   For now, do so if deployment target is 10.9+.
+#   For now, do so if deployment target is 10.6+.
 def internalTk():
-    return getDeptargetTuple() >= (10, 9)
+    return getDeptargetTuple() >= (10, 6)
 
 # List of names of third party software built with this installer.
 # The names will be inserted into the rtf version of the License.
@@ -211,9 +213,9 @@ def library_recipes():
 
     result.extend([
           dict(
-              name="OpenSSL 1.0.2o",
-              url="https://www.openssl.org/source/openssl-1.0.2o.tar.gz",
-              checksum='44279b8557c3247cbe324e2322ecd114',
+              name="OpenSSL 1.0.2q",
+              url="https://www.openssl.org/source/openssl-1.0.2q.tar.gz",
+              checksum='7563e1ce046cb21948eeb6ba1a0eb71c',
               buildrecipe=build_universal_openssl,
               configure=None,
               install=None,
@@ -824,6 +826,13 @@ def build_universal_openssl(basedir, archList):
         ]
         if no_asm:
             configure_opts.append("no-asm")
+        # OpenSSL 1.0.2o broke the Configure test for whether the compiler
+        # in use supports dependency rule generation (cc -M) with gcc-4.2
+        # used for the 10.6+ installer builds.  Patch Configure here to
+        # force use of "cc -M" rather than "makedepend".
+        runCommand(
+            """sed -i "" 's|my $cc_as_makedepend = 0|my $cc_as_makedepend = 1|g' Configure""")
+
         runCommand(" ".join(["perl", "Configure"]
                         + arch_opts[arch] + configure_opts))
         runCommand("make depend")
@@ -1524,12 +1533,27 @@ def buildDMG():
     imagepath = imagepath + '.dmg'
 
     os.mkdir(outdir)
+
+    # Try to mitigate race condition in certain versions of macOS, e.g. 10.9,
+    # when hdiutil create fails with  "Resource busy".  For now, just retry
+    # the create a few times and hope that it eventually works.
+
     volname='Python %s'%(getFullVersion())
-    runCommand("hdiutil create -format UDRW -volname %s -srcfolder %s %s"%(
+    cmd = ("hdiutil create -format UDRW -volname %s -srcfolder %s -size 100m %s"%(
             shellQuote(volname),
             shellQuote(os.path.join(WORKDIR, 'installer')),
             shellQuote(imagepath + ".tmp.dmg" )))
-
+    for i in range(5):
+        fd = os.popen(cmd, 'r')
+        data = fd.read()
+        xit = fd.close()
+        if not xit:
+            break
+        sys.stdout.write(data)
+        print(" -- retrying hdiutil create")
+        time.sleep(5)
+    else:
+        raise RuntimeError("command failed: %s"%(commandline,))
 
     if not os.path.exists(os.path.join(WORKDIR, "mnt")):
         os.mkdir(os.path.join(WORKDIR, "mnt"))
