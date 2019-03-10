@@ -274,7 +274,7 @@ class GetSourceBase(unittest.TestCase):
 
     def sourcerange(self, top, bottom):
         lines = self.source.split("\n")
-        return "\n".join(lines[top-1:bottom]) + "\n"
+        return "\n".join(lines[top-1:bottom]) + ("\n" if bottom else "")
 
     def assertSourceEqual(self, obj, top, bottom):
         self.assertEqual(inspect.getsource(obj),
@@ -397,6 +397,16 @@ class TestRetrievingSourceCode(GetSourceBase):
             inspect.getsource(ns["x"])
         finally:
             linecache.getlines = getlines
+
+class TestGettingSourceOfToplevelFrames(GetSourceBase):
+    fodderFile = mod
+
+    def test_range_toplevel_frame(self):
+        self.maxDiff = None
+        self.assertSourceEqual(mod.currentframe, 1, None)
+
+    def test_range_traceback_toplevel_frame(self):
+        self.assertSourceEqual(mod.tb, 1, None)
 
 class TestDecorators(GetSourceBase):
     fodderFile = mod2
@@ -2839,10 +2849,11 @@ def test_main():
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
         TestInterpreterStack, TestClassesAndFunctions, TestPredicates,
         TestGetcallargsFunctions, TestGetcallargsFunctionsCellVars,
-        TestGetcallargsMethods, TestGetcallargsUnboundMethods, TestGetGeneratorState,
-        TestGetCoroutineState, TestSignatureObject, TestParameterObject,
-        TestSignatureBind, TestBoundArguments, TestSignaturePrivateHelpers,
-        TestSignatureDefinitions, TestUnwrap)
+        TestGetcallargsMethods, TestGetcallargsUnboundMethods,
+        TestGetGeneratorState, TestGetCoroutineState, TestSignatureObject,
+        TestParameterObject, TestSignatureBind, TestBoundArguments,
+        TestSignaturePrivateHelpers, TestSignatureDefinitions, TestUnwrap,
+        TestGettingSourceOfToplevelFrames)
 
 if __name__ == "__main__":
     test_main()

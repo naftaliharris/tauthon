@@ -674,7 +674,7 @@ static int obj2ast_string(PyObject* obj, PyObject** out, PyArena* arena)
 static int obj2ast_int(PyObject* obj, int* out, PyArena* arena)
 {
     int i;
-    if (!PyInt_Check(obj) && !PyLong_Check(obj)) {
+    if (!_PyAnyInt_Check(obj)) {
         PyObject *s = PyObject_Repr(obj);
         if (s == NULL) return 1;
         PyErr_Format(PyExc_ValueError, "invalid integer value: %.400s",
@@ -4142,14 +4142,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         body = asdl_seq_new(len, arena);
                         if (body == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                stmt_ty value;
-                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                stmt_ty val;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "AsyncFunctionDef field \"body\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(body, i, value);
+                                asdl_seq_SET(body, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -4171,14 +4171,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         decorator_list = asdl_seq_new(len, arena);
                         if (decorator_list == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                expr_ty value;
-                                res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                                expr_ty val;
+                                res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "AsyncFunctionDef field \"decorator_list\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(decorator_list, i, value);
+                                asdl_seq_SET(decorator_list, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -4270,14 +4270,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         keywords = asdl_seq_new(len, arena);
                         if (keywords == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                keyword_ty value;
-                                res = obj2ast_keyword(PyList_GET_ITEM(tmp, i), &value, arena);
+                                keyword_ty val;
+                                res = obj2ast_keyword(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "ClassDef field \"keywords\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(keywords, i, value);
+                                asdl_seq_SET(keywords, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -4744,14 +4744,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         body = asdl_seq_new(len, arena);
                         if (body == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                stmt_ty value;
-                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                stmt_ty val;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "AsyncFor field \"body\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(body, i, value);
+                                asdl_seq_SET(body, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -4773,14 +4773,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         orelse = asdl_seq_new(len, arena);
                         if (orelse == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                stmt_ty value;
-                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                stmt_ty val;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "AsyncFor field \"orelse\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(orelse, i, value);
+                                asdl_seq_SET(orelse, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -4981,14 +4981,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         items = asdl_seq_new(len, arena);
                         if (items == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                withitem_ty value;
-                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &value, arena);
+                                withitem_ty val;
+                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "With field \"items\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(items, i, value);
+                                asdl_seq_SET(items, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -5010,14 +5010,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         body = asdl_seq_new(len, arena);
                         if (body == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                stmt_ty value;
-                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &value, arena);
+                                stmt_ty val;
+                                res = obj2ast_stmt(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "With field \"body\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(body, i, value);
+                                asdl_seq_SET(body, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -5051,14 +5051,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         items = asdl_seq_new(len, arena);
                         if (items == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                withitem_ty value;
-                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &value, arena);
+                                withitem_ty val;
+                                res = obj2ast_withitem(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "AsyncWith field \"items\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(items, i, value);
+                                asdl_seq_SET(items, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -5564,14 +5564,14 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         names = asdl_seq_new(len, arena);
                         if (names == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                identifier value;
-                                res = obj2ast_identifier(PyList_GET_ITEM(tmp, i), &value, arena);
+                                identifier val;
+                                res = obj2ast_identifier(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "Nonlocal field \"names\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(names, i, value);
+                                asdl_seq_SET(names, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;
@@ -7570,14 +7570,14 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 kwonlyargs = asdl_seq_new(len, arena);
                 if (kwonlyargs == NULL) goto failed;
                 for (i = 0; i < len; i++) {
-                        arg_ty value;
-                        res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &value, arena);
+                        arg_ty val;
+                        res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &val, arena);
                         if (res != 0) goto failed;
                         if (len != PyList_GET_SIZE(tmp)) {
                                 PyErr_SetString(PyExc_RuntimeError, "arguments field \"kwonlyargs\" changed size during iteration");
                                 goto failed;
                         }
-                        asdl_seq_SET(kwonlyargs, i, value);
+                        asdl_seq_SET(kwonlyargs, i, val);
                 }
                 Py_XDECREF(tmp);
                 tmp = NULL;
@@ -7650,14 +7650,14 @@ obj2ast_arguments(PyObject* obj, arguments_ty* out, PyArena* arena)
                 kw_defaults = asdl_seq_new(len, arena);
                 if (kw_defaults == NULL) goto failed;
                 for (i = 0; i < len; i++) {
-                        expr_ty value;
-                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &value, arena);
+                        expr_ty val;
+                        res = obj2ast_expr(PyList_GET_ITEM(tmp, i), &val, arena);
                         if (res != 0) goto failed;
                         if (len != PyList_GET_SIZE(tmp)) {
                                 PyErr_SetString(PyExc_RuntimeError, "arguments field \"kw_defaults\" changed size during iteration");
                                 goto failed;
                         }
-                        asdl_seq_SET(kw_defaults, i, value);
+                        asdl_seq_SET(kw_defaults, i, val);
                 }
                 Py_XDECREF(tmp);
                 tmp = NULL;
@@ -7740,14 +7740,14 @@ obj2ast_arg(PyObject* obj, arg_ty* out, PyArena* arena)
                         args = asdl_seq_new(len, arena);
                         if (args == NULL) goto failed;
                         for (i = 0; i < len; i++) {
-                                arg_ty value;
-                                res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &value, arena);
+                                arg_ty val;
+                                res = obj2ast_arg(PyList_GET_ITEM(tmp, i), &val, arena);
                                 if (res != 0) goto failed;
                                 if (len != PyList_GET_SIZE(tmp)) {
                                         PyErr_SetString(PyExc_RuntimeError, "NestedArgs field \"args\" changed size during iteration");
                                         goto failed;
                                 }
-                                asdl_seq_SET(args, i, value);
+                                asdl_seq_SET(args, i, val);
                         }
                         Py_XDECREF(tmp);
                         tmp = NULL;

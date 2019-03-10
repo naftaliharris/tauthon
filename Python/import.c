@@ -450,7 +450,9 @@ PyImport_Cleanup(void)
         dict = PyModule_GetDict(value);
         if (Py_VerboseFlag)
             PySys_WriteStderr("# clear __builtin__._\n");
-        PyDict_SetItemString(dict, "_", Py_None);
+        if (PyDict_SetItemString(dict, "_", Py_None) < 0) {
+            PyErr_Clear();
+        }
     }
     value = PyDict_GetItemString(modules, "sys");
     if (value != NULL && PyModule_Check(value)) {
@@ -460,7 +462,9 @@ PyImport_Cleanup(void)
         for (p = sys_deletes; *p != NULL; p++) {
             if (Py_VerboseFlag)
                 PySys_WriteStderr("# clear sys.%s\n", *p);
-            PyDict_SetItemString(dict, *p, Py_None);
+            if (PyDict_SetItemString(dict, *p, Py_None) < 0) {
+                PyErr_Clear();
+            }
         }
         for (p = sys_files; *p != NULL; p+=2) {
             if (Py_VerboseFlag)
@@ -468,7 +472,9 @@ PyImport_Cleanup(void)
             v = PyDict_GetItemString(dict, *(p+1));
             if (v == NULL)
                 v = Py_None;
-            PyDict_SetItemString(dict, *p, v);
+            if (PyDict_SetItemString(dict, *p, v) < 0) {
+                PyErr_Clear();
+            }
         }
     }
 
@@ -478,7 +484,9 @@ PyImport_Cleanup(void)
         if (Py_VerboseFlag)
             PySys_WriteStderr("# cleanup __main__\n");
         _PyModule_Clear(value);
-        PyDict_SetItemString(modules, "__main__", Py_None);
+        if (PyDict_SetItemString(modules, "__main__", Py_None) < 0) {
+            PyErr_Clear();
+        }
     }
 
     /* The special treatment of __builtin__ here is because even
@@ -513,9 +521,14 @@ PyImport_Cleanup(void)
                     PySys_WriteStderr(
                         "# cleanup[1] %s\n", name);
                 _PyModule_Clear(value);
-                PyDict_SetItem(modules, key, Py_None);
+                if (PyDict_SetItem(modules, key, Py_None) < 0) {
+                    PyErr_Clear();
+                }
                 ndone++;
             }
+        }
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
         }
     } while (ndone > 0);
 
@@ -531,7 +544,12 @@ PyImport_Cleanup(void)
             if (Py_VerboseFlag)
                 PySys_WriteStderr("# cleanup[2] %s\n", name);
             _PyModule_Clear(value);
-            PyDict_SetItem(modules, key, Py_None);
+            if (PyDict_SetItem(modules, key, Py_None) < 0) {
+                PyErr_Clear();
+            }
+        }
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
         }
     }
 
@@ -541,14 +559,18 @@ PyImport_Cleanup(void)
         if (Py_VerboseFlag)
             PySys_WriteStderr("# cleanup sys\n");
         _PyModule_Clear(value);
-        PyDict_SetItemString(modules, "sys", Py_None);
+        if (PyDict_SetItemString(modules, "sys", Py_None) < 0) {
+            PyErr_Clear();
+        }
     }
     value = PyDict_GetItemString(modules, "__builtin__");
     if (value != NULL && PyModule_Check(value)) {
         if (Py_VerboseFlag)
             PySys_WriteStderr("# cleanup __builtin__\n");
         _PyModule_Clear(value);
-        PyDict_SetItemString(modules, "__builtin__", Py_None);
+        if (PyDict_SetItemString(modules, "__builtin__", Py_None) < 0) {
+            PyErr_Clear();
+        }
     }
 
     /* Finally, clear and delete the modules directory */
@@ -682,7 +704,7 @@ remove_module(const char *name)
     if (PyDict_GetItemString(modules, name) == NULL)
         return;
     if (PyDict_DelItemString(modules, name) < 0)
-        Py_FatalError("import:  deleting existing key in"
+        Py_FatalError("import:  deleting existing key in "
                       "sys.modules failed");
 }
 
