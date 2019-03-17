@@ -84,14 +84,30 @@ What’s new in Tauthon
 -  .. rubric:: New Metaclass Syntax
       :name: new-metaclass-syntax
 
-   \```python >>> from collections import OrderedDict >>> class
-   Meta(type): … @staticmethod … def **prepare**\ (name, bases, **kwds):
-   … return OrderedDict() … def new\ (cls, name, bases,
-   namespace,**\ kwds): … namespace.update(kwds) … res =
-   type.__new__(cls, name, bases, dict(namespace)) … res._namespace =
-   namespace … return res … def **init**\ (*args, \**kwds): … pass … >>>
-   class MyClass(metaclass=Meta, foo=“bar”): … def first(self): pass …
-   def second(self): pass … def third(self): pass … >>> MyClass.foo ’ba
+   .. code:: python
+
+       >>> from collections import OrderedDict
+       >>> class Meta(type):
+       ...     @staticmethod
+       ...     def __prepare__(name, bases, **kwds):
+       ...             return OrderedDict()
+       ...     def __new__(cls, name, bases, namespace, **kwds):
+       ...             namespace.update(kwds)
+       ...             res = type.__new__(cls, name, bases, dict(namespace))
+       ...             res._namespace = namespace
+       ...             return res
+       ...     def __init__(*args, **kwds):
+       ...             pass
+       ...
+       >>> class MyClass(metaclass=Meta, foo="bar"):
+       ...     def first(self): pass
+       ...     def second(self): pass
+       ...     def third(self): pass
+       ...
+       >>> MyClass.foo
+       'bar'
+       >>> MyClass._namespace
+       OrderedDict([('__module__', '__main__'), ('first', <function first at 0x1007ef568>), ('second', <function second at 0x10131b060>), ('third', <function third at 0x10131b118>), ('foo', 'bar')])
 
 .. _But with Tauthon, that code can now use some of the new features from Python 3.x.: https://www.naftaliharris.com/blog/why-making-python-2.8/
 .. _PEP 3107: https://www.python.org/dev/peps/pep-3107/
