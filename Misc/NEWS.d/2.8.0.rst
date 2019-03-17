@@ -174,8 +174,6 @@ parallel, so we work around that by excluding them from the profiling task.
 EXTRATESTOPTS is now used inside PROFILE_TASK, to allow for custom arguments
 (like "-jN" to run N jobs in parallel).
 
-We no longer let the profiling task fail silently.
-
 ..
 
 .. bpo: 0

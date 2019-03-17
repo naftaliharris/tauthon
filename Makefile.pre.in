@@ -438,7 +438,7 @@ build_all_generate_profile:
 
 run_profile_task:
 	: # FIXME: can't run for a cross build
-	$(LLVM_PROF_FILE) _PYTHONNOSITEPACKAGES=1 $(RUNSHARED) ./$(BUILDTAUTHON) -E $(PROFILE_TASK)
+	$(LLVM_PROF_FILE) _PYTHONNOSITEPACKAGES=1 $(RUNSHARED) ./$(BUILDTAUTHON) -E $(PROFILE_TASK) || true # allow failures here for restrictive sandboxes
 
 build_all_merge_profile:
 	$(LLVM_PROF_MERGER)
