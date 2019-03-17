@@ -1,0 +1,5 @@
+Fix SSL regression test failure on non-UTF8 filesystems
+
+Use logic found elsewhere in tests to detect and skip tests which require
+(in this case) UTF8 filenames in the filesystem, when the filesystem does
+not support them.
