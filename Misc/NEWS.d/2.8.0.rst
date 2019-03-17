@@ -1,3 +1,194 @@
-- PEP 465: Add the '@' operator for matrix multiplication.  (Also,
-  glorious revolution.)
+.. bpo: 34113
+.. date: 2018-07-28-10-34-00
+.. nonce: eZ5FWV
+.. release date: 2019-03-17
+.. section: Core and Builtins
 
+Fixed crash on debug builds when opcode stack was adjusted with negative
+numbers. Patch by Constantin Petrisor.
+
+..
+
+.. bpo: 0
+.. date: 2017-01-03-13-24-46
+.. nonce: Gdnd-g
+.. section: Core and Builtins
+
+PEP 3104 -- Access to Names in Outer Scopes
+
+..
+
+.. bpo: 0
+.. date: 2016-12-02-20-53-56
+.. nonce: HC618m
+.. section: Core and Builtins
+
+PEP 3135 -- New Super
+
+..
+
+.. bpo: 0
+.. date: 2016-11-28-23-42-52
+.. nonce: ZLArge
+.. section: Core and Builtins
+
+PEP 3115 -- Metaclasses in Python 3000
+
+..
+
+.. bpo: 0
+.. date: 2016-11-16-11-00-32
+.. nonce: bEdggj
+.. section: Core and Builtins
+
+PEP 484 -- Type Hints
+
+..
+
+.. bpo: 0
+.. date: 2016-11-11-10-41-10
+.. nonce: H2jjYt
+.. section: Core and Builtins
+
+PEP 3107 -- Function Annotations
+
+..
+
+.. bpo: 0
+.. date: 2016-11-09-11-35-09
+.. nonce: oIoVRB
+.. section: Core and Builtins
+
+PEP 3151 -- Reworking the OS and IO exception hierarchy
+
+..
+
+.. bpo: 0
+.. date: 2016-11-03-20-20-21
+.. nonce: bN59jm
+.. section: Core and Builtins
+
+PEP 3148 -- futures - execute computations asynchronously
+
+..
+
+.. bpo: 0
+.. date: 2016-11-01-09-52-48
+.. nonce: k9VEcg
+.. section: Core and Builtins
+
+PEP 362 -- Function Signature Object
+
+..
+
+.. bpo: 0
+.. date: 2016-10-31-10-43-54
+.. nonce: Uo9siT
+.. section: Core and Builtins
+
+PEP 492 -- Coroutines with async and await syntax
+
+..
+
+.. bpo: 0
+.. date: 2016-10-07-16-02-17
+.. nonce: O4KLMK
+.. section: Core and Builtins
+
+PEP 3102 -- Keyword-Only Arguments
+
+..
+
+.. bpo: 0
+.. date: 2016-10-05-14-41-06
+.. nonce: AWvde6
+.. section: Core and Builtins
+
+PEP 515 -- Underscores in Numeric Literals
+
+..
+
+.. bpo: 0
+.. date: 2015-11-07-17-12-10
+.. nonce: kiUkdD
+.. section: Core and Builtins
+
+PEP 465: Add the '@' operator for matrix multiplication.  (Also, glorious
+revolution.)
+
+..
+
+.. bpo: 4761
+.. date: 2018-09-19-08-51-14
+.. nonce: AqNuDX
+.. section: Library
+
+Add the \*at() family of functions (openat(), etc.) to the posix module.
+Patch by Ross Lagerwall.
+
+..
+
+.. bpo: 0
+.. date: 2017-02-02-15-53-23
+.. nonce: lj1zDD
+.. section: Library
+
+PEP 628 -- Add math.tau
+
+..
+
+.. bpo: 0
+.. date: 2019-01-22-00-12-44
+.. nonce: aoXxkR
+.. section: Tests
+
+Fix SSL regression test failure on non-UTF8 filesystems
+
+Use logic found elsewhere in tests to detect and skip tests which require
+(in this case) UTF8 filenames in the filesystem, when the filesystem does
+not support them.
+
+..
+
+.. bpo: 0
+.. date: 2018-05-30-13-38-36
+.. nonce: VJ1FyR
+.. section: Build
+
+Extensions where not properly compiled with PGO because the CFLAGS were not
+read from the environment in "setup.py". Once that was fixed, gcc failed
+with an internal compiler error (ICE) because the same source file was used
+in 3 different extensions so it was compiled 3 different times in the
+profile generation stage: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85759
+
+After introducing the concept of mtime-conditional recompilation to
+distutils, the ICE was avoided.
+
+While building the software in a sandbox, on Gentoo, it became obvious that
+the profiling task was accessing system-wide paths it had no business
+accessing. This was also fixed.
+
+A couple of regression tests fail randomly when the suite is run in
+parallel, so we work around that by excluding them from the profiling task.
+
+EXTRATESTOPTS is now used inside PROFILE_TASK, to allow for custom arguments
+(like "-jN" to run N jobs in parallel).
+
+..
+
+.. bpo: 0
+.. date: 2018-05-11-18-18-22
+.. nonce: xO_Rw_
+.. section: Build
+
+document that LTO is no longer enabled by --enable-optimizations
+
+..
+
+.. bpo: 5915
+.. date: 2018-09-19-15-52-01
+.. nonce: cMNcgK
+.. section: C API
+
+Bring in a small subset of PEP 383 -- just the PyUnicode_FSConverter
+routine.

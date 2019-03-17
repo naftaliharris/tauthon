@@ -31,7 +31,7 @@ class MagicNumberTests(unittest.TestCase):
         in advance. Such exceptional releases will then require an
         adjustment to this test case.
         """
-        EXPECTED_MAGIC_NUMBER = 62211
+        EXPECTED_MAGIC_NUMBER = 62241
         raw_magic = imp.get_magic()
         actual = (ord(raw_magic[1]) << 8) + ord(raw_magic[0])
 

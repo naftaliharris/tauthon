@@ -35,6 +35,13 @@ matrix:
         apt:
           packages:
             - xvfb
+    - os: osx
+      language: c
+      compiler: clang
+      before_install:
+        - brew install openssl xz
+        - export CPPFLAGS="-I$(brew --prefix openssl)/include"
+        - export LDFLAGS="-L$(brew --prefix openssl)/lib"
     - os: linux
       language: python
       python: 2.7

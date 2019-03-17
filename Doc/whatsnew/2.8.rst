@@ -1,0 +1,119 @@
+Tauthon
+=======
+
+Tauthon is a backwards-compatible fork of the Python 2.7.16 interpreter
+with new syntax, builtins, and libraries backported from Python 3.x.
+Python code and C-extensions targeting Python 2.7 or below are expected
+to run unmodified on Tauthon and produce the same output. `But with
+Tauthon, that code can now use some of the new features from Python
+3.x.`_
+
+What’s new in Tauthon
+---------------------
+
+-  .. rubric:: Function Annotations
+      :name: function-annotations
+
+   .. code:: python
+
+      >>> def f(a:int, b:str) -> list:
+      ...     pass
+      ...
+      >>> f.__annotations__
+      {'a': <type 'int'>, 'b': <type 'str'>, 'return': <type 'list'>}
+
+   *More info:*\ `PEP 3107`_
+
+-  .. rubric:: Keyword-Only Arguments
+      :name: keyword-only-arguments
+
+   .. code:: python
+
+      >>> def f(a, *, b):
+      ...     pass
+      ...
+      >>> f(1, 2)
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      TypeError: f() takes exactly 1 positional argument (2 given)
+      >>> f(1, b=2)
+      >>>
+
+   *More info:*\ `PEP 3102`_
+
+-  .. rubric:: “async” and “await” Syntax
+      :name: async-and-await-syntax
+
+   .. code:: python
+
+      >>> import types
+      >>> @types.coroutine
+      ... def delayed_print():
+      ...     printme = yield
+      ...     print printme
+      ...
+      >>> async def main():
+      ...     while True:
+      ...         await delayed_print()
+      ...
+      >>> coro = main()
+      >>> coro.send(None)
+      >>> coro.send("hello")
+      hello
+      >>> coro.send("there")
+      there
+      >>> coro.send("friend")
+      friend
+
+   *More info:*\ `PEP 492`_\ *,*\ `Tutorial`_
+
+-  .. rubric:: Argument-less “super”
+      :name: argument-less-super
+
+   .. code:: python
+
+      >>> class MyList(list):
+      ...     def __repr__(self):
+      ...             return "MyList" + super().__repr__()
+      ...
+      >>> MyList(range(3))
+      MyList[0, 1, 2]
+
+   *More info:*\ `PEP 3135`_\ *,*\ `API Docs`_
+
+-  .. rubric:: New Metaclass Syntax
+      :name: new-metaclass-syntax
+
+   .. code:: python
+
+       >>> from collections import OrderedDict
+       >>> class Meta(type):
+       ...     @staticmethod
+       ...     def __prepare__(name, bases, **kwds):
+       ...             return OrderedDict()
+       ...     def __new__(cls, name, bases, namespace, **kwds):
+       ...             namespace.update(kwds)
+       ...             res = type.__new__(cls, name, bases, dict(namespace))
+       ...             res._namespace = namespace
+       ...             return res
+       ...     def __init__(*args, **kwds):
+       ...             pass
+       ...
+       >>> class MyClass(metaclass=Meta, foo="bar"):
+       ...     def first(self): pass
+       ...     def second(self): pass
+       ...     def third(self): pass
+       ...
+       >>> MyClass.foo
+       'bar'
+       >>> MyClass._namespace
+       OrderedDict([('__module__', '__main__'), ('first', <function first at 0x1007ef568>), ('second', <function second at 0x10131b060>), ('third', <function third at 0x10131b118>), ('foo', 'bar')])
+
+.. _But with Tauthon, that code can now use some of the new features from Python 3.x.: https://www.naftaliharris.com/blog/why-making-python-2.8/
+.. _PEP 3107: https://www.python.org/dev/peps/pep-3107/
+.. _PEP 3102: https://www.python.org/dev/peps/pep-3102/
+.. _PEP 492: https://www.python.org/dev/peps/pep-0492/
+.. _Tutorial: http://www.snarky.ca/how-the-heck-does-async-await-work-in-python-3-5
+.. _PEP 3135: https://www.python.org/dev/peps/pep-3135/
+.. _API Docs: https://docs.python.org/3/library/functions.html#super
+
