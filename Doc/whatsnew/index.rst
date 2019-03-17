@@ -1,16 +1,17 @@
 .. _whatsnew-index:
 
 ######################
- What's New in Python
+ What's New in Tauthon
 ######################
 
-The "What's New in Python" series of essays takes tours through the most
-important changes between major Python versions.  They are a "must read" for
+The "What's New in Tauthon" series of essays takes tours through the most
+important changes between major Tauthon versions.  They are a "must read" for
 anyone wishing to stay up-to-date after a new release.
 
 .. toctree::
    :maxdepth: 2
 
+   2.8.rst
    2.7.rst
    2.6.rst
    2.5.rst
