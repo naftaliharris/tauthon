@@ -1,2 +1,0 @@
-Add the \*at() family of functions (openat(), etc.) to the posix module.
-Patch by Ross Lagerwall.

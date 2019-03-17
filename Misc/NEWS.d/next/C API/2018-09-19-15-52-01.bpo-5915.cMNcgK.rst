@@ -1,2 +1,0 @@
-Bring in a small subset of PEP 383 -- just the PyUnicode_FSConverter
-routine.

@@ -1,2 +1,0 @@
-PEP 465: Add the '@' operator for matrix multiplication.  (Also, glorious
-revolution.)

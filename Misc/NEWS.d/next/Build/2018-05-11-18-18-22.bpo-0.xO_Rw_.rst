@@ -1,1 +1,0 @@
-document that LTO is no longer enabled by --enable-optimizations
