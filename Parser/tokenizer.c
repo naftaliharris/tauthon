@@ -510,6 +510,34 @@ static void fp_ungetc(int c, struct tok_state *tok) {
     ungetc(c, tok->fp);
 }
 
+/* Check whether the characters at s start a valid
+   UTF-8 sequence. Return the number of characters forming
+   the sequence if yes, 0 if not.  */
+static int valid_utf8(const unsigned char* s)
+{
+    int expected = 0;
+    int length;
+    if (*s < 0x80)
+        /* single-byte code */
+        return 1;
+    if (*s < 0xc0)
+        /* following byte */
+        return 0;
+    if (*s < 0xE0)
+        expected = 1;
+    else if (*s < 0xF0)
+        expected = 2;
+    else if (*s < 0xF8)
+        expected = 3;
+    else
+        return 0;
+    length = expected + 1;
+    for (; expected; expected--)
+        if (s[expected] < 0x80 || s[expected] >= 0xC0)
+            return 0;
+    return length;
+}
+
 /* Read a line of input from TOK. Determine encoding
    if necessary.  */
 
@@ -544,12 +572,13 @@ decoding_fgets(char *s, int size, struct tok_state *tok)
         }
     }
 #ifndef PGEN
-    /* The default encoding is ASCII, so make sure we don't have any
-       non-ASCII bytes in it. */
+    /* The default encoding is UTF-8, so make sure we don't have any
+       non-UTF-8 bytes in it. */
     if (line && !tok->encoding) {
         unsigned char *c;
-        for (c = (unsigned char *)line; *c; c++)
-            if (*c > 127) {
+        int length;
+        for (c = (unsigned char *)line; *c; c += length)
+            if (!(length = valid_utf8(c))) {
                 badchar = *c;
                 break;
             }
@@ -559,7 +588,7 @@ decoding_fgets(char *s, int size, struct tok_state *tok)
         /* Need to add 1 to the line number, since this line
            has not been counted, yet.  */
         sprintf(buf,
-            "Non-ASCII character '\\x%.2x' "
+            "Non-UTF-8 code starting with '\\x%.2x' "
             "in file %.200s on line %i, "
             "but no encoding declared; "
             "see http://python.org/dev/peps/pep-0263/ for details",

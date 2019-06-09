@@ -232,7 +232,7 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
         c.c_encoding = STR(n);
         n = CHILD(n, 0);
     } else {
-        c.c_encoding = NULL;
+        c.c_encoding = "utf-8";
     }
     c.c_future_unicode = flags && flags->cf_flags & CO_FUTURE_UNICODE_LITERALS;
     c.c_arena = arena;
