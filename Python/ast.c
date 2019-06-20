@@ -214,7 +214,7 @@ num_stmts(const node *n)
 
 mod_ty
 PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
-               PyArena *arena)
+               PyArena *arena, bool unicode_default)
 {
     int i, j, k, num;
     asdl_seq *stmts = NULL;
@@ -231,8 +231,10 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
     } else if (TYPE(n) == encoding_decl) {
         c.c_encoding = STR(n);
         n = CHILD(n, 0);
-    } else {
+    } else if (unicode_default) {
         c.c_encoding = "utf-8";
+    } else {
+        c.c_encoding = NULL;
     }
     c.c_future_unicode = flags && flags->cf_flags & CO_FUTURE_UNICODE_LITERALS;
     c.c_arena = arena;
