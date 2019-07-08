@@ -1494,7 +1494,7 @@ PyParser_ASTFromString(const char *s, const char *filename, int start,
     }
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
-        mod = PyAST_FromNode(n, flags, filename, arena, false);
+        mod = PyAST_FromNode(n, flags, filename, arena);
         PyNode_Free(n);
         return mod;
     }
@@ -1522,7 +1522,7 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
     }
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
-        mod = PyAST_FromNode(n, flags, filename, arena, true);
+        mod = PyAST_FromUnicodeNode(n, flags, filename, arena);
         PyNode_Free(n);
         return mod;
     }

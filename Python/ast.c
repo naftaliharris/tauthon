@@ -213,8 +213,8 @@ num_stmts(const node *n)
 */
 
 mod_ty
-PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
-               PyArena *arena, bool unicode_default)
+from_node(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena, bool unicode_default)
 {
     int i, j, k, num;
     asdl_seq *stmts = NULL;
@@ -325,6 +325,20 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
  error:
     ast_error_finish(filename);
     return NULL;
+}
+
+mod_ty
+PyAST_FromNode(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena)
+{
+    return from_node(n, flags, filename, arena, false);
+}
+
+mod_ty
+PyAST_FromUnicodeNode(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena)
+{
+    return from_node(n, flags, filename, arena, true);
 }
 
 /* Return the AST repr. of the operator represented as syntax (|, ^, etc.)
