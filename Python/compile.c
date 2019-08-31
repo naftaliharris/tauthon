@@ -323,7 +323,7 @@ PyNode_Compile(struct _node *n, const char *filename)
     PyArena *arena = PyArena_New();
     if (!arena)
         return NULL;
-    mod = PyAST_FromNode(n, NULL, filename, arena);
+    mod = PyAST_FromUnicodeNode(n, NULL, filename, arena);
     if (mod)
         co = PyAST_Compile(mod, filename, NULL, arena);
     PyArena_Free(arena);

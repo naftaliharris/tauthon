@@ -569,7 +569,7 @@ if 1:
             rc, out, err = script_helper.assert_python_failure(fn)
         finally:
             test_support.rmtree(tmpd)
-        self.assertIn(b"Non-ASCII", err)
+        self.assertIn(b"Non-UTF-8", err)
 
     def test_null_terminated(self):
         # The source code is null-terminated internally, but bytes-like

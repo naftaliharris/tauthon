@@ -7,6 +7,9 @@ extern "C" {
 PyAPI_FUNC(mod_ty) PyAST_FromNode(const node *, PyCompilerFlags *flags,
 				  const char *, PyArena *);
 
+PyAPI_FUNC(mod_ty) PyAST_FromUnicodeNode(const node *, PyCompilerFlags *flags,
+				  const char *, PyArena *);
+
 #ifdef __cplusplus
 }
 #endif

@@ -213,8 +213,8 @@ num_stmts(const node *n)
 */
 
 mod_ty
-PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
-               PyArena *arena)
+from_node(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena, bool unicode_default)
 {
     int i, j, k, num;
     asdl_seq *stmts = NULL;
@@ -231,6 +231,8 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
     } else if (TYPE(n) == encoding_decl) {
         c.c_encoding = STR(n);
         n = CHILD(n, 0);
+    } else if (unicode_default) {
+        c.c_encoding = "utf-8";
     } else {
         c.c_encoding = NULL;
     }
@@ -323,6 +325,20 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
  error:
     ast_error_finish(filename);
     return NULL;
+}
+
+mod_ty
+PyAST_FromNode(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena)
+{
+    return from_node(n, flags, filename, arena, false);
+}
+
+mod_ty
+PyAST_FromUnicodeNode(const node *n, PyCompilerFlags *flags,
+               const char *filename, PyArena *arena)
+{
+    return from_node(n, flags, filename, arena, true);
 }
 
 /* Return the AST repr. of the operator represented as syntax (|, ^, etc.)

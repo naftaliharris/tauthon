@@ -1522,7 +1522,7 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, int start, char *ps1,
     }
     if (n) {
         flags->cf_flags |= iflags & PyCF_MASK;
-        mod = PyAST_FromNode(n, flags, filename, arena);
+        mod = PyAST_FromUnicodeNode(n, flags, filename, arena);
         PyNode_Free(n);
         return mod;
     }
@@ -2052,4 +2052,3 @@ PyRun_InteractiveLoop(FILE *f, const char *p)
 #ifdef __cplusplus
 }
 #endif
-
