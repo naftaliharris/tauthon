@@ -487,7 +487,8 @@ calculate_path(void)
             // If not found via prefix, then look up the dllpath
             // and use that to find everything
             pythonhome = strdup(dllpath);
-            reduce(pythonhome);
+            if (pythonhome)
+                reduce(pythonhome);
         }
     }
     else
@@ -518,7 +519,8 @@ calculate_path(void)
     // that were found in the registry. (Give registry priority).
     if (pythonhome == NULL) {
         pythonhome = strdup(dllpath);
-        if (pythonhome) reduce(pythonhome);
+        if (pythonhome)
+            reduce(pythonhome);
     }
 
     skiphome = pythonhome==NULL ? 0 : 1;
