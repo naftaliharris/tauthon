@@ -483,8 +483,12 @@ calculate_path(void)
     if (pythonhome == NULL || *pythonhome == '\0') {
         if (search_for_prefix(argv0_path, LANDMARK))
             pythonhome = prefix;
-        else
-            pythonhome = NULL;
+        else {
+            // If not found via prefix, then look up the dllpath
+            // and use that to find everything
+            pythonhome = strdup(dllpath);
+            reduce(pythonhome);
+        }
     }
     else
         strncpy(prefix, pythonhome, MAXPATHLEN);
@@ -508,6 +512,13 @@ calculate_path(void)
     }
     else {
         zip_path[0] = 0;
+    }
+
+    // Otherwise assign the dllpath before overwriting it with values
+    // that were found in the registry. (Give registry priority).
+    if (pythonhome == NULL) {
+        pythonhome = strdup(dllpath);
+        if (pythonhome) reduce(pythonhome);
     }
 
     skiphome = pythonhome==NULL ? 0 : 1;
