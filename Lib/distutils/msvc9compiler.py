@@ -183,6 +183,10 @@ def get_build_version():
     s, rest = sys.version[i:].split(" ", 1)
     majorVersion = int(s[:-2]) - 6
     minorVersion = int(s[2:3]) / 10.0
+
+    # There is no majorVersion of 13 (VS2013 == 1800, and VS2015 == 1900)
+    if majorVersion == 13: majorVersion = 14
+
     # I don't think paths are affected by minor version in version 6
     if majorVersion == 6:
         minorVersion = 0

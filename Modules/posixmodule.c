@@ -27,7 +27,9 @@
 
 #include "Python.h"
 #include "structseq.h"
-#ifndef MS_WINDOWS
+#ifdef MS_WINDOWS
+#include <Windows.h>
+#else
 #include "posixmodule.h"
 #endif
 
@@ -282,6 +284,14 @@ extern int lstat(const char *, struct stat *);
 #define pclose  _pclose
 #endif /* _MSC_VER */
 
+#if !defined(SEP)
+	#ifdef MS_WINDOWS
+		#define SEP "\\"
+	#else
+		#define SEP "/"
+	#endif
+#endif
+
 #if defined(PYCC_VACPP) && defined(PYOS_OS2)
 #include <io.h>
 #endif /* OS2 */
@@ -533,8 +543,48 @@ _PyInt_FromDev(PY_LONG_LONG v)
 #  define _PyInt_FromDev PyInt_FromLong
 #endif
 
+#if defined _MSC_VER && _MSC_VER >= 1700
+void
+_PyInvalidParameterHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
+{
+}
 
-#if defined _MSC_VER && _MSC_VER >= 1400
+int
+_PyVerify_fd(int fd)
+{
+	HANDLE hFd;
+	_invalid_parameter_handler oldHandler;
+
+	oldHandler = _set_invalid_parameter_handler(_PyInvalidParameterHandler);
+
+	hFd = _get_osfhandle(fd);
+	if (hFd == INVALID_HANDLE_VALUE)
+		goto fail;
+	if ((fd < 0) || _isatty(fd))
+		goto fail;
+
+	// FIXME: ensure that file descriptor is open too
+	_set_invalid_parameter_handler(oldHandler);
+	return 1;
+
+fail:
+	_set_invalid_parameter_handler(oldHandler);
+	return 0;
+}
+
+static int
+_PyVerify_fd_dup2(int fd1, int fd2)
+{
+	_invalid_parameter_handler oldHandler;
+
+	if (!_PyVerify_fd(fd1))
+		return 0;
+	if (fd2 < 0)
+		return 0;
+	return 1;
+}
+
+#elif defined _MSC_VER && _MSC_VER >= 1400
 /* Microsoft CRT in VS2005 and higher will verify that a filehandle is
  * valid and raise an assertion if it isn't.
  * Normally, an invalid fd is likely to be a C program error and therefore
@@ -5376,6 +5426,10 @@ win32_popen4(PyObject *self, PyObject  *args)
 
     return f;
 }
+
+#if !defined(SEP)
+#define SEP "\\"
+#endif
 
 static BOOL
 _PyPopenCreateProcess(char *cmdstring,
