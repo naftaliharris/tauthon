@@ -160,6 +160,10 @@ time_clock(PyObject *self, PyObject *unused)
 #endif /* HAVE_CLOCK */
 
 #if defined(MS_WINDOWS) && !defined(__BORLANDC__)
+#include <time.h>
+#define timezone _timezone
+#define daylight _daylight
+#define tzname _tzname
 /* Due to Mark Hammond and Tim Peters */
 static PyObject *
 time_clock(PyObject *self, PyObject *unused)
