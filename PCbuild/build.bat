@@ -8,7 +8,7 @@ echo.version(s) of Microsoft Visual Studio to be installed (see readme.txt).
 echo.
 echo.After the flags recognized by this script, up to 9 arguments to be passed
 echo.directly to MSBuild may be passed.  If the argument contains an '=', the
-echo.entire argument must be quoted (e.g. `%~nx0 "/p:PlatformToolset=v100"`).
+echo.entire argument must be quoted (e.g. `%~nx0 "-p:PlatformToolset=v100"`).
 echo.Alternatively you can put extra flags for MSBuild in a file named 
 echo.`msbuild.rsp` in the `PCbuild` directory, one flag per line. This file
 echo.will be picked automatically by MSBuild. Flags put in this file does not
@@ -54,7 +54,7 @@ set conf=Release
 set target=Build
 set dir=%~dp0
 set parallel=
-set verbose=/nologo /v:m
+set verbose=-nologo -v:m
 set kill=
 set do_pgo=
 set pgo_job=-m test.regrtest --pgo
@@ -66,9 +66,9 @@ if "%~1"=="-p" (set platf=%2) & shift & shift & goto CheckOpts
 if "%~1"=="-r" (set target=Rebuild) & shift & goto CheckOpts
 if "%~1"=="-t" (set target=%2) & shift & shift & goto CheckOpts
 if "%~1"=="-d" (set conf=Debug) & shift & goto CheckOpts
-if "%~1"=="-m" (set parallel=/m) & shift & goto CheckOpts
+if "%~1"=="-m" (set parallel=-m) & shift & goto CheckOpts
 if "%~1"=="-M" (set parallel=) & shift & goto CheckOpts
-if "%~1"=="-v" (set verbose=/v:n) & shift & goto CheckOpts
+if "%~1"=="-v" (set verbose=-v:n) & shift & goto CheckOpts
 if "%~1"=="-k" (set kill=true) & shift & goto CheckOpts
 if "%~1"=="--pgo" (set do_pgo=true) & shift & goto CheckOpts
 if "%~1"=="--pgo-job" (set do_pgo=true) & (set pgo_job=%~2) & shift & shift & goto CheckOpts
@@ -97,7 +97,7 @@ if "%do_pgo%" EQU "true" if "%platf%" EQU "x64" (
 )
 
 if "%GIT%" EQU "" set GIT=git
-if exist "%GIT%" set GITProperty=/p:GIT="%GIT%"
+if exist "%GIT%" set GITProperty=-p:GIT="%GIT%"
 
 rem Setup the environment
 call "%dir%find_msbuild.bat" %MSBUILD%
@@ -121,9 +121,9 @@ goto Build
 
 :Kill
 echo on
-%MSBUILD% "%dir%\pythoncore.vcxproj" /t:KillPython %verbose%^
- /p:Configuration=%conf% /p:Platform=%platf%^
- /p:KillPython=true
+%MSBUILD% "%dir%\pythoncore.vcxproj" -t:KillPython %verbose%^
+ -p:Configuration=%conf% -p:Platform=%platf%^
+ -p:KillPython=true
 
 @echo off
 goto :eof
@@ -133,11 +133,11 @@ rem Call on MSBuild to do the work, echo the command.
 rem Passing %1-9 is not the preferred option, but argument parsing in
 rem batch is, shall we say, "lackluster"
 echo on
-%MSBUILD% "%dir%pcbuild.proj" /t:%target% %parallel% %verbose%^
- /p:Configuration=%conf% /p:Platform=%platf%^
- /p:IncludeExternals=%IncludeExternals%^
- /p:IncludeSSL=%IncludeSSL% /p:IncludeTkinter=%IncludeTkinter%^
- /p:IncludeBsddb=%IncludeBsddb% %GITProperty%^
+%MSBUILD% "%dir%pcbuild.proj" -t:%target% %parallel% %verbose%^
+ -p:Configuration=%conf% -p:Platform=%platf%^
+ -p:IncludeExternals=%IncludeExternals%^
+ -p:IncludeSSL=%IncludeSSL% -p:IncludeTkinter=%IncludeTkinter%^
+ -p:IncludeBsddb=%IncludeBsddb% %GITProperty%^
  %1 %2 %3 %4 %5 %6 %7 %8 %9
 
 @echo off
