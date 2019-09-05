@@ -45,6 +45,9 @@ echo.  -t Build ^| Rebuild ^| Clean ^| CleanAll
 echo.     Set the target manually
 echo.  --pgo-job  The job to use for PGO training; implies --pgo
 echo.             (default: "-m test.regrtest --pgo")
+echo.  --platform-toolset v90 ^| v110 ^| v120 ^| v140
+echo.                     Specify the platform toolset to use
+echo.                     (default: v90)
 exit /b 127
 
 :Run
@@ -58,6 +61,7 @@ set verbose=-nologo -v:m
 set kill=
 set do_pgo=
 set pgo_job=-m test.regrtest --pgo
+set PlatformToolset=v90
 
 :CheckOpts
 if "%~1"=="-h" goto Usage
@@ -79,6 +83,7 @@ if "%~1"=="-e" (set IncludeExternals=true) & shift & goto CheckOpts
 if "%~1"=="--no-ssl" (set IncludeSSL=false) & shift & goto CheckOpts
 if "%~1"=="--no-tkinter" (set IncludeTkinter=false) & shift & goto CheckOpts
 if "%~1"=="--no-bsddb" (set IncludeBsddb=false) & shift & goto CheckOpts
+if "%~1"=="--platform-toolset" (set PlatformToolset=%2) & shift & shift & goto CheckOpts
 
 if "%IncludeExternals%"=="" set IncludeExternals=false
 if "%IncludeSSL%"=="" set IncludeSSL=true
@@ -136,8 +141,9 @@ echo on
 %MSBUILD% "%dir%pcbuild.proj" -t:%target% %parallel% %verbose%^
  -p:Configuration=%conf% -p:Platform=%platf%^
  -p:IncludeExternals=%IncludeExternals%^
- -p:IncludeSSL=%IncludeSSL% -p:IncludeTkinter=%IncludeTkinter%^
- -p:IncludeBsddb=%IncludeBsddb% %GITProperty%^
+ -p:IncludeSSL=%IncludeSSL% -p:IncludeTkinter=%IncludeTkinter% -p:IncludeBsddb=%IncludeBsddb%^
+ -p:PlatformToolset=%PlatformToolset%^
+ %GITProperty%^
  %1 %2 %3 %4 %5 %6 %7 %8 %9
 
 @echo off
