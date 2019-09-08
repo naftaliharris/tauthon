@@ -14,10 +14,10 @@ echo.
 rem Set up the v90 tools first.  This is mostly needed to allow PGInstrument
 rem builds to find the PGO DLL.  Do it first so the newer MSBuild is found
 rem before the one from v90 (vcvarsall.bat prepends to PATH).
-call "%VS90COMNTOOLS%..\..\VC\vcvarsall.bat" %*
 
 set VSTOOLS=%VS140COMNTOOLS%
 if "%VSTOOLS%"=="" set VSTOOLS=%VS120COMNTOOLS%
 if "%VSTOOLS%"=="" set VSTOOLS=%VS110COMNTOOLS%
 if "%VSTOOLS%"=="" set VSTOOLS=%VS100COMNTOOLS%
+if "%VSTOOLS%"=="" set VSTOOLS=%VS90COMNTOOLS%
 call "%VSTOOLS%..\..\VC\vcvarsall.bat" %*
