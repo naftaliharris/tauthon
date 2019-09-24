@@ -5,6 +5,11 @@
 #include "pyconfig.h" /* include for defines */
 #include "object.h"
 
+/* Include C99 integer types as per posix */
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#endif
+
 /**************************************************************************
 Symbols and macros to supply platform-independent interfaces to time related
 functions and constants

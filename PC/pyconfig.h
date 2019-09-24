@@ -686,6 +686,9 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 /* Define if you have the <stddef.h> header file.  */
 #define HAVE_STDDEF_H 1
 
+/* Define if you have the <stdint.h> header file.  */
+#define HAVE_STDINT_H 1
+
 /* Define if you have the <sys/audioio.h> header file.  */
 /* #undef HAVE_SYS_AUDIOIO_H */
 
