@@ -3,6 +3,7 @@
 #define Py_PYTIME_H
 
 #include "pyconfig.h" /* include for defines */
+#include "pyport.h"
 #include "object.h"
 
 /**************************************************************************
@@ -16,7 +17,7 @@ extern "C" {
 /* _PyTime_t: Python timestamp with subsecond precision. It can be used to
    store a duration, and so indirectly a date (related to another date, like
    UNIX epoch). */
-typedef int64_t _PyTime_t;
+typedef PY_INT64_T _PyTime_t;
 #define _PyTime_MIN PY_LLONG_MIN
 #define _PyTime_MAX PY_LLONG_MAX
 
