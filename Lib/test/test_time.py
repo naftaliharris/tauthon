@@ -385,7 +385,7 @@ class TimeTestCase(unittest.TestCase):
         for t in (-2, -1, 0, 1):
             try:
                 tt = time.localtime(t)
-            except (OverflowError, ValueError):
+            except ValueError:
                 pass
             else:
                 self.assertEqual(time.mktime(tt), t)
@@ -403,7 +403,7 @@ class TimeTestCase(unittest.TestCase):
         self.assertNotEqual(tzname, 'LMT')
         try:
             time.mktime((-1, 1, 1, 0, 0, 0, -1, -1, -1))
-        except OverflowError:
+        except ValueError:
             pass
         self.assertEqual(time.strftime('%Z', tt), tzname)
 
