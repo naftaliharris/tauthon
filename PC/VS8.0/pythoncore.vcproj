@@ -961,6 +961,9 @@
 			<File
 				RelativePath="..\..\Include\timefuncs.h"
 				>
+			<File
+				RelativePath="..\..\Include\pytime.h"
+				>
 			</File>
 			<File
 				RelativePath="..\..\Include\token.h"

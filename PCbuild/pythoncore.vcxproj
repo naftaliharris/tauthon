@@ -162,6 +162,7 @@
     <ClInclude Include="..\Include\symtable.h" />
     <ClInclude Include="..\Include\sysmodule.h" />
     <ClInclude Include="..\Include\timefuncs.h" />
+    <ClInclude Include="..\Include\pytime.h" />
     <ClInclude Include="..\Include\token.h" />
     <ClInclude Include="..\Include\traceback.h" />
     <ClInclude Include="..\Include\tupleobject.h" />
@@ -373,6 +374,7 @@
     <ClCompile Include="..\Python\pyctype.c" />
     <ClCompile Include="..\Python\pyfpe.c" />
     <ClCompile Include="..\Python\pymath.c" />
+    <ClCompile Include="..\Python\pytime.c" />
     <ClCompile Include="..\Python\pystate.c" />
     <ClCompile Include="..\Python\pystrcmp.c" />
     <ClCompile Include="..\Python\pystrtod.c" />
