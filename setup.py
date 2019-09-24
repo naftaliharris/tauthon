@@ -601,9 +601,11 @@ class PyBuildExt(build_ext):
         # fast string operations implemented in C
         exts.append( Extension('strop', ['stropmodule.c']) )
         # time operations and variables
-        exts.append( Extension('time', ['timemodule.c'],
+        exts.append( Extension('time', ['timemodule.c', 'pytime.c'],
+                               depends=['pytime.h'],
                                libraries=math_libs) )
-        exts.append( Extension('datetime', ['datetimemodule.c', 'timemodule.c'],
+        exts.append( Extension('datetime', ['datetimemodule.c', 'timemodule.c', 'pytime.c'],
+                               depends=['pytime.h'],
                                libraries=math_libs) )
         # fast iterator tools implemented in C
         exts.append( Extension("itertools", ["itertoolsmodule.c"]) )
@@ -806,8 +808,8 @@ class PyBuildExt(build_ext):
         exts.append( Extension('_csv', ['_csv.c']) )
 
         # socket(2)
-        exts.append( Extension('_socket', ['socketmodule.c', 'timemodule.c'],
-                               depends=['socketmodule.h'],
+        exts.append( Extension('_socket', ['socketmodule.c', 'timemodule.c', 'pytime.c'],
+                               depends=['socketmodule.h', 'pytime.h'],
                                libraries=math_libs) )
         # Detect SSL support for the socket module (via _ssl)
         search_for_ssl_incs_in = [
