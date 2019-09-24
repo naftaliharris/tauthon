@@ -1474,6 +1474,34 @@ inittime(void)
     /* Set, or reset, module variables like time.timezone */
     inittimezone(m);
 
+#ifdef CLOCK_REALTIME
+    PyModule_AddIntMacro(m, CLOCK_REALTIME);
+#endif
+#ifdef CLOCK_MONOTONIC
+    PyModule_AddIntMacro(m, CLOCK_MONOTONIC);
+#endif
+#ifdef CLOCK_MONOTONIC_RAW
+    PyModule_AddIntMacro(m, CLOCK_MONOTONIC_RAW);
+#endif
+#ifdef CLOCK_HIGHRES
+    PyModule_AddIntMacro(m, CLOCK_HIGHRES);
+#endif
+#ifdef CLOCK_PROCESS_CPUTIME_ID
+    PyModule_AddIntMacro(m, CLOCK_PROCESS_CPUTIME_ID);
+#endif
+#ifdef CLOCK_THREAD_CPUTIME_ID
+    PyModule_AddIntMacro(m, CLOCK_THREAD_CPUTIME_ID);
+#endif
+#ifdef CLOCK_PROF
+    PyModule_AddIntMacro(m, CLOCK_PROF);
+#endif
+#ifdef CLOCK_BOOTTIME
+    PyModule_AddIntMacro(m, CLOCK_BOOTTIME);
+#endif
+#ifdef CLOCK_UPTIME
+    PyModule_AddIntMacro(m, CLOCK_UPTIME);
+#endif
+
 #ifdef MS_WINDOWS
     /* Helper to allow interrupts for Windows.
        If Ctrl+C event delivered while not sleeping
