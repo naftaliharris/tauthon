@@ -813,6 +813,7 @@ PYTHON_HEADERS= \
 		Include/pyfpe.h \
 		Include/pymath.h \
 		Include/pygetopt.h \
+		Include/pymacro.h \
 		Include/pymem.h \
 		Include/pyport.h \
 		Include/pystate.h \

@@ -143,6 +143,7 @@
     <ClInclude Include="..\Include\pygetopt.h" />
     <ClInclude Include="..\Include\pymactoolbox.h" />
     <ClInclude Include="..\Include\pymath.h" />
+    <ClInclude Include="..\Include\pymacro.h" />
     <ClInclude Include="..\Include\pymem.h" />
     <ClInclude Include="..\Include\pyport.h" />
     <ClInclude Include="..\Include\pystate.h" />
