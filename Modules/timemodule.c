@@ -78,9 +78,6 @@ static long main_thread;
 #define timezone _timezone
 #define daylight _daylight
 #define tzname _tzname
-
-/* Win32 has better clock replacement; we have our own version below. */
-#undef HAVE_CLOCK
 #endif /* MS_WINDOWS && !defined(__BORLANDC__) */
 
 #if defined(PYOS_OS2)
@@ -262,9 +259,9 @@ time_clock(PyObject *self, PyObject *unused)
 {
     return pyclock(NULL);
 }
-#endif /* HAVE_CLOCK */
+#endif /* HAVE_CLOCK || MS_WINDOWS */
 
-#ifdef HAVE_CLOCK
+#ifdef PYCLOCK
 PyDoc_STRVAR(clock_doc,
 "clock() -> floating point number\n\
 \n\
@@ -1463,7 +1460,7 @@ inittimezone(PyObject *m) {
 static PyMethodDef time_methods[] = {
     {"time",            time_time, METH_NOARGS, time_doc},
     {"time_ns",         time_time_ns, METH_NOARGS, time_ns_doc},
-#ifdef HAVE_CLOCK
+#ifdef PYCLOCK
     {"clock",           time_clock, METH_NOARGS, clock_doc},
 #endif
 #ifdef HAVE_CLOCK_GETTIME
