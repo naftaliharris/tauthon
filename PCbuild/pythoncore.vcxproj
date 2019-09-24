@@ -251,7 +251,6 @@
     <ClCompile Include="..\Modules\stropmodule.c" />
     <ClCompile Include="..\Modules\symtablemodule.c" />
     <ClCompile Include="..\Modules\threadmodule.c" />
-    <ClCompile Include="..\Modules\pytime.c" />
     <ClCompile Include="..\Modules\timemodule.c" />
     <ClCompile Include="..\Modules\xxsubtype.c" />
     <ClCompile Include="..\Modules\zipimport.c" />
@@ -375,6 +374,7 @@
     <ClCompile Include="..\Python\pyctype.c" />
     <ClCompile Include="..\Python\pyfpe.c" />
     <ClCompile Include="..\Python\pymath.c" />
+    <ClCompile Include="..\Python\pytime.c" />
     <ClCompile Include="..\Python\pystate.c" />
     <ClCompile Include="..\Python\pystrcmp.c" />
     <ClCompile Include="..\Python\pystrtod.c" />
