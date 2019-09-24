@@ -770,6 +770,11 @@ pymonotonic(_PyTime_t *tp, _Py_clock_info_t *info, int raise)
 
     assert(info == NULL || raise);
 
+    // FIXME: GetTickCount64 is only available on Windows Vista and greater. In
+    //        order to enable backwards-compatibility, we need another monotonic
+    //        source that returns a 64-bit Integer. Maybe QueryPerformanceCounter
+    //        can be utilised as a workaround?
+
     ticks = GetTickCount64();
     Py_BUILD_ASSERT(sizeof(ticks) <= sizeof(_PyTime_t));
     t = (_PyTime_t)ticks;
