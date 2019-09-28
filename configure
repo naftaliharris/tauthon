@@ -11781,6 +11781,184 @@ fi
 done
 
 
+for ac_func in clock_gettime
+do :
+  ac_fn_c_check_func "$LINENO" "clock_gettime" "ac_cv_func_clock_gettime"
+if test "x$ac_cv_func_clock_gettime" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_CLOCK_GETTIME 1
+_ACEOF
+
+else
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for clock_gettime in -lrt" >&5
+$as_echo_n "checking for clock_gettime in -lrt... " >&6; }
+if ${ac_cv_lib_rt_clock_gettime+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lrt  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char clock_gettime ();
+int
+main ()
+{
+return clock_gettime ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_rt_clock_gettime=yes
+else
+  ac_cv_lib_rt_clock_gettime=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_rt_clock_gettime" >&5
+$as_echo "$ac_cv_lib_rt_clock_gettime" >&6; }
+if test "x$ac_cv_lib_rt_clock_gettime" = xyes; then :
+
+        LIBS="$LIBS -lrt"
+        $as_echo "#define HAVE_CLOCK_GETTIME 1" >>confdefs.h
+
+
+$as_echo "#define TIMEMODULE_LIB rt" >>confdefs.h
+
+
+fi
+
+
+fi
+done
+
+
+for ac_func in clock_getres
+do :
+  ac_fn_c_check_func "$LINENO" "clock_getres" "ac_cv_func_clock_getres"
+if test "x$ac_cv_func_clock_getres" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_CLOCK_GETRES 1
+_ACEOF
+
+else
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for clock_getres in -lrt" >&5
+$as_echo_n "checking for clock_getres in -lrt... " >&6; }
+if ${ac_cv_lib_rt_clock_getres+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lrt  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char clock_getres ();
+int
+main ()
+{
+return clock_getres ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_rt_clock_getres=yes
+else
+  ac_cv_lib_rt_clock_getres=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_rt_clock_getres" >&5
+$as_echo "$ac_cv_lib_rt_clock_getres" >&6; }
+if test "x$ac_cv_lib_rt_clock_getres" = xyes; then :
+
+        $as_echo "#define HAVE_CLOCK_GETRES 1" >>confdefs.h
+
+
+fi
+
+
+fi
+done
+
+
+for ac_func in clock_settime
+do :
+  ac_fn_c_check_func "$LINENO" "clock_settime" "ac_cv_func_clock_settime"
+if test "x$ac_cv_func_clock_settime" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_CLOCK_SETTIME 1
+_ACEOF
+
+else
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for clock_settime in -lrt" >&5
+$as_echo_n "checking for clock_settime in -lrt... " >&6; }
+if ${ac_cv_lib_rt_clock_settime+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lrt  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char clock_settime ();
+int
+main ()
+{
+return clock_settime ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_rt_clock_settime=yes
+else
+  ac_cv_lib_rt_clock_settime=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_rt_clock_settime" >&5
+$as_echo "$ac_cv_lib_rt_clock_settime" >&6; }
+if test "x$ac_cv_lib_rt_clock_settime" = xyes; then :
+
+        $as_echo "#define HAVE_CLOCK_SETTIME 1" >>confdefs.h
+
+
+fi
+
+
+fi
+done
+
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for major" >&5
 $as_echo_n "checking for major... " >&6; }
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext

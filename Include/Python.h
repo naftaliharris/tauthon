@@ -59,6 +59,7 @@
 #include <assert.h>
 
 #include "pyport.h"
+#include "pymacro.h"
 
 /* pyconfig.h or pyport.h may or may not define DL_IMPORT */
 #ifndef DL_IMPORT	/* declarations for DLL import/export */
@@ -78,6 +79,7 @@
 #error "PYMALLOC_DEBUG requires WITH_PYMALLOC"
 #endif
 #include "pymath.h"
+#include "pytime.h"
 #include "pymem.h"
 
 #include "object.h"

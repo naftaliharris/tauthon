@@ -3,12 +3,19 @@ import time
 import unittest
 import sys
 import sysconfig
+import platform
+import threading
 
 
 # Max year is only limited by the size of C int.
 SIZEOF_INT = sysconfig.get_config_var('SIZEOF_INT') or 4
 TIME_MAXYEAR = (1 << 8 * SIZEOF_INT - 1) - 1
 
+def busy_wait(duration):
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
+        pass
+    return
 
 class TimeTestCase(unittest.TestCase):
 
@@ -24,6 +31,77 @@ class TimeTestCase(unittest.TestCase):
     def test_clock(self):
         time.clock()
 
+    def test_time_ns_type(self):
+        def check_ns(sec, ns):
+            self.assertIsInstance(ns, long)
+
+            sec_ns = int(sec * 1e9)
+            # tolerate a difference of 50 ms
+            self.assertLess((sec_ns - ns), 50 ** 6, (sec, ns))
+
+        check_ns(time.time(),
+                 time.time_ns())
+        check_ns(time.monotonic(),
+                 time.monotonic_ns())
+        check_ns(time.perf_counter(),
+                 time.perf_counter_ns())
+        check_ns(time.process_time(),
+                 time.process_time_ns())
+
+        if hasattr(time, 'thread_time'):
+            check_ns(time.thread_time(),
+                     time.thread_time_ns())
+
+        if hasattr(time, 'clock_gettime'):
+            check_ns(time.clock_gettime(time.CLOCK_REALTIME),
+                     time.clock_gettime_ns(time.CLOCK_REALTIME))
+
+    @unittest.skipUnless(hasattr(time, 'clock_gettime'),
+                         'need time.clock_gettime()')
+    def test_clock_realtime(self):
+        t = time.clock_gettime(time.CLOCK_REALTIME)
+        self.assertIsInstance(t, float)
+
+    @unittest.skipUnless(hasattr(time, 'clock_gettime'),
+                         'need time.clock_gettime()')
+    @unittest.skipUnless(hasattr(time, 'CLOCK_MONOTONIC'),
+                         'need time.CLOCK_MONOTONIC')
+    def test_clock_monotonic(self):
+        a = time.clock_gettime(time.CLOCK_MONOTONIC)
+        b = time.clock_gettime(time.CLOCK_MONOTONIC)
+        self.assertLessEqual(a, b)
+
+    @unittest.skipUnless(hasattr(time, 'pthread_getcpuclockid'),
+                         'need time.pthread_getcpuclockid()')
+    @unittest.skipUnless(hasattr(time, 'clock_gettime'),
+                         'need time.clock_gettime()')
+    def test_pthread_getcpuclockid(self):
+        clk_id = time.pthread_getcpuclockid(threading.get_ident())
+        self.assertTrue(type(clk_id) is int)
+        self.assertNotEqual(clk_id, time.CLOCK_THREAD_CPUTIME_ID)
+        t1 = time.clock_gettime(clk_id)
+        t2 = time.clock_gettime(clk_id)
+        self.assertLessEqual(t1, t2)
+
+    @unittest.skipUnless(hasattr(time, 'clock_getres'),
+                         'need time.clock_getres()')
+    def test_clock_getres(self):
+        res = time.clock_getres(time.CLOCK_REALTIME)
+        self.assertGreater(res, 0.0)
+        self.assertLessEqual(res, 1.0)
+
+    @unittest.skipUnless(hasattr(time, 'clock_settime'),
+                         'need time.clock_settime()')
+    def test_clock_settime(self):
+        t = time.clock_gettime(time.CLOCK_REALTIME)
+        try:
+            time.clock_settime(time.CLOCK_REALTIME, t)
+        except PermissionError:
+            pass
+
+        if hasattr(time, 'CLOCK_MONOTONIC'):
+            self.assertRaises(OSError,
+                              time.clock_settime, time.CLOCK_MONOTONIC, 0)
     def test_conversions(self):
         self.assertTrue(time.ctime(self.t)
                      == time.asctime(time.localtime(self.t)))
@@ -307,11 +385,145 @@ class TimeTestCase(unittest.TestCase):
         for t in (-2, -1, 0, 1):
             try:
                 tt = time.localtime(t)
-            except (OverflowError, ValueError):
+            except ValueError:
                 pass
             else:
                 self.assertEqual(time.mktime(tt), t)
 
+    # Issue #13309: passing extreme values to mktime() or localtime()
+    # borks the glibc's internal timezone data.
+    @unittest.skipUnless(platform.libc_ver()[0] != 'glibc',
+                         "disabled because of a bug in glibc. Issue #13309")
+    def test_mktime_error(self):
+        # It may not be possible to reliably make mktime return error
+        # on all platfom.  This will make sure that no other exception
+        # than OverflowError is raised for an extreme value.
+        tt = time.gmtime(self.t)
+        tzname = time.strftime('%Z', tt)
+        self.assertNotEqual(tzname, 'LMT')
+        try:
+            time.mktime((-1, 1, 1, 0, 0, 0, -1, -1, -1))
+        except ValueError:
+            pass
+        self.assertEqual(time.strftime('%Z', tt), tzname)
+
+    def test_monotonic(self):
+        # monotonic() should not go backward
+        times = [time.monotonic() for n in range(100)]
+        t1 = times[0]
+        for t2 in times[1:]:
+            self.assertGreaterEqual(t2, t1, "times=%s" % times)
+            t1 = t2
+
+        # monotonic() includes time elapsed during a sleep
+        t1 = time.monotonic()
+        time.sleep(0.5)
+        t2 = time.monotonic()
+        dt = t2 - t1
+        self.assertGreater(t2, t1)
+        # Issue #20101: On some Windows machines, dt may be slightly low
+        self.assertTrue(0.45 <= dt <= 1.0, dt)
+
+    def test_perf_counter(self):
+        time.perf_counter()
+
+    def test_process_time(self):
+        # process_time() should not include time spend during a sleep
+        start = time.process_time()
+        time.sleep(0.100)
+        stop = time.process_time()
+        # use 20 ms because process_time() has usually a resolution of 15 ms
+        # on Windows
+        self.assertLess(stop - start, 0.020)
+
+        # bpo-33723: A busy loop of 100 ms should increase process_time()
+        # by at least 15 ms
+        min_time = 0.015
+        busy_time = 0.100
+
+        # process_time() should include CPU time spent in any thread
+        start = time.process_time()
+        busy_wait(busy_time)
+        stop = time.process_time()
+        self.assertGreaterEqual(stop - start, min_time)
+
+        t = threading.Thread(target=busy_wait, args=(busy_time,))
+        start = time.process_time()
+        t.start()
+        t.join()
+        stop = time.process_time()
+        self.assertGreaterEqual(stop - start, min_time)
+
+    def test_thread_time(self):
+        if not hasattr(time, 'thread_time'):
+            if sys.platform.startswith(('linux', 'win')):
+                self.fail("time.thread_time() should be available on %r"
+                          % (sys.platform,))
+            else:
+                self.skipTest("need time.thread_time")
+
+        # thread_time() should not include time spend during a sleep
+        start = time.thread_time()
+        time.sleep(0.100)
+        stop = time.thread_time()
+        # use 20 ms because thread_time() has usually a resolution of 15 ms
+        # on Windows
+        self.assertLess(stop - start, 0.020)
+
+        # bpo-33723: A busy loop of 100 ms should increase thread_time()
+        # by at least 15 ms
+        min_time = 0.015
+        busy_time = 0.100
+
+        # thread_time() should include CPU time spent in current thread...
+        start = time.thread_time()
+        busy_wait(busy_time)
+        stop = time.thread_time()
+        self.assertGreaterEqual(stop - start, min_time)
+
+        # ...but not in other threads
+        t = threading.Thread(target=busy_wait, args=(busy_time,))
+        start = time.thread_time()
+        t.start()
+        t.join()
+        stop = time.thread_time()
+        self.assertLess(stop - start, min_time)
+
+    @unittest.skipUnless(hasattr(time, 'clock_settime'),
+                         'need time.clock_settime')
+    def test_monotonic_settime(self):
+        t1 = time.monotonic()
+        realtime = time.clock_gettime(time.CLOCK_REALTIME)
+        # jump backward with an offset of 1 hour
+        try:
+            time.clock_settime(time.CLOCK_REALTIME, realtime - 3600)
+        except PermissionError as err:
+            self.skipTest(err)
+        t2 = time.monotonic()
+        time.clock_settime(time.CLOCK_REALTIME, realtime)
+        # monotonic must not be affected by system clock updates
+        self.assertGreaterEqual(t2, t1)
+
+    def test_localtime_failure(self):
+        # Issue #13847: check for localtime() failure
+        invalid_time_t = None
+        for time_t in (-1, 2**30, 2**33, 2**60):
+            try:
+                time.localtime(time_t)
+            except (ValueError, OverflowError):
+                self.skipTest("need 64-bit time_t")
+            except OSError:
+                invalid_time_t = time_t
+                break
+        if invalid_time_t is None:
+            self.skipTest("unable to find an invalid time_t value")
+
+        self.assertRaises(OSError, time.localtime, invalid_time_t)
+        self.assertRaises(OSError, time.ctime, invalid_time_t)
+
+        # Issue #26669: check for localtime() failure
+        self.assertRaises(ValueError, time.localtime, float("nan"))
+        self.assertRaises(ValueError, time.ctime, float("nan"))
 
 def test_main():
     test_support.run_unittest(TimeTestCase)

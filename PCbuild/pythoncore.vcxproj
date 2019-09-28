@@ -143,6 +143,7 @@
     <ClInclude Include="..\Include\pygetopt.h" />
     <ClInclude Include="..\Include\pymactoolbox.h" />
     <ClInclude Include="..\Include\pymath.h" />
+    <ClInclude Include="..\Include\pymacro.h" />
     <ClInclude Include="..\Include\pymem.h" />
     <ClInclude Include="..\Include\pyport.h" />
     <ClInclude Include="..\Include\pystate.h" />
@@ -161,6 +162,7 @@
     <ClInclude Include="..\Include\symtable.h" />
     <ClInclude Include="..\Include\sysmodule.h" />
     <ClInclude Include="..\Include\timefuncs.h" />
+    <ClInclude Include="..\Include\pytime.h" />
     <ClInclude Include="..\Include\token.h" />
     <ClInclude Include="..\Include\traceback.h" />
     <ClInclude Include="..\Include\tupleobject.h" />
@@ -249,6 +251,7 @@
     <ClCompile Include="..\Modules\stropmodule.c" />
     <ClCompile Include="..\Modules\symtablemodule.c" />
     <ClCompile Include="..\Modules\threadmodule.c" />
+    <ClCompile Include="..\Modules\pytime.c" />
     <ClCompile Include="..\Modules\timemodule.c" />
     <ClCompile Include="..\Modules\xxsubtype.c" />
     <ClCompile Include="..\Modules\zipimport.c" />

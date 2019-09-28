@@ -279,7 +279,7 @@
     <ClInclude Include="..\Include\sysmodule.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="..\Include\timefuncs.h">
+    <ClInclude Include="..\Include\pytime.h">
       <Filter>Include</Filter>
     </ClInclude>
     <ClInclude Include="..\Include\token.h">

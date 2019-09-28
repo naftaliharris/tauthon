@@ -97,7 +97,7 @@ Local naming conventions:
 
 #include "Python.h"
 #include "structmember.h"
-#include "timefuncs.h"
+#include "pytime.h"
 
 #ifndef INVALID_SOCKET /* MS defines this */
 #define INVALID_SOCKET (-1)

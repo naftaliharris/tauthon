@@ -10,7 +10,7 @@
 
 #include <time.h>
 
-#include "timefuncs.h"
+#include "pytime.h"
 
 /* Differentiate between building the core module and building extension
  * modules.
