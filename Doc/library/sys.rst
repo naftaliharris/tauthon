@@ -617,6 +617,16 @@ always available.
    .. versionadded:: 2.7
 
 
+.. data:: __interactivehook__
+
+   When present, this function is automatically called (with no arguments)
+   when the interpreter is launched in :ref:`interactive mode <tut-interactive>`.
+   This is done after the :envvar:`PYTHONSTARTUP` file is read, so that you
+   can set this hook there.
+
+   .. versionadded:: 2.8
+
+
 .. data:: last_type
           last_value
           last_traceback

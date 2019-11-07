@@ -171,6 +171,32 @@ static void RunStartupFile(PyCompilerFlags *cf)
     }
 }
 
+static void RunInteractiveHook(void)
+{
+    PyObject *sys, *hook, *result;
+    sys = PyImport_ImportModule("sys");
+    if (sys == NULL)
+        goto error;
+    hook = PyObject_GetAttrString(sys, "__interactivehook__");
+    Py_DECREF(sys);
+    if (hook == NULL)
+        PyErr_Clear();
+    else {
+        result = PyObject_CallObject(hook, NULL);
+        Py_DECREF(hook);
+        if (result == NULL)
+            goto error;
+        else
+            Py_DECREF(result);
+    }
+    return;
+
+error:
+    PySys_WriteStderr("Failed calling sys.__interactivehook__\n");
+    PyErr_Print();
+    PyErr_Clear();
+}
+
 
 static int RunModule(char *module, int set_argv0)
 {
@@ -597,6 +623,7 @@ Py_Main(int argc, char **argv)
         if (filename == NULL && stdin_is_interactive) {
             Py_InspectFlag = 0; /* do exit on SystemExit */
             RunStartupFile(&cf);
+            RunInteractiveHook();
         }
         /* XXX */
 
@@ -663,6 +690,7 @@ Py_Main(int argc, char **argv)
     if (Py_InspectFlag && stdin_is_interactive &&
         (filename != NULL || command != NULL || module != NULL)) {
         Py_InspectFlag = 0;
+        RunInteractiveHook();
         /* XXX */
         sts = PyRun_AnyFileFlags(stdin, "<stdin>", &cf) != 0;
     }
