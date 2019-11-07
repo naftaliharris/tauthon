@@ -324,6 +324,10 @@ What's new in Tauthon
     *More info: [API Docs](https://docs.python.org/3/library/selectors.html)*
 
 
+* ### tab completion enabled by default in the interactive interpreter
+
+    *More info: [BPO 5845](https://bugs.python.org/issue5845)*
+
 Building and Installation
 -------------------------
 
