@@ -46,7 +46,7 @@ matrix:
         # (Updating the version is fine as long as no warnings are raised by doing so.)
         - python3 -m pip install sphinx~=2.0.1
       script:
-        - make check suspicious html SPHINXOPTS="-q -W -j3"
+        - make check suspicious html SPHINXOPTS="-q -j auto"
 
 
 before_install:
