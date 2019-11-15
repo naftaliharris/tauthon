@@ -2,8 +2,8 @@
 setlocal
 rem Simple script to fetch source for external libraries
 
-if "%PCBUILD%"=="" (set PCBUILD=%~dp0)
-if "%EXTERNALS_DIR%"=="" (set EXTERNALS_DIR=%PCBUILD%\..\externals)
+if NOT DEFINED PCBUILD (set PCBUILD=%~dp0)
+if NOT DEFINED EXTERNALS_DIR (set EXTERNALS_DIR=%PCBUILD%\..\externals)
 
 set DO_FETCH=true
 set DO_CLEAN=false
@@ -34,7 +34,7 @@ call "%PCBUILD%\find_python.bat" "%PYTHON%"
 
 git 2>&1 > nul
 if ERRORLEVEL 9009 (
-    if "%PYTHON%"=="" (
+    if NOT DEFINED PYTHON (
         echo Python 3.6 could not be found or installed, and git.exe is not on your PATH && exit /B 1
     )
 )
@@ -47,8 +47,8 @@ rem files in both this dir and PC\VS9.0
 set libraries=
 set libraries=%libraries%                                    bzip2-1.0.6
 if NOT "%IncludeBsddb%"=="false" set libraries=%libraries%   bsddb-4.7.25.0
-if NOT "%IncludeSSL%"=="false" set libraries=%libraries%     openssl-1.0.2q
-set libraries=%libraries%                                    sqlite-3.14.2.0
+if NOT "%IncludeSSL%"=="false" set libraries=%libraries%     openssl-1.0.2t
+set libraries=%libraries%                                    sqlite-3.28.0.0
 if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tcl-8.5.19.0
 if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tk-8.5.19.0
 if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tix-8.4.3.5
@@ -56,7 +56,7 @@ if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tix-8.4.3.5
 for %%e in (%libraries%) do (
     if exist "%EXTERNALS_DIR%\%%e" (
         echo.%%e already exists, skipping.
-    ) else if "%PYTHON%"=="" (
+    ) else if NOT DEFINED PYTHON (
         echo.Fetching %%e with git...
         git clone --depth 1 https://github.com/%ORG%/cpython-source-deps --branch %%e "%EXTERNALS_DIR%\%%e"
     ) else (
@@ -74,7 +74,7 @@ if NOT "%IncludeSSL%"=="false" set binaries=%binaries%     nasm-2.11.06
 for %%b in (%binaries%) do (
     if exist "%EXTERNALS_DIR%\%%b" (
         echo.%%b already exists, skipping.
-    ) else if "%PYTHON%"=="" (
+    ) else if NOT DEFINED PYTHON (
         echo.Fetching %%b with git...
         git clone --depth 1 https://github.com/%ORG%/cpython-bin-deps --branch %%b "%EXTERNALS_DIR%\%%b"
     ) else (
