@@ -31,8 +31,9 @@ matrix:
       language: c
       compiler: clang
       before_install:
-        - export HOMEBREW_NO_AUTO_UPDATE=1
-        - brew install openssl xz
+        ## packages already installed, as of 2019-11-16
+        #- export HOMEBREW_NO_AUTO_UPDATE=1
+        #- brew install openssl xz
         - export CPPFLAGS="-I$(brew --prefix openssl)/include"
         - export LDFLAGS="-L$(brew --prefix openssl)/lib"
     - os: linux
