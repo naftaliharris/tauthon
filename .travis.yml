@@ -2,21 +2,14 @@ language: c
 dist: bionic
 group: beta
 
-# To cache doc-building dependencies and C compiler output.
+# To cache doc-building dependencies
 cache:
   - pip
-  - ccache
 
 env:
   global:
     # Use -O3 because we don't use debugger on Travis-CI
-    - CFLAGS="-O3"
-
-branches:
-  only:
-    - master
-    - /^\d\.\d$/
-    - buildbot-custom
+    - CFLAGS="-O3 -march=native -pipe"
 
 matrix:
   fast_finish: true
@@ -52,7 +45,7 @@ matrix:
         # (Updating the version is fine as long as no warnings are raised by doing so.)
         - python3 -m pip install sphinx~=2.0.1
       script:
-        - make check suspicious html SPHINXOPTS="-q -W -j4"
+        - make check suspicious html SPHINXOPTS="-q -W -j3"
 
 
 before_install:
@@ -85,7 +78,7 @@ before_install:
 # Travis provides only 2 cores, so don't overdo the parallelism and waste memory.
 before_script:
   - ./configure
-  - make -j4 regen-all
+  - make -j3 regen-all
   - changes=`git status --porcelain`
   - |
       # Check for changes in regenerated files
@@ -95,12 +88,12 @@ before_script:
         echo "$changes"
         exit 1
       fi
-  - make -j4
+  - make -j3
   - make pythoninfo
 
 script:
   # Check that all symbols exported by libpython start with "Py" or "_Py"
   - make smelly
   # `-r -w` implicitly provided through `make buildbottest`.
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then XVFB_RUN=xvfb-run; fi; $XVFB_RUN make buildbottest TESTOPTS="-j4 -uall,-cpu"
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then XVFB_RUN=xvfb-run; fi; $XVFB_RUN make buildbottest TESTOPTS="-j3 -uall,-cpu"
 
