@@ -244,13 +244,13 @@ def test_main():
     test_support.run_unittest(
         DumpCPickle_LoadPickle,
         DumpPickle_LoadCPickle,
-        CPicklePython24Compat,
-        CPicklePython25Compat,
-        CPicklePython26Compat,
+        #CPicklePython24Compat,
+        #CPicklePython25Compat,
+        #CPicklePython26Compat,
         CPicklePython27Compat,
-        PicklePython24Compat,
-        PicklePython25Compat,
-        PicklePython26Compat,
+        #PicklePython24Compat,
+        #PicklePython25Compat,
+        #PicklePython26Compat,
         PicklePython27Compat,
     )
 

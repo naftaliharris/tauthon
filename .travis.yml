@@ -1,21 +1,15 @@
 language: c
+dist: bionic
 group: beta
 
-# To cache doc-building dependencies and C compiler output.
+# To cache doc-building dependencies
 cache:
   - pip
-  - ccache
 
 env:
   global:
     # Use -O3 because we don't use debugger on Travis-CI
-    - CFLAGS="-O3"
-
-branches:
-  only:
-    - master
-    - /^\d\.\d$/
-    - buildbot-custom
+    - CFLAGS="-O3 -march=native -pipe"
 
 matrix:
   fast_finish: true
@@ -37,20 +31,23 @@ matrix:
       language: c
       compiler: clang
       before_install:
-        - brew install openssl xz
+        ## packages already installed, as of 2019-11-16
+        #- export HOMEBREW_NO_AUTO_UPDATE=1
+        #- brew install openssl xz
         - export CPPFLAGS="-I$(brew --prefix openssl)/include"
         - export LDFLAGS="-L$(brew --prefix openssl)/lib"
     - os: linux
       language: python
-      python: 2.7
+      # Build the docs against a stable version of Python so code bugs don't hold up doc-related PRs.
+      python: 3.6
       env: TESTING=docs
       before_script:
         - cd Doc
         # Sphinx is pinned so that new versions that introduce new warnings won't suddenly cause build failures.
         # (Updating the version is fine as long as no warnings are raised by doing so.)
-        - python -m pip install sphinx~=1.6.1
+        - python3 -m pip install sphinx~=2.0.1
       script:
-        - make check suspicious html SPHINXOPTS="-q -W -j4"
+        - make check suspicious html SPHINXOPTS="-q -j auto"
 
 
 before_install:
@@ -83,7 +80,7 @@ before_install:
 # Travis provides only 2 cores, so don't overdo the parallelism and waste memory.
 before_script:
   - ./configure
-  - make -j4 regen-all
+  - make -j3 regen-all
   - changes=`git status --porcelain`
   - |
       # Check for changes in regenerated files
@@ -93,12 +90,12 @@ before_script:
         echo "$changes"
         exit 1
       fi
-  - make -j4
+  - make -j3
   - make pythoninfo
 
 script:
   # Check that all symbols exported by libpython start with "Py" or "_Py"
   - make smelly
   # `-r -w` implicitly provided through `make buildbottest`.
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then XVFB_RUN=xvfb-run; fi; $XVFB_RUN make buildbottest TESTOPTS="-j4 -uall,-cpu"
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then XVFB_RUN=xvfb-run; fi; $XVFB_RUN make buildbottest TESTOPTS="-j3 -uall,-cpu"
 

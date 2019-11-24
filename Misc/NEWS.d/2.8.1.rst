@@ -1,0 +1,8 @@
+.. bpo: 36816
+.. date: 2019-05-08-15-55-46
+.. nonce: WBKRGZ
+.. release date: 2019-11-24
+.. section: Tests
+
+Update Lib/test/selfsigned_pythontestdotnet.pem to match
+self-signed.pythontest.net's new TLS certificate.

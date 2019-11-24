@@ -323,6 +323,13 @@ What's new in Tauthon
 
     *More info: [API Docs](https://docs.python.org/3/library/selectors.html)*
 
+* ### UTF-8 as the default source encoding
+
+    *More info: [PEP 3120](https://www.python.org/dev/peps/pep-3120/)*
+
+* ### monotonic time, performance counter, and process time functions
+
+    *More info: [PEP 418](https://www.python.org/dev/peps/pep-0418/)*
 
 * ### tab completion enabled by default in the interactive interpreter
 
