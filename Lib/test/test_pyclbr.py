@@ -176,7 +176,8 @@ class PyclbrTest(TestCase):
                              'proxy_bypass_macosx_sysconf',
                              'open_https',
                              'getproxies_macosx_sysconf',
-                             'getproxies_internetconfig',)) # not on all platforms
+                             'getproxies_internetconfig', # not on all platforms
+                             '__path__'))
         cm('pickle')
         cm('aifc', ignore=('openfp',))  # set with = in module
         cm('Cookie')
