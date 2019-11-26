@@ -88,6 +88,6 @@ the value to a string, when the values are set dictionary-style.
 Finis.
 """
 
-from Cookie import CookieError, BaseCookie, SimpleCookie
+from Cookie import CookieError, BaseCookie, Morsel, SimpleCookie
 
 __all__ = ['CookieError', 'BaseCookie', 'SimpleCookie']
