@@ -476,12 +476,19 @@ def enablerlcompleter():
             readline.parse_and_bind('tab: complete')
         readline.read_init_file()
 
-        history = os.path.join(os.path.expanduser('~'), '.python_history')
-        try:
-            readline.read_history_file(history)
-        except IOError:
-            pass
-        atexit.register(readline.write_history_file, history)
+        if readline.get_current_history_length() == 0:
+            # If no history was loaded, default to .python_history.
+            # The guard is necessary to avoid doubling history size at
+            # each interpreter exit when readline was already configured
+            # through a PYTHONSTARTUP hook, see:
+            # http://bugs.python.org/issue5845#msg198636
+            history = os.path.join(os.path.expanduser('~'),
+                                   '.python_history')
+            try:
+                readline.read_history_file(history)
+            except IOError:
+                pass
+            atexit.register(readline.write_history_file, history)
 
     sys.__interactivehook__ = register_readline
 
