@@ -6,15 +6,15 @@ __all__ = ['ParseResult', 'SplitResult', 'parse_qs', 'parse_qsl', 'urldefrag',
            'splituser', 'splitvalue', 'uses_fragment', 'uses_netloc',
            'uses_params', 'uses_query', 'uses_relative', 'unwrap']
 
-from urllib import (quote as quote_from_bytes, unquote_plus,
-                    unquote as unquote_to_bytes, urlencode, splitattr,
-                    splithost,
-                    splitpasswd, splitport, splitquery, splittag, splittype,
-                    splituser, splitvalue, unwrap)
+from urllib import (quote as _quote_from_bytes, unquote as _unquote_to_bytes,
+                    urlencode, splitattr, splithost, splitpasswd, splitport,
+                    splitquery, splittag, splittype, splituser, splitvalue,
+                    unwrap)
 from urlparse import (__doc__, ParseResult, SplitResult, parse_qs, parse_qsl,
                       urldefrag, urljoin, urlparse, urlsplit, urlunparse,
                       urlunsplit, uses_fragment, uses_netloc, uses_params,
                       uses_query, uses_relative)
+import re
 
 # Functions modified from Python 3's urllib.
 def to_bytes(url):
@@ -28,6 +28,9 @@ def to_bytes(url):
             raise UnicodeError("URL " + repr(url) +
                                " contains non-ASCII characters")
     return url
+
+def quote_from_bytes(string, safe='/'):
+    return _quote_from_bytes(string, safe).decode('ascii')
 
 def quote(string, safe='/', encoding=None, errors=None):
     if isinstance(string, unicode):
@@ -43,6 +46,8 @@ def quote(string, safe='/', encoding=None, errors=None):
             raise TypeError("quote() doesn't support 'encoding' for bytes")
         if errors is not None:
             raise TypeError("quote() doesn't support 'errors' for bytes")
+    if isinstance(safe, unicode):
+        safe = safe.encode(encoding or 'utf-8', errors or 'strict')
     return quote_from_bytes(string, safe)
 quote.__doc__ = quote_from_bytes.__doc__
 
@@ -63,6 +68,13 @@ def quote_plus(string, safe='', encoding=None, errors=None):
     string = quote(string, safe + space, encoding, errors)
     return string.replace(' ', '+')
 
+def unquote_to_bytes(string):
+    if not isinstance(string, str):
+        string = string.encode('utf-8')
+    return _unquote_to_bytes(string)
+
+_asciire = re.compile('([\x00-\x7f]+)', re.UNICODE)
+
 def unquote(string, encoding='utf-8', errors='replace'):
     """Replace %xx escapes by their single-character equivalent. The optional
     encoding and errors parameters specify how to decode percent-encoded
@@ -73,16 +85,22 @@ def unquote(string, encoding='utf-8', errors='replace'):
 
     unquote('abc%20def') -> 'abc def'.
     """
-    if '%' not in string:
-        string.split
-        return string
     if encoding is None:
         encoding = 'utf-8'
     if errors is None:
         errors = 'replace'
-    if not isinstance(string, str):
-        string = string.encode(encoding, errors)
-    return unquote_to_bytes(string).decode(encoding, errors)
+    if isinstance(string, str):
+        return _unquote_to_bytes(string).decode(encoding, errors)
+    if '%' not in string:
+        string.split
+        return string
+    bits = _asciire.split(string)
+    res = [bits[0]]
+    append = res.append
+    for i in range(1, len(bits), 2):
+        append(unquote_to_bytes(bits[i]).decode(encoding, errors))
+        append(bits[i + 1])
+    return u''.join(res)
 
 def unquote_plus(string, encoding='utf-8', errors='replace'):
     """Like unquote(), but also replace plus signs by spaces, as required for
