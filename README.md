@@ -1,7 +1,7 @@
 Tauthon
 =======
 
-Tauthon is a backwards-compatible fork of the Python 2.7.17 interpreter with new
+Tauthon is a backwards-compatible fork of the Python 2.7.18 interpreter with new
 syntax, builtins, and libraries backported from Python 3.x. Python code and
 C-extensions targeting Python 2.7 or below are expected to run unmodified on
 Tauthon and produce the same output. [But with Tauthon, that code can now use

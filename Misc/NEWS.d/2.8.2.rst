@@ -1,0 +1,9 @@
+.. bpo: 0
+.. date: 2020-04-21
+.. no changes: True
+.. nonce: BSbx2c
+.. release date: 2020-04-21
+.. section: Library
+
+Merge Python-2.7.18
+
