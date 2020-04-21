@@ -1,6 +1,5 @@
 language: c
 dist: bionic
-group: beta
 
 # To cache doc-building dependencies
 cache:

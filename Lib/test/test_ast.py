@@ -103,6 +103,12 @@ exec_tests = [
     "{r for l in x if g}",
     # setcomp with naked tuple
     "{r for l,m in x}",
+    # Decorated FunctionDef
+    "@deco1\n@deco2()\n@deco3(1)\ndef f(): pass",
+    # Decorated ClassDef
+    "@deco1\n@deco2()\n@deco3(1)\nclass C: pass",
+    # Decorator with generator argument
+    "@deco(a for a in b)\ndef f(): pass",
     # AsyncFunctionDef
     "async def f():\n await something()",
     # AsyncFor
@@ -565,6 +571,9 @@ exec_results = [
 ('Module', [('Expr', (1, 0), ('DictComp', (1, 1), ('Name', (1, 1), 'a', ('Load',)), ('Name', (1, 5), 'b', ('Load',)), [('comprehension', ('Tuple', (1, 11), [('Name', (1, 11), 'v', ('Store',)), ('Name', (1, 13), 'w', ('Store',))], ('Store',)), ('Name', (1, 18), 'x', ('Load',)), [])]))]),
 ('Module', [('Expr', (1, 0), ('SetComp', (1, 1), ('Name', (1, 1), 'r', ('Load',)), [('comprehension', ('Name', (1, 7), 'l', ('Store',)), ('Name', (1, 12), 'x', ('Load',)), [('Name', (1, 17), 'g', ('Load',))])]))]),
 ('Module', [('Expr', (1, 0), ('SetComp', (1, 1), ('Name', (1, 1), 'r', ('Load',)), [('comprehension', ('Tuple', (1, 7), [('Name', (1, 7), 'l', ('Store',)), ('Name', (1, 9), 'm', ('Store',))], ('Store',)), ('Name', (1, 14), 'x', ('Load',)), [])]))]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, None, [], None, None, [], []), [('Pass', (4, 9))], [('Name', (1, 1), 'deco1', ('Load',)), ('Call', (2, 1), ('Name', (2, 1), 'deco2', ('Load',)), [], [], None, None), ('Call', (3, 1), ('Name', (3, 1), 'deco3', ('Load',)), [('Num', (3, 7), 1)], [], None, None)], None)]),
+('Module', [('ClassDef', (1, 0), 'C', [], [], None, None, [('Pass', (4, 9))], [('Name', (1, 1), 'deco1', ('Load',)), ('Call', (2, 1), ('Name', (2, 1), 'deco2', ('Load',)), [], [], None, None), ('Call', (3, 1), ('Name', (3, 1), 'deco3', ('Load',)), [('Num', (3, 7), 1)], [], None, None)])]),
+('Module', [('FunctionDef', (1, 0), 'f', ('arguments', [], None, None, [], None, None, [], []), [('Pass', (2, 9))], [('Call', (1, 1), ('Name', (1, 1), 'deco', ('Load',)), [('GeneratorExp', (1, 6), ('Name', (1, 6), 'a', ('Load',)), [('comprehension', ('Name', (1, 12), 'a', ('Store',)), ('Name', (1, 17), 'b', ('Load',)), [])])], [], None, None)], None)]),
 ('Module', [('AsyncFunctionDef', (1, 6), 'f', ('arguments', [], None, None, [], None, None, [], []), [('Expr', (2, 1), ('Await', (2, 1), ('Call', (2, 7), ('Name', (2, 7), 'something', ('Load',)), [], [], None, None)))], [], None)]),
 ('Module', [('AsyncFunctionDef', (1, 6), 'f', ('arguments', [], None, None, [], None, None, [], []), [('AsyncFor', (2, 7), ('Name', (2, 11), 'e', ('Store',)), ('Name', (2, 16), 'i', ('Load',)), [('Expr', (2, 19), ('Num', (2, 19), 1))], [('Expr', (3, 7), ('Num', (3, 7), 2))])], [], None)]),
 ('Module', [('AsyncFunctionDef', (1, 6), 'f', ('arguments', [], None, None, [], None, None, [], []), [('AsyncWith', (2, 7), [('withitem', ('Name', (2, 12), 'a', ('Load',)), ('Name', (2, 17), 'b', ('Store',)))], [('Expr', (2, 20), ('Num', (2, 20), 1))])], [], None)]),
