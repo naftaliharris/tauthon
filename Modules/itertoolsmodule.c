@@ -4131,6 +4131,11 @@ inititertools(void)
         PyModule_AddObject(m, name+1, (PyObject *)typelist[i]);
     }
 
+    Py_INCREF(&ifilterfalse_type);
+    PyModule_AddObject(m, "filterfalse", (PyObject *)&ifilterfalse_type);
+    Py_INCREF(&iziplongest_type);
+    PyModule_AddObject(m, "zip_longest", (PyObject *)&iziplongest_type);
+
     if (PyType_Ready(&teedataobject_type) < 0)
         return;
     if (PyType_Ready(&tee_type) < 0)

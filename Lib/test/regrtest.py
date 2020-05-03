@@ -1099,6 +1099,8 @@ NOTTESTS = {
     'test_support',
     'test_future1',
     'test_future2',
+    'test_linuxaudiodev',
+    'test_ossaudiodev',
 }
 
 def findtests(testdir=None, stdtests=STDTESTS, nottests=NOTTESTS):
