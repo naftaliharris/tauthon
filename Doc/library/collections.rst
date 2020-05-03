@@ -14,7 +14,8 @@
    import itertools
    __name__ = '<doctest>'
 
-**Source code:** :source:`Lib/collections.py` and :source:`Lib/_abcoll.py`
+**Source code:** :source:`Lib/collections/__init__.py` and
+:source:`Lib/_abcoll.py`
 
 --------------
 

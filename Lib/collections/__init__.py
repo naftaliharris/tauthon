@@ -11,8 +11,9 @@ list, set, and tuple.
 '''
 
 __all__ = ['Counter', 'deque', 'defaultdict', 'namedtuple', 'OrderedDict']
-# For bootstrapping reasons, the collection ABCs are defined in _abcoll.py.
-# They should however be considered an integral part of collections.py.
+
+# For backwards compatibility, continue to make the collections ABCs
+# available through the collections module.
 from _abcoll import *
 import _abcoll
 __all__ += _abcoll.__all__

@@ -93,7 +93,10 @@ class PyclbrTest(TestCase):
                 continue
             self.assertHasattr(module, name, ignore)
             py_item = getattr(module, name)
-            if isinstance(value, pyclbr.Function):
+            if name == '__path__':
+                self.assertIsInstance(py_item, list)
+                self.assertEqual(py_item, value)
+            elif isinstance(value, pyclbr.Function):
                 self.assertIsInstance(py_item, (FunctionType, BuiltinFunctionType))
                 if py_item.__module__ != moduleName:
                     continue   # skip functions that came from somewhere else

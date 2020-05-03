@@ -585,6 +585,10 @@ class TestBasicOps(unittest.TestCase):
         ids = map(id, list(izip('abc', 'def')))
         self.assertEqual(len(dict.fromkeys(ids)), len(ids))
 
+    def test_aliases(self):
+        self.assertEqual(izip_longest, zip_longest)
+        self.assertEqual(ifilterfalse, filterfalse)
+
     def test_iziplongest(self):
         for args in [
                 ['abc', range(6)],
