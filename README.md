@@ -335,6 +335,10 @@ What's new in Tauthon
 
     *More info: [BPO 5845](https://bugs.python.org/issue5845)*
 
+* ### module/function aliases and wrappers matching Python3's module renaming and reorganization
+
+    *More info: [PR #128](https://github.com/naftaliharris/tauthon/pull/128)*
+
 Building and Installation
 -------------------------
 
