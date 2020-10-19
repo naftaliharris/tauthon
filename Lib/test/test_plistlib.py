@@ -86,6 +86,19 @@ TESTDATA = """<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 """.replace(" " * 8, "\t")  # Apple as well as plistlib.py output hard tabs
 
+XML_PLIST_WITH_ENTITY='''\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd" [
+   <!ENTITY entity "replacement text">
+  ]>
+<plist version="1.0">
+  <dict>
+    <key>A</key>
+    <string>&entity;</string>
+  </dict>
+</plist>
+'''
+
 
 class TestPlistlib(unittest.TestCase):
 
@@ -194,6 +207,11 @@ class TestPlistlib(unittest.TestCase):
         result2 = plistlib.readPlistFromString(plistlib.writePlistToString(test2))
         self.assertEqual(test1, result1)
         self.assertEqual(test2, result2)
+
+    def test_xml_plist_with_entity_decl(self):
+        with self.assertRaisesRegexp(plistlib.InvalidFileException,
+                                     "XML entity declarations are not supported"):
+            plistlib.readPlistFromString(XML_PLIST_WITH_ENTITY)
 
 
 def test_main():
