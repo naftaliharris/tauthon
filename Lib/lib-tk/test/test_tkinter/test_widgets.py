@@ -861,7 +861,8 @@ class ScaleTest(AbstractWidgetTest, unittest.TestCase):
 
     def test_from(self):
         widget = self.create()
-        self.checkFloatParam(widget, 'from', 100, 14.9, 15.1, conv=round)
+        conv = float if get_tk_patchlevel() >= (8, 6, 10) else round
+        self.checkFloatParam(widget, 'from', 100, 14.9, 15.1, conv=conv)
 
     def test_label(self):
         widget = self.create()
@@ -1161,8 +1162,11 @@ class MenuTest(AbstractWidgetTest, unittest.TestCase):
 
     def test_type(self):
         widget = self.create()
-        self.checkEnumParam(widget, 'type',
-                'normal', 'tearoff', 'menubar')
+        self.checkEnumParam(
+            widget, 'type',
+            'normal', 'tearoff', 'menubar',
+            errmsg='bad type "{}": must be normal, tearoff, or menubar',
+            )
 
     def test_entryconfigure(self):
         m1 = self.create()

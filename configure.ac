@@ -5,12 +5,12 @@ dnl ***********************************************
 # Set VERSION so we only need to edit in one place (i.e., here)
 m4_define(TAUTHON_VERSION, 2.8)
 
-AC_PREREQ(2.65)
+AC_PREREQ([2.71])
 
 AC_REVISION($Revision$)
-AC_INIT(tauthon, TAUTHON_VERSION, https://github.com/naftaliharris/tauthon)
+AC_INIT([tauthon],[TAUTHON_VERSION],[https://github.com/naftaliharris/tauthon])
 AC_CONFIG_SRCDIR([Include/object.h])
-AC_CONFIG_HEADER(pyconfig.h)
+AC_CONFIG_HEADERS([pyconfig.h])
 
 AC_CANONICAL_HOST
 AC_SUBST(build)
@@ -176,7 +176,11 @@ fi
 AC_SUBST(LIPO_32BIT_FLAGS)
 AC_MSG_CHECKING(for --with-universal-archs)
 AC_ARG_WITH(universal-archs,
-    AS_HELP_STRING([--with-universal-archs=ARCH], [select architectures for universal build ("32-bit", "64-bit", "3-way", "intel", "intel-32", "intel-64", or "all")]),
+    AS_HELP_STRING([--with-universal-archs=ARCH],
+                   [specify the kind of universal binary that should be created. this option is
+                    only valid when --enable-universalsdk is set; options are:
+                    ("universal2", "32-bit", "64-bit", "3-way", "intel", "intel-32", "intel-64", or "all")
+                    see Mac/README.rst]),
 [
 	UNIVERSAL_ARCHS="$withval"
 ],
@@ -1113,7 +1117,7 @@ fi
 
 AC_SUBST(BASECFLAGS)
 
-# The -arch flags for universal builds on OSX
+# The -arch flags for universal builds on macOS
 UNIVERSAL_ARCH_FLAGS=
 AC_SUBST(UNIVERSAL_ARCH_FLAGS)
 
@@ -1188,6 +1192,11 @@ yes)
                LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
                ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
                ;;
+            universal2)
+               UNIVERSAL_ARCH_FLAGS="-arch arm64 -arch x86_64"
+               LIPO_32BIT_FLAGS=""
+               ARCH_RUN_32BIT="true"
+		;;
             intel)
                UNIVERSAL_ARCH_FLAGS="-arch i386 -arch x86_64"
                LIPO_32BIT_FLAGS="-extract i386"
@@ -1209,7 +1218,7 @@ yes)
                ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
                ;;
             *)
-               AC_MSG_ERROR([proper usage is --with-universal-arch=32-bit|64-bit|all|intel|3-way])
+               AC_MSG_ERROR([proper usage is --with-universal-arch=universal2|32-bit|64-bit|all|intel|3-way])
                ;;
             esac
 
@@ -1727,7 +1736,6 @@ dnl ]], [[;]])],[cpp_type=ansi],[AC_DEFINE(HAVE_OLD_CPP) cpp_type=traditional])
 dnl AC_MSG_RESULT($cpp_type)
 
 # checks for header files
-AC_HEADER_STDC
 AC_CHECK_HEADERS(asm/types.h crypt.h conio.h direct.h dlfcn.h errno.h \
 fcntl.h grp.h \
 ieeefp.h io.h langinfo.h libintl.h poll.h process.h pthread.h \
@@ -2055,7 +2063,7 @@ case $ac_sys_system/$ac_sys_release in
     		MACOSX_DEFAULT_ARCH="ppc" 
     		;;
     	*)
-    		AC_MSG_ERROR([Unexpected output of 'arch' on OSX])
+    		AC_MSG_ERROR([Unexpected output of 'arch' on macOS])
     		;;
     	esac
     else
@@ -2065,9 +2073,12 @@ case $ac_sys_system/$ac_sys_release in
     		;;
     	ppc) 
     		MACOSX_DEFAULT_ARCH="ppc64" 
+		;;
+    	arm64)
+    		MACOSX_DEFAULT_ARCH="arm64"
     		;;
     	*)
-    		AC_MSG_ERROR([Unexpected output of 'arch' on OSX])
+    		AC_MSG_ERROR([Unexpected output of 'arch' on macOS])
     		;;
     	esac
 
@@ -3203,6 +3214,13 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
    AC_MSG_RESULT(yes)],
   [AC_MSG_RESULT(no)
 ])
+AC_MSG_CHECKING(for _dyld_shared_cache_contains_path)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <mach-o/dyld.h>]], [[void *x=_dyld_shared_cache_contains_path]])],
+  [AC_DEFINE(HAVE_DYLD_SHARED_CACHE_CONTAINS_PATH, 1, Define if you have the '_dyld_shared_cache_contains_path' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
+
 # On some systems (eg. FreeBSD 5), we would find a definition of the
 # functions ctermid_r, setgroups in the library, but no prototype
 # (e.g. because we use _XOPEN_SOURCE). See whether we can take their
@@ -3597,7 +3615,6 @@ fi
 AC_CHECK_FUNCS(getnameinfo)
 
 # checks for structures
-AC_HEADER_TIME
 AC_STRUCT_TM
 AC_STRUCT_TIMEZONE
 AC_CHECK_MEMBERS([struct stat.st_rdev])

@@ -1051,7 +1051,7 @@ class MinidomTest(unittest.TestCase):
 
         # Verify that character decoding errors raise exceptions instead
         # of crashing
-        self.assertRaises(UnicodeDecodeError, parseString,
+        self.assertRaises((UnicodeDecodeError, xml.parsers.expat.ExpatError), parseString,
                 '<fran\xe7ais>Comment \xe7a va ? Tr\xe8s bien ?</fran\xe7ais>')
 
         doc.unlink()

@@ -376,6 +376,7 @@ if hasattr(select, 'poll'):
                 # zero to wait *at least* timeout seconds.
                 timeout = math.ceil(timeout * 1e3)
             ready = []
+            fd_event_list = []
             try:
                 fd_event_list = self._poll.poll(timeout)
             except (EnvironmentError, select.error) as e:
@@ -442,6 +443,7 @@ if hasattr(select, 'epoll'):
             max_ev = max(len(self._fd_to_key), 1)
 
             ready = []
+            fd_event_list = []
             try:
                 fd_event_list = self._epoll.poll(timeout, max_ev)
             except (EnvironmentError, select.error) as e:
@@ -501,6 +503,7 @@ if hasattr(select, 'devpoll'):
                 # zero to wait *at least* timeout seconds.
                 timeout = math.ceil(timeout * 1e3)
             ready = []
+            fd_event_list = []
             try:
                 fd_event_list = self._devpoll.poll(timeout)
             except (EnvironmentError, select.error) as e:

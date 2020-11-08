@@ -8,6 +8,16 @@
 #endif
 #endif
 
+#if defined(__APPLE__) && defined(__has_builtin)
+#  if __has_builtin(__builtin_available)
+#    define HAVE_GETENTRYPY_GETRANDOM_RUNTIME __builtin_available(macOS 10.12, iOS 10.10, tvOS 10.0, watchOS 3.0, *)
+#  endif
+#endif
+#ifndef HAVE_GETENTRYPY_GETRANDOM_RUNTIME
+#  define HAVE_GETENTRYPY_GETRANDOM_RUNTIME 1
+#endif
+
+
 #ifdef Py_DEBUG
 int _Py_HashSecret_Initialized = 0;
 #else
@@ -112,6 +122,16 @@ win32_urandom(unsigned char *buffer, Py_ssize_t size, int raise)
    Return 0 on success, or raise an exception and return -1 on error.
    If fatal is nonzero, call Py_FatalError() instead of raising an exception
    on error. */
+
+#if defined(__APPLE__) && defined(__has_attribute) && __has_attribute(availability)
+static int
+py_getentropy(unsigned char *buffer, Py_ssize_t size, int fatal)
+        __attribute__((availability(macos,introduced=10.12)))
+        __attribute__((availability(ios,introduced=10.0)))
+        __attribute__((availability(tvos,introduced=10.0)))
+        __attribute__((availability(watchos,introduced=3.0)));
+#endif
+
 static int
 py_getentropy(unsigned char *buffer, Py_ssize_t size, int fatal)
 {
@@ -348,14 +368,16 @@ _PyOS_URandom(void *buffer, Py_ssize_t size)
 #ifdef MS_WINDOWS
     return win32_urandom((unsigned char *)buffer, size, 1);
 #elif defined(PY_GETENTROPY)
-    return py_getentropy(buffer, size, 0);
+    if (HAVE_GETENTRYPY_GETRANDOM_RUNTIME) {
+        return py_getentropy(buffer, size, 0);
+    }
 #else
 # ifdef __VMS
     return vms_urandom((unsigned char *)buffer, size, 1);
-# else
-    return dev_urandom_python((char*)buffer, size);
 # endif
 #endif
+
+    return dev_urandom_python((char*)buffer, size);
 }
 
 void
@@ -411,7 +433,11 @@ _PyRandom_Init(void)
 #elif __VMS
         vms_urandom((unsigned char *)secret, secret_size, 0);
 #elif defined(PY_GETENTROPY)
-        (void)py_getentropy(secret, secret_size, 1);
+        if (HAVE_GETENTRYPY_GETRANDOM_RUNTIME) {
+            (void)py_getentropy(secret, secret_size, 1);
+        } else {
+            dev_urandom_noraise(secret, secret_size);
+        }
 #else
         dev_urandom_noraise(secret, secret_size);
 #endif

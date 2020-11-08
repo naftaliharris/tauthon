@@ -109,6 +109,13 @@ def is_macosx_sdk_path(path):
                 or path.startswith('/System/')
                 or path.startswith('/Library/') )
 
+def grep_headers_for(function, headers):
+    for header in headers:
+        with open(header, 'r') as f:
+            if function in f.read():
+                return True
+    return False
+
 def find_file(filename, std_dirs, paths):
     """Searches for the directory where a given file is located,
     and returns a possibly-empty list of additional directories, or None
@@ -2031,46 +2038,8 @@ class PyBuildExt(build_ext):
                         )
         self.extensions.append(ext)
 
-        # XXX handle these, but how to detect?
-        # *** Uncomment and edit for PIL (TkImaging) extension only:
-        #       -DWITH_PIL -I../Extensions/Imaging/libImaging  tkImaging.c \
-        # *** Uncomment and edit for TOGL extension only:
-        #       -DWITH_TOGL togl.c \
-        # *** Uncomment these for TOGL extension only:
-        #       -lGL -lGLU -lXext -lXmu \
-
-    def configure_ctypes_darwin(self, ext):
-        # Darwin (OS X) uses preconfigured files, in
-        # the Modules/_ctypes/libffi_osx directory.
-        srcdir = sysconfig.get_config_var('srcdir')
-        ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
-                                                  '_ctypes', 'libffi_osx'))
-        sources = [os.path.join(ffi_srcdir, p)
-                   for p in ['ffi.c',
-                             'x86/darwin64.S',
-                             'x86/x86-darwin.S',
-                             'x86/x86-ffi_darwin.c',
-                             'x86/x86-ffi64.c',
-                             'powerpc/ppc-darwin.S',
-                             'powerpc/ppc-darwin_closure.S',
-                             'powerpc/ppc-ffi_darwin.c',
-                             'powerpc/ppc64-darwin_closure.S',
-                             ]]
-
-        # Add .S (preprocessed assembly) to C compiler source extensions.
-        self.compiler.src_extensions.append('.S')
-
-        include_dirs = [os.path.join(ffi_srcdir, 'include'),
-                        os.path.join(ffi_srcdir, 'powerpc')]
-        ext.include_dirs.extend(include_dirs)
-        ext.sources.extend(sources)
-        return True
-
     def configure_ctypes(self, ext):
         if not self.use_system_libffi:
-            if host_platform == 'darwin':
-                return self.configure_ctypes_darwin(ext)
-
             srcdir = sysconfig.get_config_var('srcdir')
             ffi_builddir = os.path.join(self.build_temp, 'libffi')
             ffi_srcdir = os.path.abspath(os.path.join(srcdir, 'Modules',
@@ -2120,7 +2089,11 @@ class PyBuildExt(build_ext):
         return True
 
     def detect_ctypes(self, inc_dirs, lib_dirs):
-        self.use_system_libffi = False
+        if (not sysconfig.get_config_var("LIBFFI_INCLUDEDIR") and host_platform == 'darwin'):
+            self.use_system_libffi = True
+        else:
+            self.use_system_libffi = '--with-system-ffi' in sysconfig.get_config_var("CONFIG_ARGS")
+
         include_dirs = []
         extra_compile_args = []
         extra_link_args = []
@@ -2133,11 +2106,9 @@ class PyBuildExt(build_ext):
 
         if host_platform == 'darwin':
             sources.append('_ctypes/malloc_closure.c')
-            sources.append('_ctypes/darwin/dlfcn_simple.c')
+            extra_compile_args.append('-DUSING_MALLOC_CLOSURE_DOT_C=1')
             extra_compile_args.append('-DMACOSX')
             include_dirs.append('_ctypes/darwin')
-# XXX Is this still needed?
-##            extra_link_args.extend(['-read_only_relocs', 'warning'])
 
         elif host_platform == 'sunos5':
             # XXX This shouldn't be necessary; it appears that some
@@ -2164,38 +2135,48 @@ class PyBuildExt(build_ext):
                              sources=['_ctypes/_ctypes_test.c'])
         self.extensions.extend([ext, ext_test])
 
-        if not '--with-system-ffi' in sysconfig.get_config_var("CONFIG_ARGS"):
-            return
-
-        if host_platform == 'darwin':
-            # OS X 10.5 comes with libffi.dylib; the include files are
-            # in /usr/include/ffi
-            inc_dirs.append('/usr/include/ffi')
-
-        ffi_inc = [sysconfig.get_config_var("LIBFFI_INCLUDEDIR")]
-        if not ffi_inc or ffi_inc[0] == '':
-            ffi_inc = find_file('ffi.h', [], inc_dirs)
-        if ffi_inc is not None:
-            ffi_h = ffi_inc[0] + '/ffi.h'
-            with open(ffi_h) as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith(('#define LIBFFI_H',
-                                        '#define ffi_wrapper_h')):
-                        break
-                else:
-                    ffi_inc = None
-                    print('Header file {} does not define LIBFFI_H or '
-                          'ffi_wrapper_h'.format(ffi_h))
+        ffi_inc = sysconfig.get_config_var("LIBFFI_INCLUDEDIR")
         ffi_lib = None
-        if ffi_inc is not None:
+
+        ffi_inc_dirs = inc_dirs[:]
+        if host_platform == 'darwin':
+            ffi_in_sdk = os.path.join(macosx_sdk_root(), "usr/include/ffi")
+
+            if not ffi_inc:
+                if os.path.exists(ffi_in_sdk):
+                    ext.extra_compile_args.append("-DUSING_APPLE_OS_LIBFFI=1")
+                    ffi_inc = ffi_in_sdk
+                    ffi_lib = 'ffi'
+                else:
+                    # OS X 10.5 comes with libffi.dylib; the include files are
+                    # in /usr/include/ffi
+                    ffi_inc_dirs.append('/usr/include/ffi')
+
+        if not ffi_inc:
+            found = find_file('ffi.h', [], ffi_inc_dirs)
+            if found:
+                ffi_inc = found[0]
+        if ffi_inc:
+            ffi_h = ffi_inc + '/ffi.h'
+            if not os.path.exists(ffi_h):
+                ffi_inc = None
+                print('Header file ' + ffi_h + ' does not exist')
+        if ffi_lib is None and ffi_inc:
             for lib_name in ('ffi_convenience', 'ffi_pic', 'ffi'):
                 if (self.compiler.find_library_file(lib_dirs, lib_name)):
                     ffi_lib = lib_name
                     break
 
         if ffi_inc and ffi_lib:
-            ext.include_dirs.extend(ffi_inc)
+            ffi_headers = glob(os.path.join(ffi_inc, '*.h'))
+            if grep_headers_for('ffi_prep_cif_var', ffi_headers):
+                ext.extra_compile_args.append("-DHAVE_FFI_PREP_CIF_VAR=1")
+            if grep_headers_for('ffi_prep_closure_loc', ffi_headers):
+                ext.extra_compile_args.append("-DHAVE_FFI_PREP_CLOSURE_LOC=1")
+            if grep_headers_for('ffi_closure_alloc', ffi_headers):
+                ext.extra_compile_args.append("-DHAVE_FFI_CLOSURE_ALLOC=1")
+
+            ext.include_dirs.append(ffi_inc)
             ext.libraries.append(ffi_lib)
             self.use_system_libffi = True
 

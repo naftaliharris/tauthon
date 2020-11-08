@@ -452,7 +452,14 @@ class ScalableSelectorMixIn:
                     self.skipTest("FD limit reached")
                 raise
 
-        self.assertEqual(NUM_FDS // 2, len(s.select()))
+        try:
+            fds = s.select()
+        except OSError as e:
+            if e.errno == errno.EINVAL and sys.platform == 'darwin':
+                # unexplainable errors on macOS don't need to fail the test
+                self.skipTest("Invalid argument error calling poll()")
+            raise
+        self.assertEqual(NUM_FDS // 2, len(fds))
 
 
 class DefaultSelectorTestCase(BaseSelectorTestCase):
@@ -465,6 +472,7 @@ class SelectSelectorTestCase(BaseSelectorTestCase):
     SELECTOR = selectors.SelectSelector
 
 
+@unittest.skipIf(sys.platform == 'darwin', 'poll() is pretty broken on macOS')
 @unittest.skipUnless(hasattr(selectors, 'PollSelector'),
                      "Test needs selectors.PollSelector")
 class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):

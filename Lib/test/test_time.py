@@ -525,9 +525,39 @@ class TimeTestCase(unittest.TestCase):
         self.assertRaises(ValueError, time.localtime, float("nan"))
         self.assertRaises(ValueError, time.ctime, float("nan"))
 
-def test_main():
-    test_support.run_unittest(TimeTestCase)
+@unittest.skipUnless(sys.platform == "darwin", "test weak linking on macOS")
+class TestTimeWeaklinking(unittest.TestCase):
+    # These test cases verify that weak linking support on macOS works
+    # as expected. These cases only test new behaviour introduced by weak linking,
+    # regular behaviour is tested by the normal test cases.
+    #
+    # See the section on Weak Linking in Mac/README.txt for more information.
+    def test_clock_functions(self):
+        import sysconfig
+        import platform
 
+        config_vars = sysconfig.get_config_vars()
+        var_name = "HAVE_CLOCK_GETTIME"
+        if var_name not in config_vars or not config_vars[var_name]:
+            raise unittest.SkipTest(var_name + " is not available")
+
+        mac_ver = tuple(int(x) for x in platform.mac_ver()[0].split("."))
+
+        clock_names = [
+            "CLOCK_MONOTONIC", "clock_gettime", "clock_gettime_ns", "clock_settime",
+            "clock_settime_ns", "clock_getres"]
+
+        if mac_ver >= (10, 12):
+            for name in clock_names:
+                self.assertTrue(hasattr(time, name), "time." + name + " is not available")
+
+        else:
+            for name in clock_names:
+                self.assertFalse(hasattr(time, name), "time." + name + " is available")
+
+
+def test_main():
+    test_support.run_unittest(TimeTestCase, TestTimeWeaklinking)
 
 if __name__ == "__main__":
     test_main()

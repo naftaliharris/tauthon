@@ -7,13 +7,10 @@
 #include "Python.h"
 #include "structmember.h"
 
-#ifdef STDC_HEADERS
 #include <stddef.h>
-#else /* !STDC_HEADERS */
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>          /* For size_t */
 #endif /* HAVE_SYS_TYPES_H */
-#endif /* !STDC_HEADERS */
 
 struct arrayobject; /* Forward */
 

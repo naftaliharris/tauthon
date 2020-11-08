@@ -2,11 +2,7 @@
 
 #include "Python.h"
 
-#ifdef STDC_HEADERS
 #include <stddef.h>
-#else
-#include <sys/types.h>          /* For size_t */
-#endif
 
 /* Ensure ob_item has room for at least newsize elements, and set
  * ob_size to newsize.  If newsize > ob_size on entry, the content
