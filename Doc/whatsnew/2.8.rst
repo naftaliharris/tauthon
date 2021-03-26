@@ -1,5 +1,6 @@
-Tauthon
-=======
+*************************
+What’s new in Tauthon 2.8
+*************************
 
 Tauthon is a backwards-compatible fork of the Python 2.7.17 interpreter
 with new syntax, builtins, and libraries backported from Python 3.x.
@@ -8,8 +9,8 @@ to run unmodified on Tauthon and produce the same output. `But with
 Tauthon, that code can now use some of the new features from Python
 3.x.`_
 
-What’s new in Tauthon
----------------------
+Summary -- Release highlights
+=============================
 
 -  .. rubric:: Function Annotations
       :name: function-annotations
