@@ -492,11 +492,25 @@ def enablerlcompleter():
             # http://bugs.python.org/issue5845#msg198636
             history = os.path.join(os.path.expanduser('~'),
                                    '.python_history')
+
             try:
                 readline.read_history_file(history)
-            except IOError:
+            except FileNotFoundError:
                 pass
-            atexit.register(readline.write_history_file, history)
+            except OSError as e:
+                warnings.warn("Cannot read readline history file: " +
+                              str(e),
+                              RuntimeWarning)
+
+            def write_history_file():
+                try:
+                    readline.write_history_file(history)
+                except OSError as e:
+                    warnings.warn("Cannot write readline history file: " +
+                                  str(e),
+                                  RuntimeWarning)
+
+            atexit.register(write_history_file)
 
     sys.__interactivehook__ = register_readline
 
