@@ -1052,15 +1052,12 @@ class URLopener_Tests(unittest.TestCase):
 
     def test_local_file_open(self):
         # bpo-35907, CVE-2019-9948: urllib must reject local_file:// scheme
-        class DummyURLopener(urllib.URLopener):
-            def open_local_file(self, url):
-                return url
         for url in ('local_file://example', 'local-file://example'):
-            self.assertRaises(IOError, urllib.urlopen, url)
-            self.assertRaises(IOError, urllib.URLopener().open, url)
-            self.assertRaises(IOError, urllib.URLopener().retrieve, url)
-            self.assertRaises(IOError, DummyURLopener().open, url)
-            self.assertRaises(IOError, DummyURLopener().retrieve, url)
+            for fun in (urllib.urlopen,
+                        urllib.URLopener().open,
+                        urllib.URLopener().retrieve):
+                self.assertRaisesRegexp(
+                    IOError, self._unknown_url_regexp, fun, url)
 
     def test_URL_local_file_open(self):
         # bpo-37820: urllib must reject URL:/local_file or </local_file> URLs
