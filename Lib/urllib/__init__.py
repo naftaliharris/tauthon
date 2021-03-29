@@ -182,7 +182,7 @@ class URLopener:
     # External interface
     def open(self, fullurl, data=None):
         """Use URLopener().open(file) instead of open(file, 'r')."""
-        fullurl = unwrap(toBytes(fullurl))
+        fullurl = toBytes(fullurl)
         # percent encode url, fixing lame server errors for e.g, like space
         # within url paths.
         fullurl = quote(fullurl, safe="%/:=&?~#+!$,;'@()*[]|")
@@ -232,7 +232,7 @@ class URLopener:
     def retrieve(self, url, filename=None, reporthook=None, data=None):
         """retrieve(url) returns (filename, headers) for a local object
         or (tempfilename, headers) for a remote object."""
-        url = unwrap(toBytes(url))
+        url = toBytes(url)
         if self.tempcache and url in self.tempcache:
             return self.tempcache[url]
         type, url1 = splittype(url)

@@ -1048,6 +1048,8 @@ class URLopener_Tests(unittest.TestCase):
             "spam://c:|windows%/:=&?~#+!$,;'@()*[]|/path/"),
             "//c:|windows%/:=&?~#+!$,;'@()*[]|/path/")
 
+    _unknown_url_regexp = "unknown url type"
+
     def test_local_file_open(self):
         # bpo-35907, CVE-2019-9948: urllib must reject local_file:// scheme
         class DummyURLopener(urllib.URLopener):
@@ -1059,6 +1061,21 @@ class URLopener_Tests(unittest.TestCase):
             self.assertRaises(IOError, urllib.URLopener().retrieve, url)
             self.assertRaises(IOError, DummyURLopener().open, url)
             self.assertRaises(IOError, DummyURLopener().retrieve, url)
+
+    def test_URL_local_file_open(self):
+        # bpo-37820: urllib must reject URL:/local_file or </local_file> URLs
+        for fun in (urllib.urlopen,
+                    urllib.URLopener().open,
+                    urllib.URLopener().retrieve):
+            self.assertRaisesRegexp(
+                IOError, self._unknown_url_regexp, fun, 'URL:/example')
+        for fun in (urllib.urlopen,
+                    urllib.URLopener().open,
+                    urllib.URLopener().retrieve):
+            # On Windows, the error is not about a non-existing file, but
+            # rather "[Errno 22] The filename, directory name, or volume label
+            # syntax is incorrect: '<\\example>'".
+            self.assertRaises(IOError, fun, '</example>')
 
 # Just commented them out.
 # Can't really tell why keep failing in windows and sparc.
