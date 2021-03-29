@@ -65,6 +65,7 @@ import sys
 import os
 import __builtin__
 import traceback
+import warnings
 
 # Prefixes for site-packages; add additional prefixes like /usr/local here
 PREFIXES = [sys.prefix, sys.exec_prefix]
@@ -474,7 +475,14 @@ def enablerlcompleter():
             readline.parse_and_bind('bind ^I rl_complete')
         else:
             readline.parse_and_bind('tab: complete')
-        readline.read_init_file()
+
+        try:
+            readline.read_init_file()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            warnings.warn("Cannot read readline init file: " + str(e),
+                          RuntimeWarning)
 
         if readline.get_current_history_length() == 0:
             # If no history was loaded, default to .python_history.
