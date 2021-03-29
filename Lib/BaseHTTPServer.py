@@ -71,6 +71,7 @@ __version__ = "0.3"
 __all__ = ["HTTPServer", "BaseHTTPRequestHandler"]
 
 import sys
+from re import sub as re_sub
 import time
 import socket # For gethostbyaddr()
 from warnings import filterwarnings, catch_warnings
@@ -286,6 +287,10 @@ class BaseHTTPRequestHandler(SocketServer.StreamRequestHandler):
             self.send_error(400, "Bad request syntax (%r)" % requestline)
             return False
         self.command, self.path, self.request_version = command, path, version
+
+        # bpo-43223: Replacing '//' at path start with '/' to avoid redirection
+        # to another host via a '//host/else' URL in the Location header.
+        self.path = re_sub(r'^/+', '/', self.path)
 
         # Examine the headers and look for a Connection directive
         self.headers = self.MessageClass(self.rfile, 0)
