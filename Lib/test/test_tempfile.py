@@ -580,6 +580,18 @@ class test_mkstemp(TC):
         finally:
             os.rmdir(dir)
 
+    def _test_forbidden_char_prefix_suffix(self, c):
+        with self.assertRaises(ValueError):
+            tempfile.mkstemp(prefix=c+"tmp")
+        with self.assertRaises(ValueError):
+            tempfile.mkstemp(suffix=c + (".." + c) * 8 + "tmp" + c)
+
+    def test_prefix_suffix_sanity_checks(self):
+        self._test_forbidden_char_prefix_suffix(os.sep)
+        if os.altsep is not None:
+            self._test_forbidden_char_prefix_suffix(os.altsep)
+
+
 test_classes.append(test_mkstemp)
 
 
@@ -759,6 +771,17 @@ class test_NamedTemporaryFile(TC):
         self.do_create(suf="b")
         self.do_create(pre="a", suf="b")
         self.do_create(pre="aa", suf=".txt")
+
+    def _test_forbidden_char_prefix_suffix(self, c):
+        with self.assertRaises(ValueError):
+            tempfile.NamedTemporaryFile(prefix=c+"tmp")
+        with self.assertRaises(ValueError):
+            tempfile.NamedTemporaryFile(suffix=c + (".." + c) * 8 + "tmp" + c)
+
+    def test_prefix_suffix_sanity_checks(self):
+        self._test_forbidden_char_prefix_suffix(os.sep)
+        if os.altsep is not None:
+            self._test_forbidden_char_prefix_suffix(os.altsep)
 
     def test_creates_named(self):
         # NamedTemporaryFile creates files with names
@@ -1058,6 +1081,17 @@ class test_TemporaryFile(TC):
             tempfile.TemporaryFile()
         except:
             self.failOnException("TemporaryFile")
+
+    def _test_forbidden_char_prefix_suffix(self, c):
+        with self.assertRaises(ValueError):
+            tempfile.TemporaryFile(prefix=c+"tmp")
+        with self.assertRaises(ValueError):
+            tempfile.TemporaryFile(suffix=c + (".." + c) * 8 + "tmp" + c)
+
+    def test_prefix_suffix_sanity_checks(self):
+        self._test_forbidden_char_prefix_suffix(os.sep)
+        if os.altsep is not None:
+            self._test_forbidden_char_prefix_suffix(os.altsep)
 
     def test_has_no_name(self):
         # TemporaryFile creates files with no names (on this system)
