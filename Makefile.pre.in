@@ -1057,6 +1057,11 @@ PLATMACDIRS= plat-mac plat-mac/Carbon plat-mac/lib-scriptpackages \
 	plat-mac/lib-scriptpackages/SystemEvents \
 	plat-mac/lib-scriptpackages/Terminal
 PLATMACPATH=:plat-mac:plat-mac/lib-scriptpackages
+TAUTHON_SPECIFIC_LIBSUBDIRS:=	\
+	collections \
+	concurrent concurrent/futures \
+	http \
+	urllib
 LIBSUBDIRS=	lib-tk lib-tk/test lib-tk/test/test_tkinter \
 		lib-tk/test/test_ttk site-packages test test/audiodata test/capath \
 		test/data test/cjkencodings test/decimaltestdata test/xmltestdata \
@@ -1064,7 +1069,7 @@ LIBSUBDIRS=	lib-tk lib-tk/test lib-tk/test/test_tkinter \
 		test/subprocessdata \
 		test/support \
 		test/tracedmodules \
-		concurrent concurrent/futures \
+		$(TAUTHON_SPECIFIC_LIBSUBDIRS) \
 		encodings compiler hotshot \
 		email email/mime email/test email/test/data \
 		ensurepip ensurepip/_bundled \
