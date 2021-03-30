@@ -471,7 +471,7 @@ def enablerlcompleter():
 
         # Reading the initialization (config) file may not be enough to set a
         # completion key, so we set one first and then read the file
-        if 'libedit' in getattr(readline, '__doc__', ''):
+        if 'libedit' in (getattr(readline, '__doc__', '') or ''):
             readline.parse_and_bind('bind ^I rl_complete')
         else:
             readline.parse_and_bind('tab: complete')
