@@ -346,6 +346,10 @@ class bdist_wininst (Command):
             # for current version - use authoritative check.
             bv = get_build_version()
 
+        # We don't have newer versions of wininst.
+        if bv > 9.0:
+            bv = 9.0
+
         # wininst-x.y.exe is in the same directory as this file
         directory = os.path.dirname(__file__)
         # we must use a wininst-x.y.exe built with the same C compiler

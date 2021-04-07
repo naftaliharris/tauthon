@@ -1,0 +1,135 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        target:
+          - os: linux
+            cpu: amd64
+          - os: linux
+            cpu: i386
+          - os: macos
+            cpu: amd64
+          #- os: windows
+            #cpu: amd64
+        include:
+          - target:
+              os: linux
+            builder: ubuntu-18.04 # 20.04 has an OpenSSL that disables TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+          - target:
+              os: macos
+            builder: macos-latest
+          #- target:
+              #os: windows
+            #builder: windows-latest
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v2
+
+      - name: Environment variables
+        shell: bash
+        run: |
+          echo "CFLAGS=-O3 -march=native -pipe" >> $GITHUB_ENV
+          ncpu=""
+          case "${{ runner.os }}" in
+          "Linux")
+            ncpu="$(nproc)"
+            echo "DEBIAN_FRONTEND=noninteractive" >> $GITHUB_ENV
+            echo "TZ=Etc/UTC" >> $GITHUB_ENV
+            ;;
+          "macOS")
+            ncpu="$(sysctl -n hw.ncpu)"
+            ;;
+          "Windows")
+            ncpu="${NUMBER_OF_PROCESSORS}"
+            ;;
+          esac
+          [[ -z "${ncpu}" || ${ncpu} -le 0 ]] && ncpu="1"
+          echo "ncpu=${ncpu}" >> $GITHUB_ENV
+
+      - name: Install build dependencies (Linux i386)
+        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
+        run: |
+          sudo -E dpkg --add-architecture i386
+          sudo -E apt-get update -qq
+          sudo -E apt-get install --no-install-recommends -yq gcc-multilib \
+            libbz2-dev:i386 libffi-dev:i386 libgdbm-dev:i386 \
+            liblzma-dev:i386 libncurses5-dev:i386 libreadline6-dev:i386 libsqlite3-dev:i386 \
+            libssl-dev:i386 lzma:i386 uuid-dev:i386 zlib1g-dev:i386
+          mkdir -p external/bin
+          cat << EOF > external/bin/gcc
+          #!/bin/bash
+          exec $(which gcc) -m32 -mno-adx "\$@"
+          EOF
+          cat << EOF > external/bin/g++
+          #!/bin/bash
+          exec $(which g++) -m32 -mno-adx "\$@"
+          EOF
+          chmod 755 external/bin/gcc external/bin/g++
+          echo "${{ github.workspace }}/external/bin" >> $GITHUB_PATH
+
+      - name: Install build dependencies (Linux AMD64)
+        if: runner.os == 'Linux' && matrix.target.cpu == 'amd64'
+        run: |
+          sudo -E apt-get update -qq
+          sudo -E apt-get install --no-install-recommends -yq \
+            build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev \
+            liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev \
+            libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev
+
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ./configure
+          if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
+            make -j${ncpu} regen-all
+            changes="$(git status --porcelain)"
+            # Check for changes in regenerated files
+            if ! test -z "${changes}"; then
+              echo "Generated files not up to date"
+              echo "${changes}"
+              exit 1
+            fi
+          fi
+          make -j${ncpu}
+          make pythoninfo
+          make smelly
+          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly"
+          # doc checks:
+          if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
+            # Sphinx is pinned so that new versions that introduce new warnings won't suddenly cause build failures.
+            # (Updating the version is fine as long as no warnings are raised by doing so.)
+            cd Doc
+            python3 -m pip install sphinx~=2.0.1
+            make check suspicious html SPHINXOPTS="-q -j auto" PYTHON=python2
+          fi
+
+      - name: Run tests (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ./configure
+          make -j${ncpu}
+          make pythoninfo
+          make smelly
+          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu"
+
+      - name: Add msbuild to PATH
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .\PCbuild\build.bat -e -p x64 --platform-toolset v142
+          .\PCbuild\amd64\python.exe -m test.pythoninfo
+          .\PCbuild\rt.bat -x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures test_multiprocessing test_selectors test_asynchat test_asyncore
+

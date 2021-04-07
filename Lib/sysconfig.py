@@ -117,9 +117,6 @@ if (os.name == "nt"
    and os.path.basename(os.path.dirname(os.path.dirname(_PROJECT_BASE))).lower() == "pc"
    and os.path.basename(os.path.dirname(_PROJECT_BASE)).lower() == "vs9.0"):
     _PROJECT_BASE = _safe_realpath(os.path.join(_PROJECT_BASE, pardir, pardir, pardir))
-# PC/AMD64
-if os.name == "nt" and "\\pcbuild\\amd64" in _PROJECT_BASE[-14:].lower():
-    _PROJECT_BASE = _safe_realpath(os.path.join(_PROJECT_BASE, pardir, pardir))
 
 # set for cross builds
 if "_PYTHON_PROJECT_BASE" in os.environ:

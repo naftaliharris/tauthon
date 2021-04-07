@@ -64,20 +64,11 @@ static BOOL WINAPI PyCtrlHandler(DWORD dwCtrlType)
 static long main_thread;
 
 
-#if defined(__BORLANDC__)
-/* These overrides not needed for Win32 */
-#define timezone _timezone
-#define tzname _tzname
-#define daylight _daylight
-#endif /* __BORLANDC__ */
 #endif /* MS_WINDOWS */
 #endif /* !__WATCOMC__ || __QNX__ */
 
 #if defined(MS_WINDOWS) && !defined(__BORLANDC__)
 #include <time.h>
-#define timezone _timezone
-#define daylight _daylight
-#define tzname _tzname
 #endif /* MS_WINDOWS && !defined(__BORLANDC__) */
 
 #if defined(PYOS_OS2)
@@ -107,6 +98,16 @@ static double floattime(void);
 
 /* For Y2K check */
 static PyObject *moddict = NULL;
+
+#ifdef _MSC_VER
+#define _Py_timezone _timezone
+#define _Py_daylight _daylight
+#define _Py_tzname _tzname
+#else
+#define _Py_timezone timezone
+#define _Py_daylight daylight
+#define _Py_tzname tzname
+#endif
 
 #define SEC_TO_NS (1000 * 1000 * 1000)
 
@@ -1389,23 +1390,15 @@ inittimezone(PyObject *m) {
      */
 #if defined(HAVE_TZNAME) && !defined(__GLIBC__) && !defined(__CYGWIN__)
     tzset();
-#ifdef PYOS_OS2
-    PyModule_AddIntConstant(m, "timezone", _timezone);
-#else /* !PYOS_OS2 */
-    PyModule_AddIntConstant(m, "timezone", timezone);
-#endif /* PYOS_OS2 */
+    PyModule_AddIntConstant(m, "timezone", _Py_timezone);
 #ifdef HAVE_ALTZONE
     PyModule_AddIntConstant(m, "altzone", altzone);
 #else
-#ifdef PYOS_OS2
-    PyModule_AddIntConstant(m, "altzone", _timezone-3600);
-#else /* !PYOS_OS2 */
-    PyModule_AddIntConstant(m, "altzone", timezone-3600);
-#endif /* PYOS_OS2 */
+    PyModule_AddIntConstant(m, "altzone", _Py_timezone-3600);
 #endif
-    PyModule_AddIntConstant(m, "daylight", daylight);
+    PyModule_AddIntConstant(m, "daylight", _Py_daylight);
     PyModule_AddObject(m, "tzname",
-                       Py_BuildValue("(zz)", tzname[0], tzname[1]));
+                       Py_BuildValue("(zz)", _Py_tzname[0], _Py_tzname[1]));
 #else /* !HAVE_TZNAME || __GLIBC__ || __CYGWIN__*/
 #ifdef HAVE_STRUCT_TM_TM_ZONE
     {
@@ -1448,11 +1441,11 @@ inittimezone(PyObject *m) {
 #endif /* HAVE_STRUCT_TM_TM_ZONE */
 #ifdef __CYGWIN__
     tzset();
-    PyModule_AddIntConstant(m, "timezone", _timezone);
-    PyModule_AddIntConstant(m, "altzone", _timezone-3600);
-    PyModule_AddIntConstant(m, "daylight", _daylight);
+    PyModule_AddIntConstant(m, "timezone", _Py_timezone);
+    PyModule_AddIntConstant(m, "altzone", _Py_timezone-3600);
+    PyModule_AddIntConstant(m, "daylight", _Py_daylight);
     PyModule_AddObject(m, "tzname",
-                       Py_BuildValue("(zz)", _tzname[0], _tzname[1]));
+                       Py_BuildValue("(zz)", _Py_tzname[0], _Py_tzname[1]));
 #endif /* __CYGWIN__ */
 #endif /* !HAVE_TZNAME || __GLIBC__ || __CYGWIN__*/
 }
@@ -1643,7 +1636,7 @@ floattime(void)
         if (gettimeofday(&t) == 0)
             return (double)t.tv_sec + t.tv_usec*0.000001;
 #else /* !GETTIMEOFDAY_NO_TZ */
-        if (gettimeofday(&t, (struct timezone *)NULL) == 0)
+        if (gettimeofday(&t, (struct _Py_timezone *)NULL) == 0)
             return (double)t.tv_sec + t.tv_usec*0.000001;
 #endif /* !GETTIMEOFDAY_NO_TZ */
     }

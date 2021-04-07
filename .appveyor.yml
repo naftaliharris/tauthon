@@ -1,5 +1,4 @@
 version: 2.8build{build}
-clone_depth: 10
 
 cache:
   - externals -> PCbuild\*
@@ -28,7 +27,7 @@ build_script:
   - cmd: PCbuild\python.exe -m test.pythoninfo
 
 test_script:
-  - cmd: PCbuild\rt.bat -q -uall -u-cpu -u-largefile -rwW --slowest -j3 -x test_concurrent_futures test_multiprocessing test_selectors
+  - cmd: PCbuild\rt.bat -q -uall -u-cpu -u-largefile -rwW --slowest -j3 -x test_concurrent_futures test_multiprocessing test_selectors test_distutils
 
 environment:
   HOST_PYTHON: C:\Python36\python.exe

@@ -182,6 +182,9 @@ def get_build_version():
     i = i + len(prefix)
     s, rest = sys.version[i:].split(" ", 1)
     majorVersion = int(s[:-2]) - 6
+    if majorVersion >= 13:
+        # v13 was skipped and should be v14
+        majorVersion += 1
     minorVersion = int(s[2:3]) / 10.0
 
     # There is no majorVersion of 13 (VS2013 == 1800, and VS2015 == 1900)
@@ -221,7 +224,7 @@ def removeDuplicates(variable):
     newVariable = os.pathsep.join(newList)
     return newVariable
 
-def find_vcvarsall(version):
+def find_vcvarsall(version, arch="x86"):
     """Find the vcvarsall.bat file
 
     At first it tries to find the productdir of VS 2008 in the registry. If
@@ -259,31 +262,58 @@ def find_vcvarsall(version):
     if not productdir:
         log.debug("No productdir found")
         return None
+
+    # This file is not present in the Express version.
+    f = os.path.join(productdir, "bin\\amd64\\vcvarsamd64.bat")
+    if arch in ["amd64", "x86_amd64", "x86_ia64"] and not os.path.isfile(f):
+        # Visual Studio Express with SDK 64-bit tools, workaround
+        # for broken paths in vcvarsall.bat.
+        path = "bin\\vcvars64.bat"
+        if arch != "amd64":
+            path = "bin\\vcvars" + arch + ".bat"
+        f = os.path.join(productdir, path)
+        if not os.path.isfile(f):
+            raise DistutilsPlatformError("Visual Studio Express: need 64-bit "
+                                         "tools from the SDK")
+        return f
+
     vcvarsall = os.path.join(productdir, "vcvarsall.bat")
     if os.path.isfile(vcvarsall):
         return vcvarsall
     log.debug("Unable to find vcvarsall.bat")
     return None
 
-def query_vcvarsall(version, arch="x86"):
-    """Launch vcvarsall.bat and read the settings from its environment
+def run_vcvarsall(vcvarsall, version, arch):
+    """Launch vcvarsall.bat and collect its environment as output
     """
-    vcvarsall = find_vcvarsall(version)
-    interesting = set(("include", "lib", "libpath", "path"))
-    result = {}
-
-    if vcvarsall is None:
-        raise DistutilsPlatformError("Unable to find vcvarsall.bat")
     log.debug("Calling 'vcvarsall.bat %s' (version=%s)", arch, version)
     popen = subprocess.Popen('"%s" %s & set' % (vcvarsall, arch),
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
     try:
         stdout, stderr = popen.communicate()
-        if popen.wait() != 0:
-            raise DistutilsPlatformError(stderr.decode("mbcs"))
+    finally:
+        popen.stdout.close()
+        popen.stderr.close()
+    if popen.returncode != 0:
+        stderr = stderr.decode("mbcs")
+        log.debug("'vcvarsall.bat %s' (version=%s) call failed - %s", arch,
+            version, stderr)
+        raise DistutilsPlatformError(stderr)
+    return stdout.decode("mbcs")
 
-        stdout = stdout.decode("mbcs")
+def query_vcvarsall(version, archs=None):
+    """Launch vcvarsall.bat and read the settings from its environment
+    """
+    if archs is None:
+        archs = ["x86"]
+    vcvarsall = find_vcvarsall(version)
+    if vcvarsall is None:
+        raise DistutilsPlatformError("Unable to find vcvarsall.bat")
+    interesting = set(("include", "lib", "libpath", "path"))
+    for arch in archs:
+        stdout = run_vcvarsall(vcvarsall, version, arch)
+        result = {}
         for line in stdout.split("\n"):
             line = Reg.convert_mbcs(line)
             if '=' not in line:
@@ -295,15 +325,11 @@ def query_vcvarsall(version, arch="x86"):
                 if value.endswith(os.pathsep):
                     value = value[:-1]
                 result[key] = removeDuplicates(value)
-
-    finally:
-        popen.stdout.close()
-        popen.stderr.close()
-
-    if len(result) != len(interesting):
-        raise ValueError(str(list(result.keys())))
-
-    return result
+        if len(result) == len(interesting):
+            return result
+        log.debug("'vcvarsall.bat %s' (version=%s) call collected unexpected "
+            "environment: %s", arch, version, list(result.keys()))
+    raise DistutilsPlatformError("vcvarsall.bat environment setup failure")
 
 # More globals
 VERSION = get_build_version()
@@ -372,18 +398,26 @@ class MSVCCompiler(CCompiler) :
             self.rc = "rc.exe"
             self.mc = "mc.exe"
         else:
-            # On x86, 'vcvars32.bat amd64' creates an env that doesn't work;
-            # to cross compile, you use 'x86_amd64'.
-            # On AMD64, 'vcvars32.bat amd64' is a native build env; to cross
-            # compile use 'x86' (ie, it runs the x86 compiler directly)
+            # On x86, 'vcvarsall.bat amd64' creates an env that doesn't work;
+            # to cross-compile, you use 'x86_amd64'.
+            # On AMD64, 'vcvarsall.bat amd64' is a native build env; to
+            # cross-compile use 'x86' (ie, it runs the x86 compiler directly)
             # No idea how itanium handles this, if at all.
-            if plat_name == get_platform() or plat_name == 'win32':
-                # native build or cross-compile to win32
-                plat_spec = PLAT_TO_VCVARS[plat_name]
+            if plat_name == 'win32':
+                # native win32 build or cross-compile to win32
+                plat_spec = [PLAT_TO_VCVARS[plat_name]]
             else:
-                # cross compile from win32 -> some 64bit
-                plat_spec = PLAT_TO_VCVARS[get_platform()] + '_' + \
-                            PLAT_TO_VCVARS[plat_name]
+                cross_plat_spec = PLAT_TO_VCVARS['win32'] + '_' + \
+                                  PLAT_TO_VCVARS[plat_name]
+                if plat_name == get_platform():
+                    # native 64-bit build
+                    # In case a native 64-bit compiler is not available, as is
+                    # the case with Visual Studio Express edition, try to use a
+                    # 32-bit --> 64-bit cross-compiler instead.
+                    plat_spec = [PLAT_TO_VCVARS[plat_name], cross_plat_spec]
+                else:
+                    # cross-compile to some 64-bit
+                    plat_spec = [cross_plat_spec]
 
             vc_env = query_vcvarsall(VERSION, plat_spec)
 
