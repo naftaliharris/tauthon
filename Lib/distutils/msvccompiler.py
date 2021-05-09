@@ -164,6 +164,9 @@ def get_build_version():
     i = i + len(prefix)
     s, rest = sys.version[i:].split(" ", 1)
     majorVersion = int(s[:-2]) - 6
+    if majorVersion >= 13:
+        # v13 was skipped and should be v14
+        majorVersion += 1
     minorVersion = int(s[2:3]) / 10.0
 
     # There is no majorVersion of 13 (VS2013 == 1800, and VS2015 == 1900)

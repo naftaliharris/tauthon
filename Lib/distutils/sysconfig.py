@@ -23,24 +23,17 @@ PREFIX = os.path.normpath(sys.prefix)
 EXEC_PREFIX = os.path.normpath(sys.exec_prefix)
 
 # Path to the base directory of the project. On Windows the binary may
-# live in project/PCBuild9.  If we're dealing with an x64 Windows build,
-# it'll live in project/PCbuild/amd64.
+# live in project/PCBuild/win32 or project/PCBuild/amd64.
 if sys.executable:
     project_base = os.path.dirname(os.path.abspath(sys.executable))
 else:
     # sys.executable can be empty if argv[0] has been changed and Python is
     # unable to retrieve the real program name
     project_base = os.getcwd()
-if os.name == "nt" and "pcbuild" in project_base[-8:].lower():
-    project_base = os.path.abspath(os.path.join(project_base, os.path.pardir))
-# PC/VS7.1
-if os.name == "nt" and "\\pc\\v" in project_base[-10:].lower():
-    project_base = os.path.abspath(os.path.join(project_base, os.path.pardir,
-                                                os.path.pardir))
-# PC/AMD64
-if os.name == "nt" and "\\pcbuild\\amd64" in project_base[-14:].lower():
-    project_base = os.path.abspath(os.path.join(project_base, os.path.pardir,
-                                                os.path.pardir))
+
+if (os.name == 'nt' and
+    project_base.lower().endswith(('\\pcbuild\\win32', '\\pcbuild\\amd64'))):
+    project_base = os.path.dirname(os.path.dirname(project_base))
 
 # set for cross builds
 if "_PYTHON_PROJECT_BASE" in os.environ:

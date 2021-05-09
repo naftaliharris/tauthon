@@ -108,7 +108,7 @@ class msvc9compilerTestCase(support.TempdirManager,
         # a DistutilsPlatformError if the compiler
         # is not found
         from distutils.msvc9compiler import query_vcvarsall
-        def _find_vcvarsall(version):
+        def _find_vcvarsall(version, archs=None):
             return None
 
         from distutils import msvc9compiler
