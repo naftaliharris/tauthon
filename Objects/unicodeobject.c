@@ -684,26 +684,77 @@ PyObject *PyUnicode_FromWideChar(register const wchar_t *w,
 
 #undef CONVERT_WCHAR_TO_SURROGATES
 
-static void
-makefmt(char *fmt, int longflag, int size_tflag, int zeropad, int width, int precision, char c)
+/* A variadic macro would have been better (would have allowed to integrate the
+ * call to snprintf), but the MS compiler used to build on Windows is probably
+ * too old to support C99. */
+#define MAKEFMT_SNPRINTF_HANDLE(ret)                    \
+    do {                                                \
+        int _ret = (ret);                               \
+        if (_ret == -1 || (size_t)_ret >= fmt_size)     \
+            return 1;                                   \
+        fmt += _ret;                                    \
+        fmt_size -= _ret;                               \
+    } while (0)
+
+static int
+makefmt(char *fmt, size_t fmt_size, int longflag, int size_tflag,
+        int zeropad, int width, int precision, char c)
 {
+    if (fmt_size <= 2)          /* At least, '%', c and NUL. */
+        return 1;
+
     *fmt++ = '%';
-    if (width) {
-        if (zeropad)
-            *fmt++ = '0';
-        fmt += sprintf(fmt, "%d", width);
+    --fmt_size;
+
+    if (width != 0)
+        MAKEFMT_SNPRINTF_HANDLE(
+            snprintf(fmt, fmt_size,
+                     "%s%d",
+                     zeropad ? "0" : "",
+                     width));
+
+    if (precision != 0)
+        MAKEFMT_SNPRINTF_HANDLE(
+            snprintf(fmt, fmt_size,
+                     ".%d",
+                     precision));
+
+    /* Guard if no strncpy is called. */
+    fmt[0] = 0;
+    /* Canary for strncpy. */
+    fmt[fmt_size-1] = 0;
+
+    if (longflag != 0) {
+#ifdef HAVE_LONG_LONG
+        if (longflag == 2) {
+            strncpy(fmt, PY_FORMAT_LONG_LONG, fmt_size);
+        } else {
+#endif
+            strncpy(fmt, "l", fmt_size);
+#ifdef HAVE_LONG_LONG
+        }
+#endif
     }
-    if (precision)
-        fmt += sprintf(fmt, ".%d", precision);
-    if (longflag)
-        *fmt++ = 'l';
-    else if (size_tflag) {
-        char *f = PY_FORMAT_SIZE_T;
-        while (*f)
-            *fmt++ = *f++;
+    else if (size_tflag != 0)
+        strncpy(fmt, PY_FORMAT_SIZE_T, fmt_size);
+
+    /* Did strncpy used up all space? */
+    if (fmt[fmt_size-1] != 0)
+        return 1;
+
+    /* Find end. */
+    while (*fmt != 0) {
+        ++fmt;
+        --fmt_size;
     }
+
+    if (fmt_size <= 1)
+        return 1;
+
     *fmt++ = c;
-    *fmt = '\0';
+    *fmt = 0;
+
+    return 0;
 }
 
 #define appendstring(string) \
@@ -727,15 +778,16 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
     const char* f;
     Py_UNICODE *s;
     PyObject *string;
-    /* used by sprintf */
-    char buffer[21];
     /* use abuffer instead of buffer, if we need more space
      * (which can happen if there's a format specifier with width). */
     char *abuffer = NULL;
     char *realbuffer;
     Py_ssize_t abuffersize = 0;
-    char fmt[60]; /* should be enough for %0width.precisionld */
     const char *copy;
+    /* used by sprintf */
+    char buffer[64];
+    char fmt[16]; /* should be enough for %0width.precisionld */
+    size_t const fmt_size = sizeof(fmt);
 
 #ifdef VA_LIST_IS_ARRAY
     Py_MEMCPY(count, vargs, sizeof(va_list));
@@ -819,13 +871,12 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
                 (void) va_arg(count, int);
                 if (width < precision)
                     width = precision;
-                /* 20 bytes is enough to hold a 64-bit
-                   integer.  Decimal takes the most space.
-                   This isn't enough for octal.
+                /* 44 bytes is enough to hold a 128-bit
+                   integer.  Octal takes the most space.
                    If a width is specified we need more
                    (which we allocate later). */
-                if (width < 20)
-                    width = 20;
+                if (width < 44)
+                    width = 44;
                 n += width;
                 if (abuffersize < width)
                     abuffersize = width;
@@ -910,7 +961,7 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
             n++;
     }
   expand:
-    if (abuffersize > 20) {
+    if (abuffersize >= sizeof(buffer)) {
         /* add 1 for sprintf's trailing null byte */
         abuffer = PyObject_Malloc(abuffersize + 1);
         if (!abuffer) {
@@ -950,14 +1001,25 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
             }
             /* handle the long flag, but only for %ld and %lu.
                others can be added when necessary. */
-            if (*f == 'l' && (f[1] == 'd' || f[1] == 'u')) {
+            if (*f == 'l') {
                 longflag = 1;
                 ++f;
-            }
-            /* handle the size_t flag. */
-            if (*f == 'z' && (f[1] == 'd' || f[1] == 'u')) {
-                size_tflag = 1;
-                ++f;
+#ifdef HAVE_LONG_LONG
+                if (*f == 'l') {
+                    longflag = 2;
+                    ++f;
+                }
+#endif
+                if (*f != 'd' && *f != 'u') {
+                    f -= longflag;
+                    longflag = 0;
+                }
+            } else {
+                /* handle the size_t flag. */
+                if (*f == 'z' && (f[1] == 'd' || f[1] == 'u')) {
+                    size_tflag = 1;
+                    ++f;
+                }
             }
 
             switch (*f) {
@@ -965,9 +1027,15 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
                 *s++ = va_arg(vargs, int);
                 break;
             case 'd':
-                makefmt(fmt, longflag, size_tflag, zeropad, width, precision, 'd');
-                if (longflag)
+                if (makefmt(fmt, fmt_size, longflag, size_tflag,
+                            zeropad, width, precision, 'd'))
+                    goto fail;
+                if (longflag == 1)
                     sprintf(realbuffer, fmt, va_arg(vargs, long));
+#ifdef HAVE_LONG_LONG
+                else if (longflag == 2)
+                    sprintf(realbuffer, fmt, va_arg(vargs, long long));
+#endif
                 else if (size_tflag)
                     sprintf(realbuffer, fmt, va_arg(vargs, Py_ssize_t));
                 else
@@ -975,9 +1043,15 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
                 appendstring(realbuffer);
                 break;
             case 'u':
-                makefmt(fmt, longflag, size_tflag, zeropad, width, precision, 'u');
-                if (longflag)
+                if (makefmt(fmt, fmt_size, longflag, size_tflag,
+                            zeropad, width, precision, 'u'))
+                    goto fail;
+                if (longflag == 1)
                     sprintf(realbuffer, fmt, va_arg(vargs, unsigned long));
+#ifdef HAVE_LONG_LONG
+                else if (longflag == 2)
+                    sprintf(realbuffer, fmt, va_arg(vargs, unsigned long long));
+#endif
                 else if (size_tflag)
                     sprintf(realbuffer, fmt, va_arg(vargs, size_t));
                 else
@@ -985,12 +1059,14 @@ PyUnicode_FromFormatV(const char *format, va_list vargs)
                 appendstring(realbuffer);
                 break;
             case 'i':
-                makefmt(fmt, 0, 0, zeropad, width, precision, 'i');
+                if (makefmt(fmt, fmt_size, 0, 0, zeropad, width, precision, 'i'))
+                    goto fail;
                 sprintf(realbuffer, fmt, va_arg(vargs, int));
                 appendstring(realbuffer);
                 break;
             case 'x':
-                makefmt(fmt, 0, 0, zeropad, width, precision, 'x');
+                if (makefmt(fmt, fmt_size, 0, 0, zeropad, width, precision, 'x'))
+                    goto fail;
                 sprintf(realbuffer, fmt, va_arg(vargs, int));
                 appendstring(realbuffer);
                 break;

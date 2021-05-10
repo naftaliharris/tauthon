@@ -232,8 +232,19 @@ def _get_candidate_names():
     return _name_sequence
 
 
+if _os.altsep is not None:
+    _seps = (_os.sep, _os.altsep)
+else:
+    _seps = (_os.sep)
+
 def _mkstemp_inner(dir, pre, suf, flags):
     """Code common to mkstemp, TemporaryFile, and NamedTemporaryFile."""
+
+    if any(sep in pre for sep in _seps):
+        raise ValueError("Prefix contains path separators")
+
+    if any(sep in suf for sep in _seps):
+        raise ValueError("Suffix contains path separators")
 
     names = _get_candidate_names()
 

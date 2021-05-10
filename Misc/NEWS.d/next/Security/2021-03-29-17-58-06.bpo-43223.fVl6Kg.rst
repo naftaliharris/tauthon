@@ -1,0 +1,5 @@
+In classes deriving from :class:`BaseHTTPServer`, including
+:class:`SimpleHTTPServer` and :class:`CGIHttpServer`, make sure that the
+requested URL's path doesn't start with a double slash which, if copied in
+the Location header on redirection, would be interpreted as redirection to
+another host ("//host/path" URL).

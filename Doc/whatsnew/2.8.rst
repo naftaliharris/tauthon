@@ -1,5 +1,6 @@
-Tauthon
-=======
+*************************
+What’s new in Tauthon 2.8
+*************************
 
 Tauthon is a backwards-compatible fork of the Python 2.7.17 interpreter
 with new syntax, builtins, and libraries backported from Python 3.x.
@@ -8,8 +9,8 @@ to run unmodified on Tauthon and produce the same output. `But with
 Tauthon, that code can now use some of the new features from Python
 3.x.`_
 
-What’s new in Tauthon
----------------------
+Summary -- Release highlights
+=============================
 
 -  .. rubric:: Function Annotations
       :name: function-annotations
@@ -353,3 +354,38 @@ What’s new in Tauthon
 .. _API Docs super: https://docs.python.org/3/library/functions.html#super
 .. _But with Tauthon, that code can now use some of the new features from Python 3.x.: https://www.naftaliharris.com/blog/why-making-python-2.8/
 
+
+Improved Modules
+================
+
+xml
+---
+
+* As mitigation against DTD and external entity retrieval, the
+  :mod:`xml.dom.minidom` and mod:`xml.sax` modules no longer process
+  external entities by default.
+  (Contributed by Christian Heimes in :issue:`17239`.)
+
+
+Porting to Tauthon 2.8.3
+========================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+Changes in the Python API
+-------------------------
+
+* :mod:`xml.dom.minidom` and mod:`xml.sax` modules no longer process
+  external entities by default.
+  (Contributed by Christian Heimes in :issue:`17239`.)
+
+
+Notable changes in Tauthon 2.8.3
+================================
+
+A security fix alters the :class:`ftplib.FTP` behavior to not trust the
+IPv4 address sent from the remote server when setting up a passive data
+channel.  We reuse the ftp server IP address instead.  For unusual code
+requiring the old behavior, set a ``trust_server_pasv_ipv4_address``
+attribute on your FTP instance to ``True``.  (See Python's :issue:`43285`)

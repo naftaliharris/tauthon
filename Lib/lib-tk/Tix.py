@@ -208,8 +208,9 @@ class Tk(Tkinter.Tk, tixCommand):
         tixlib = os.environ.get('TIX_LIBRARY')
         self.tk.eval('global auto_path; lappend auto_path [file dir [info nameof]]')
         if tixlib is not None:
-            self.tk.eval('global auto_path; lappend auto_path {%s}' % tixlib)
-            self.tk.eval('global tcl_pkgPath; lappend tcl_pkgPath {%s}' % tixlib)
+            self.tk.setvar('TIX_LIBRARY', tixlib)
+            self.tk.eval('global auto_path; lappend auto_path $TIX_LIBRARY')
+            self.tk.eval('global tcl_pkgPath; lappend tcl_pkgPath $TIX_LIBRARY')
         # Load Tix - this should work dynamically or statically
         # If it's static, tcl/tix8.1/pkgIndex.tcl should have
         #               'load {} Tix'
