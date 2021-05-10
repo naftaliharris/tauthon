@@ -117,7 +117,9 @@ read_init_file(PyObject *self, PyObject *args)
 PyDoc_STRVAR(doc_read_init_file,
 "read_init_file([filename]) -> None\n\
 Execute a readline initialization file.\n\
-The default filename is the last filename used.");
+If filename is not specified, the last explicit one used in a preceding call\n\
+is used, or if none, one of the default ones as specified by Readline\n\
+(usually, the first one in env var INPUTRC, ~/.inputrc or /etc/inputrc).");
 
 
 /* Exported function to load a readline history file */
