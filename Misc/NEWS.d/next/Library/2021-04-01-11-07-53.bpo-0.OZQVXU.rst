@@ -1,5 +1,0 @@
-For interactive sessions, fix several :file:`site.py` Readline-related
-initialization problems, and have warnings printed when appropriate. Don't fail
-if there is no global Readline init file. Don't fail with ad-hoc Readline
-libraries. The history file is set up even if reading the default init files
-failed.

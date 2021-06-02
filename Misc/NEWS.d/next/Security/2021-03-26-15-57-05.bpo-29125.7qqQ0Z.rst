@@ -1,1 +1,0 @@
-Fixed arbitrary shell code injection through TIX_LIBRARY variable.

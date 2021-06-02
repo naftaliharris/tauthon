@@ -1,0 +1,180 @@
+.. bpo: 43223
+.. date: 2021-03-29-17-58-06
+.. nonce: fVl6Kg
+.. release date: 2021-06-02
+.. section: Security
+
+In classes deriving from :class:`BaseHTTPServer`, including
+:class:`SimpleHTTPServer` and :class:`CGIHttpServer`, make sure that the
+requested URL's path doesn't start with a double slash which, if copied in
+the Location header on redirection, would be interpreted as redirection to
+another host ("//host/path" URL).
+
+..
+
+.. bpo: 37820
+.. date: 2021-03-29-16-24-17
+.. nonce: z1LXfg
+.. section: Security
+
+Disallow URLs starting with URL:, and those wrapped between a pair of
+('<','>') characters, so that local files cannot be accessed by passing in
+something like 'URL:/etc/passwd' or '</etc/passwd>'.
+
+There is really no justification to keep these old quirks from the very root
+of Python, they are not documented and pose a security risk for those
+wanting to selectively rule out schemes allowing to access local files.
+
+..
+
+.. bpo: 43075
+.. date: 2021-03-29-14-35-27
+.. nonce: MV-_SC
+.. section: Security
+
+Fix some RE DoS possibility in HTTP basic auth handler. See the bug for full
+details.
+
+..
+
+.. bpo: 35278
+.. date: 2021-03-29-13-11-48
+.. nonce: xjEYGs
+.. section: Security
+
+The functions creating temporary files in :mod:`tempfile` now longer accept
+path separators in the prefix and suffix arguments, avoiding unintended or
+malicious escapes of the temporary directory.
+
+..
+
+.. bpo: 29125
+.. date: 2021-03-26-15-57-05
+.. nonce: 7qqQ0Z
+.. section: Security
+
+Fixed arbitrary shell code injection through TIX_LIBRARY variable.
+
+..
+
+.. bpo: 43285
+.. date: 2021-03-13-03-48-14
+.. nonce: g-Hah3
+.. section: Security
+
+:mod:`ftplib` no longer trusts the IP address value returned from the server
+in response to the PASV command by default.  This prevents a malicious FTP
+server from using the response to probe IPv4 address and port combinations
+on the client network.
+
+Code that requires the former vulnerable behavior may set a
+``trust_server_pasv_ipv4_address`` attribute on their :class:`ftplib.FTP`
+instances to ``True`` to re-enable it.
+
+..
+
+.. bpo: 42938
+.. date: 2021-01-18-09-27-31
+.. nonce: 4Zn4Mp
+.. section: Security
+
+Avoid static buffers when computing the repr of :class:`ctypes.c_double` and
+:class:`ctypes.c_longdouble` values.
+
+..
+
+.. bpo: 42051
+.. date: 2020-10-19-10-56-27
+.. nonce: EU_B7u
+.. section: Security
+
+The :mod:`plistlib` module no longer accepts entity declarations in XML
+plist files to avoid XML vulnerabilities. This should not affect users as
+entity declarations are not used in regular plist files.
+
+..
+
+.. bpo: 40791
+.. date: 2020-05-28-06-06-47
+.. nonce: QGZClX
+.. section: Security
+
+Add ``volatile`` to the accumulator variable in ``hmac.compare_digest``,
+making constant-time-defeating optimizations less likely.
+
+..
+
+.. bpo: 39603
+.. date: 2020-02-12-14-17-39
+.. nonce: Gt3RSg
+.. section: Security
+
+Prevent http header injection by rejecting control characters in
+http.client.putrequest(...).
+
+..
+
+.. bpo: 39503
+.. date: 2020-01-30-16-15-29
+.. nonce: B299Yq
+.. section: Security
+
+CVE-2020-8492: The :class:`~urllib.request.AbstractBasicAuthHandler` class
+of the :mod:`urllib.request` module uses an inefficient regular expression
+which can be exploited by an attacker to cause a denial of service. Fix the
+regex to prevent the catastrophic backtracking. Vulnerability reported by
+Ben Caller and Matt Schwager.
+
+..
+
+.. bpo: 17239
+.. date: 2018-09-11-18-30-55
+.. nonce: kOpwK2
+.. section: Security
+
+The xml.sax and xml.dom.minidom parsers no longer processes external
+entities by default. External DTD and ENTITY declarations no longer load
+files or create network connections.
+
+..
+
+.. bpo: 0
+.. date: 2021-04-01-11-07-53
+.. nonce: OZQVXU
+.. section: Library
+
+For interactive sessions, fix several :file:`site.py` Readline-related
+initialization problems, and have warnings printed when appropriate. Don't
+fail if there is no global Readline init file. Don't fail with ad-hoc
+Readline libraries. The history file is set up even if reading the default
+init files failed.
+
+..
+
+.. bpo: 39017
+.. date: 2020-07-12-22-16-58
+.. nonce: x3Cg-9
+.. section: Library
+
+Avoid infinite loop when reading specially crafted TAR files using the
+tarfile module (CVE-2019-20907).
+
+..
+
+.. bpo: 39503
+.. date: 2020-03-25-16-02-16
+.. nonce: YmMbYn
+.. section: Library
+
+:class:`~urllib.request.AbstractBasicAuthHandler` of :mod:`urllib.request`
+now parses all WWW-Authenticate HTTP headers and accepts multiple challenges
+per header: use the realm of the first Basic challenge.
+
+..
+
+.. bpo: 0
+.. date: 2021-03-30-20-38-11
+.. nonce: JiQVbe
+.. section: Build
+
+Install 'collections', 'http' and 'urllib' modules.

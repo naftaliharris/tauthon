@@ -1,2 +1,0 @@
-Fix some RE DoS possibility in HTTP basic auth handler. See the bug for full
-details.
