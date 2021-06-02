@@ -1,7 +1,0 @@
-Disallow URLs starting with URL:, and those wrapped between a pair of
-('<','>') characters, so that local files cannot be accessed by passing in
-something like 'URL:/etc/passwd' or '</etc/passwd>'.
-
-There is really no justification to keep these old quirks from the very root of
-Python, they are not documented and pose a security risk for those wanting to
-selectively rule out schemes allowing to access local files.

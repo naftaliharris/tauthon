@@ -1,3 +1,0 @@
-The functions creating temporary files in :mod:`tempfile` now longer accept
-path separators in the prefix and suffix arguments, avoiding unintended or
-malicious escapes of the temporary directory.

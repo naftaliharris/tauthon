@@ -1,4 +1,3 @@
-
 /* Newfangled version identification scheme.
 
    This scheme was added in Python 1.5.2b2; before that time, only PATCHLEVEL
@@ -22,12 +21,12 @@
 /*--start constants--*/
 #define PY_MAJOR_VERSION	2
 #define PY_MINOR_VERSION	8
-#define PY_MICRO_VERSION	2
+#define PY_MICRO_VERSION	3
 #define PY_RELEASE_LEVEL	PY_RELEASE_LEVEL_FINAL
 #define PY_RELEASE_SERIAL	0
 
 /* Version as a string */
-#define PY_VERSION      	"2.8.2+"
+#define PY_VERSION      	"2.8.3"
 /*--end constants--*/
 
 /* Subversion Revision number of this file (not of the repository). Empty
