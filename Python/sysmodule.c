@@ -1153,6 +1153,7 @@ builtin_module_names -- tuple of module names built into this interpreter\n\
 version -- the version of this interpreter as a string\n\
 version_info -- version information as a named tuple\n\
 hexversion -- version information encoded as a single integer\n\
+implementation -- Python implementation information.\n\
 copyright -- copyright notice pertaining to this interpreter\n\
 platform -- platform identifier\n\
 executable -- absolute path of the executable binary of the Python interpreter\n\
@@ -1398,10 +1399,85 @@ make_version_info(void)
     return version_info;
 }
 
+/* sys.implementation values */
+#define NAME "tauthon"
+const char *_PySys_ImplName = NAME;
+#define MAJOR Py_STRINGIFY(PY_MAJOR_VERSION)
+#define MINOR Py_STRINGIFY(PY_MINOR_VERSION)
+#define TAG NAME "-" MAJOR MINOR
+const char *_PySys_ImplCacheTag = TAG;
+#undef NAME
+#undef MAJOR
+#undef MINOR
+#undef TAG
+
+PyDoc_STRVAR(implementation_info__doc__,
+"sys.implementation\n\
+\n\
+Implementation information as a named tuple.");
+
+static PyTypeObject ImplementationInfoType = {0, 0, 0, 0, 0};
+
+static PyStructSequence_Field implementation_info_fields[] = {
+    {"name", "lower case name"},
+    {"cache_tag", "name-majorminor"},
+    {"version", "version_info object"},
+    {"hexversion", "hexadecimal version number"},
+    {0}
+};
+
+static PyStructSequence_Desc implementation_info_desc = {
+    "sys.implementation",     /* name */
+    implementation_info__doc__,    /* doc */
+    implementation_info_fields,    /* fields */
+    4
+};
+
+static PyObject *
+make_impl_info(PyObject *version_info)
+{
+    PyObject *impl_info, *value;
+    int pos = 0;
+
+    impl_info = PyStructSequence_New(&ImplementationInfoType);
+    if (impl_info == NULL) {
+        return NULL;
+    }
+
+    /* "name" */
+    value = PyUnicode_FromString(_PySys_ImplName);
+    if (value == NULL)
+        goto error;
+    PyStructSequence_SET_ITEM(impl_info, pos++, value);
+
+    /* "cache_tag" */
+    value = PyUnicode_FromString(_PySys_ImplCacheTag);
+    if (value == NULL)
+        goto error;
+    PyStructSequence_SET_ITEM(impl_info, pos++, value);
+
+    /* "version" */
+    PyStructSequence_SET_ITEM(impl_info, pos++, version_info);
+
+    /* "hexversion" */
+    value = PyLong_FromLong(PY_VERSION_HEX);
+    if (value == NULL)
+        goto error;
+    PyStructSequence_SET_ITEM(impl_info, pos++, value);
+
+error:
+    if (PyErr_Occurred()) {
+        Py_CLEAR(impl_info);
+        return NULL;
+    }
+
+    return impl_info;
+}
+
 PyObject *
 _PySys_Init(void)
 {
-    PyObject *m, *v, *sysdict;
+    PyObject *m, *v, *sysdict, *version_info;
     PyObject *sysin, *sysout, *syserr;
     char *s;
 
@@ -1537,7 +1613,12 @@ _PySys_Init(void)
     /* version_info */
     if (VersionInfoType.tp_name == 0)
         PyStructSequence_InitType(&VersionInfoType, &version_info_desc);
-    SET_SYS_FROM_STRING("version_info", make_version_info());
+    version_info = make_version_info();
+    SET_SYS_FROM_STRING("version_info", version_info);
+    /* implementation info */
+    if (ImplementationInfoType.tp_name == 0)
+        PyStructSequence_InitType(&ImplementationInfoType, &implementation_info_desc);
+    SET_SYS_FROM_STRING("implementation", make_impl_info(version_info));
     /* prevent user from creating new instances */
     VersionInfoType.tp_init = NULL;
     VersionInfoType.tp_new = NULL;
