@@ -9,8 +9,7 @@ some of the new features from Python
 3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
 
 
-[![Travis build status](https://travis-ci.org/naftaliharris/tauthon.svg?branch=master)](https://travis-ci.org/naftaliharris/tauthon) [![AppVeyor build status](https://ci.appveyor.com/api/projects/status/p3cx2bwcx6e6bg2q/branch/master?svg=true)](https://ci.appveyor.com/project/naftaliharris/tauthon/branch/master)
-
+[![CI](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml/badge.svg)](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml)
 
 What's new in Tauthon
 -------------------------
