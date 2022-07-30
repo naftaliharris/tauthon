@@ -25,6 +25,8 @@
 #ifdef _MSC_VER
 #if _MSC_VER >= 1500 && _MSC_VER < 1600
 #include <crtassem.h>
+#elif _MSC_VER >= 1600
+#include <crtversion.h>
 #endif
 #endif
 
@@ -398,7 +400,7 @@ PyMODINIT_FUNC
 initmsvcrt(void)
 {
     int st;
-    PyObject *d;
+    PyObject *d, *version;
     PyObject *m = Py_InitModule("msvcrt", msvcrt_functions);
     if (m == NULL)
         return;
@@ -426,5 +428,15 @@ initmsvcrt(void)
     st = PyModule_AddStringConstant(m, "LIBRARIES_ASSEMBLY_NAME_PREFIX",
                                     __LIBRARIES_ASSEMBLY_NAME_PREFIX);
     if (st < 0)return;
+#endif
+
+    /* constants for the 2010 crt versions */
+#if defined(_VC_CRT_MAJOR_VERSION) && defined (_VC_CRT_MINOR_VERSION) && defined(_VC_CRT_BUILD_VERSION) && defined(_VC_CRT_RBUILD_VERSION)
+    version = PyUnicode_FromFormat("%d.%d.%d.%d", _VC_CRT_MAJOR_VERSION,
+                                                  _VC_CRT_MINOR_VERSION,
+                                                  _VC_CRT_BUILD_VERSION,
+                                                  _VC_CRT_RBUILD_VERSION);
+    st = PyModule_AddObject(m, "CRT_ASSEMBLY_VERSION", version);
+    if (st < 0) return;
 #endif
 }

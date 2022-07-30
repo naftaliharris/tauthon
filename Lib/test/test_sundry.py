@@ -19,8 +19,6 @@ class TestUntestedModules(unittest.TestCase):
             import distutils.cygwinccompiler
             import distutils.emxccompiler
             import distutils.filelist
-            if sys.platform.startswith('win'):
-                import distutils.msvccompiler
             import distutils.text_file
             import distutils.unixccompiler
 

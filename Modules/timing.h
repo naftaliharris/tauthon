@@ -30,8 +30,10 @@
 #ifndef _TIMING_H_
 #define _TIMING_H_
 
-#include <sys/time.h>
-#include <time.h>
+#ifdef HAVE_SYS_TIME_H
+# include <sys/time.h>
+# include <time.h>
+#endif
 
 static struct timeval aftertp, beforetp;
 

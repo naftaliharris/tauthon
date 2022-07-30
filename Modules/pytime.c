@@ -1,6 +1,7 @@
 #include "Python.h"
 #ifdef MS_WINDOWS
-#include <windows.h>
+# include <windows.h>
+# include <time.h>
 #endif
 
 #if defined(__APPLE__)

@@ -141,7 +141,61 @@ Copyright (C) 1994 Steen Lumholt.
 #ifdef MS_WINDOWS
 #include <conio.h>
 #define WAIT_FOR_STDIN
-#endif
+
+static int isdir(PyObject *path) {
+    DWORD rv;
+    rv = GetFileAttributesA(PyBytes_AsString(PyUnicode_AsUTF8String(path)));
+    return rv != INVALID_FILE_ATTRIBUTES && rv & FILE_ATTRIBUTE_DIRECTORY;
+}
+
+static PyObject *
+_get_tcl_lib_path()
+{
+    static PyObject *tcl_library_path = NULL;
+    static int already_checked = 0;
+
+    if (already_checked == 0) {
+        PyObject *prefix;
+
+        prefix = PyUnicode_FromString(Py_GetPrefix());
+        if (prefix == NULL) {
+            return NULL;
+        }
+
+        /* Check expected location for an installed Python first */
+        tcl_library_path = PyUnicode_FromString("\\tcl\\tcl" TCL_VERSION);
+        if (tcl_library_path == NULL) {
+            return NULL;
+        }
+        tcl_library_path = PyUnicode_Concat(prefix, tcl_library_path);
+        if (tcl_library_path == NULL) {
+            return NULL;
+        }
+        if (!isdir(tcl_library_path)) {
+            /* install location doesn't exist, reset errno and see if
+               we're a repository build */
+            errno = 0;
+#ifdef Py_TCLTK_DIR
+            tcl_library_path = PyUnicode_FromString(
+                                    Py_TCLTK_DIR "\\lib\\tcl" TCL_VERSION);
+            if (tcl_library_path == NULL) {
+                return NULL;
+            }
+            if (!isdir(tcl_library_path)) {
+                /* tcltkDir for a repository build doesn't exist either,
+                   reset errno and leave Tcl to its own devices */
+                errno = 0;
+                tcl_library_path = NULL;
+            }
+#else /* Py_TCLTK_DIR */
+            tcl_library_path = NULL;
+#endif /* Py_TCLTK_DIR */
+        }
+        already_checked = 1;
+    }
+    return tcl_library_path;
+}
+#endif /* MS_WINDOWS */
 
 #ifdef WITH_THREAD
 
@@ -820,6 +874,33 @@ Tkapp_New(char *screenName, char *baseName, char *className,
         Tcl_SetVar(v->interp, "argv", args, TCL_GLOBAL_ONLY);
         ckfree(args);
     }
+
+#ifdef MS_WINDOWS
+    {
+        PyObject *str_path;
+        PyObject *utf8_path;
+        DWORD ret;
+
+        ret = GetEnvironmentVariableW(L"TCL_LIBRARY", NULL, 0);
+        if (!ret && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+            str_path = _get_tcl_lib_path();
+            if (str_path == NULL && PyErr_Occurred()) {
+                return NULL;
+            }
+            if (str_path != NULL) {
+                utf8_path = PyUnicode_AsUTF8String(str_path);
+                if (utf8_path == NULL) {
+                    return NULL;
+                }
+                Tcl_SetVar(v->interp,
+                           "tcl_library",
+                           PyBytes_AsString(utf8_path),
+                           TCL_GLOBAL_ONLY);
+                Py_DECREF(utf8_path);
+            }
+        }
+    }
+#endif
 
     if (Tcl_AppInit(v->interp) != TCL_OK) {
         PyObject *result = Tkinter_Error((PyObject *)v);
@@ -3644,7 +3725,7 @@ ins_string(PyObject *d, char *name, char *val)
 PyMODINIT_FUNC
 init_tkinter(void)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *uexe, *cexe;
 
     Py_TYPE(&Tkapp_Type) = &PyType_Type;
 
@@ -3697,7 +3778,53 @@ init_tkinter(void)
 
     /* This helps the dynamic loader; in Unicode aware Tcl versions
        it also helps Tcl find its encodings. */
-    Tcl_FindExecutable(Py_GetProgramName());
+    char *prog_name = Py_GetProgramName();
+    uexe = PyUnicode_FromWideChar(prog_name, wcslen(prog_name));
+    if (uexe) {
+        cexe = PyUnicode_EncodeUTF16(PyUnicode_AS_UNICODE(uexe), PyUnicode_GET_SIZE(uexe), NULL, 0);
+        if (cexe) {
+#ifdef MS_WINDOWS
+            int set_var = 0;
+            PyObject *str_path;
+            wchar_t *wcs_path;
+            DWORD ret;
+
+            ret = GetEnvironmentVariableW(L"TCL_LIBRARY", NULL, 0);
+
+            if (!ret && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+                str_path = _get_tcl_lib_path();
+                if (str_path == NULL && PyErr_Occurred()) {
+                    return;
+                }
+                if (str_path != NULL) {
+                    int size = (PyUnicode_GET_SIZE(str_path) + 1) * sizeof(wchar_t);
+                    wcs_path = (wchar_t *)PyMem_Malloc(size);
+                    if (!wcs_path) {
+                        return;
+                    }
+                    memset(wcs_path, 0, size);
+                    if ( -1 == PyUnicode_AsWideChar(str_path, wcs_path, PyUnicode_GET_SIZE(str_path))) {
+                      return;
+                    }
+                    if (wcs_path == NULL) {
+                        return;
+                    }
+                    SetEnvironmentVariableW(L"TCL_LIBRARY", wcs_path);
+                    set_var = 1;
+                }
+            }
+
+            Tcl_FindExecutable(PyBytes_AsString(cexe));
+
+            if (set_var) {
+                SetEnvironmentVariableW(L"TCL_LIBRARY", NULL);
+                PyMem_Free(wcs_path);
+            }
+#else
+            Tcl_FindExecutable(PyBytes_AsString(cexe));
+#endif /* MS_WINDOWS */
+        }
+    }
 
     if (PyErr_Occurred())
         return;

@@ -65,7 +65,6 @@
       <PreprocessorDefinitions>MODULE_NAME="sqlite3";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <BaseAddress>0x1e180000</BaseAddress>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

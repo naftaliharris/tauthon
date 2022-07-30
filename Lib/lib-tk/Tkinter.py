@@ -33,9 +33,6 @@ tk.mainloop()
 __version__ = "$Revision: 81008 $"
 
 import sys
-if sys.platform == "win32":
-    # Attempt to configure Tcl/Tk without requiring PATH
-    import FixTk
 import _tkinter # If this fails your Python may not be configured for Tk
 tkinter = _tkinter # b/w compat for export
 TclError = _tkinter.TclError

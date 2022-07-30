@@ -107,16 +107,9 @@ else:
     # unable to retrieve the real program name
     _PROJECT_BASE = _safe_realpath(os.getcwd())
 
-if os.name == "nt" and "pcbuild" in _PROJECT_BASE[-8:].lower():
-    _PROJECT_BASE = _safe_realpath(os.path.join(_PROJECT_BASE, pardir))
-# PC/VS7.1
-if os.name == "nt" and "\\pc\\v" in _PROJECT_BASE[-10:].lower():
+if (os.name == 'nt' and
+    _PROJECT_BASE.lower().endswith(('\\pcbuild\\win32', '\\pcbuild\\amd64'))):
     _PROJECT_BASE = _safe_realpath(os.path.join(_PROJECT_BASE, pardir, pardir))
-# PC/VS9.0/amd64
-if (os.name == "nt"
-   and os.path.basename(os.path.dirname(os.path.dirname(_PROJECT_BASE))).lower() == "pc"
-   and os.path.basename(os.path.dirname(_PROJECT_BASE)).lower() == "vs9.0"):
-    _PROJECT_BASE = _safe_realpath(os.path.join(_PROJECT_BASE, pardir, pardir, pardir))
 
 # set for cross builds
 if "_PYTHON_PROJECT_BASE" in os.environ:
@@ -132,8 +125,8 @@ _PYTHON_BUILD = is_python_build()
 
 if _PYTHON_BUILD:
     for scheme in ('posix_prefix', 'posix_home'):
-        _INSTALL_SCHEMES[scheme]['include'] = '{projectbase}/Include'
-        _INSTALL_SCHEMES[scheme]['platinclude'] = '{srcdir}'
+        _INSTALL_SCHEMES[scheme]['include'] = '{srcdir}/Include'
+        _INSTALL_SCHEMES[scheme]['platinclude'] = '{projectbase}/.'
 
 def _subst_vars(s, local_vars):
     try:

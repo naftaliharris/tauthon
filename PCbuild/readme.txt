@@ -1,158 +1,110 @@
 Quick Start Guide
 -----------------
 
-1.  Install Microsoft Visual Studio 2008, any edition.
-2.  Install Microsoft Visual Studio 2010, any edition, or Windows SDK 7.1
-    and any version of Microsoft Visual Studio newer than 2010.
-2a. Optionally install Python 3.6 or later.  If not installed,
-    get_externals.bat (build.bat -e) will download and use Python via
+1.  Install Microsoft Visual Studio 2017 with Python workload and
+    Python native development component.
+1a. Optionally install Python 3.6 or later.  If not installed,
+    get_externals.bat (via build.bat) will download and use Python via
     NuGet.
-3.  Run "build.bat -e" to build Python in 32-bit Release configuration.
-4.  (Optional, but recommended) Run the test suite with "rt.bat -q".
+2.  Run "build.bat" to build Tauthon in 32-bit Release configuration.
+3.  (Optional, but recommended) Run the test suite with "rt.bat -q".
 
 
-Building Python using MSVC 9.0 via MSBuild
+Building Tauthon using Microsoft Visual C++
 ------------------------------------------
 
-This directory is used to build Python for Win32 and x64 platforms, e.g.
-Windows 2000 and later.  In order to use the project files in this
-directory, you must have installed the MSVC 9.0 compilers, the v90
-PlatformToolset project files for MSBuild, and MSBuild version 4.0 or later.
-The easiest way to make sure you have all of these components is to install
-Visual Studio 2008 and Visual Studio 2010.  Another configuration proven
-to work is Visual Studio 2008, Windows SDK 7.1, and Visual Studio 2013.
+This directory is used to build Tauthon for Microsoft Windows NT version
+6.0 or higher (Windows Vista, Windows Server 2008, or later) on 32 and 64
+bit platforms.  Using this directory requires an installation of
+Microsoft Visual Studio 2017 (MSVC 14.1) with the *Python workload* and
+its optional *Python native development* component selected. (For
+command-line builds, Visual Studio 2015 may also be used.)
 
-If you only have Visual Studio 2008 available, use the project files in
-../PC/VS9.0 which are fully supported and specifically for VS 2008.
-
-If you do not have Visual Studio 2008 available, you can use these project
-files to build using a different version of MSVC.  For example, use
-
-   PCbuild\build.bat "/p:PlatformToolset=v100"
-
-to build using MSVC10 (Visual Studio 2010).
-
-***WARNING***
-Building Python 2.7 for Windows using any toolchain that doesn't link
-against MSVCRT90.dll is *unsupported* as the resulting python.exe will
-not be able to use precompiled extension modules that do link against
-MSVCRT90.dll.
-
-For other Windows platforms and compilers, see ../PC/readme.txt.
-
-To build modules that depend on external libraries, you need to download
-(and, for some of them, build) those first. It's thus recommended to build
-from the command line once as specified below under "Getting External Sources"
-as that does this automatically.
-
-Then, to continue development, you can open the solution "pcbuild.sln" in
-Visual Studio, select the desired combination of configuration and platform,
-then build with "Build Solution".  You can also build from the command
-line using the "build.bat" script in this directory; see below for
-details.  The solution is configured to build the projects in the correct
-order.
+Building from the command line is recommended in order to obtain any
+external dependencies. To build, simply run the "build.bat" script without
+any arguments. After this succeeds, you can open the "pcbuild.sln"
+solution in Visual Studio to continue development.
 
 To build an installer package, refer to the README in the Tools/msi folder.
 
 The solution currently supports two platforms.  The Win32 platform is
-used to build standard x86-compatible 32-bit binaries, output into this
-directory.  The x64 platform is used for building 64-bit AMD64 (aka
-x86_64 or EM64T) binaries, output into the amd64 sub-directory.  The
-Itanium (IA-64) platform is no longer supported.
+used to build standard x86-compatible 32-bit binaries, output into the
+win32 sub-directory.  The x64 platform is used for building 64-bit AMD64
+(aka x86_64 or EM64T) binaries, output into the amd64 sub-directory.
+The Itanium (IA-64) platform is no longer supported.
 
 Four configuration options are supported by the solution:
 Debug
-    Used to build Python with extra debugging capabilities, equivalent
+    Used to build Tauthon with extra debugging capabilities, equivalent
     to using ./configure --with-pydebug on UNIX.  All binaries built
     using this configuration have "_d" added to their name:
-    tauthon28_d.dll, tauthon_d.exe, parser_d.pyd, and so on.  Both the
+    tauthon38_d.dll, tauthon_d.exe, parser_d.pyd, and so on.  Both the
     build and rt (run test) batch files in this directory accept a -d
-    option for debug builds.  If you are building Python to help with
-    development of CPython, you will most likely use this configuration.
+    option for debug builds.  If you are building Tauthon to help with
+    development of Tauthon, you will most likely use this configuration.
 PGInstrument, PGUpdate
-    Used to build Python in Release configuration using PGO, which
-    requires Professional Edition of Visual Studio 2008.  See the
-    "Profile Guided Optimization" section below for more information.
-    Build output from each of these configurations lands in its own
-    sub-directory of this directory.  The official Python releases may
+    Used to build Tauthon in Release configuration using PGO, which
+    requires Premium Edition of Visual Studio.  See the "Profile
+    Guided Optimization" section below for more information.  Build
+    output from each of these configurations lands in its own
+    sub-directory of this directory.  The official Tauthon releases may
     be built using these configurations.
 Release
-    Used to build Python as it is meant to be used in production
+    Used to build Tauthon as it is meant to be used in production
     settings, though without PGO.
 
 
-Building Python using the build.bat script
+Building Tauthon using the build.bat script
 ----------------------------------------------
 
 In this directory you can find build.bat, a script designed to make
-building Python on Windows simpler.  This script will use the env.bat
-script to detect one of Visual Studio 2015, 2013, 2012, or 2010, any of
-which contains a usable version of MSBuild.
+building Tauthon on Windows simpler.  This script will use the env.bat
+script to detect either Visual Studio 2017 or 2015, either of
+which may be used to build Tauthon. Currently Visual Studio 2017 is
+officially supported.
 
-By default, build.bat will build Python in Release configuration for
+By default, build.bat will build Tauthon in Release configuration for
 the 32-bit Win32 platform.  It accepts several arguments to change
 this behavior, try `build.bat -h` to learn more.
-
-
-Legacy support
---------------
-
-You can find build directories for older versions of Visual Studio and
-Visual C++ in the PC directory.  The project files in PC/VS9.0/ are
-specific to Visual Studio 2008, and will be fully supported for the life
-of Python 2.7.
-
-The following legacy build directories are no longer maintained and may
-not work out of the box.
-
-PC/VC6/
-    Visual C++ 6.0
-PC/VS7.1/
-    Visual Studio 2003 (7.1)
-PC/VS8.0/
-    Visual Studio 2005 (8.0)
 
 
 C Runtime
 ---------
 
-Visual Studio 2008 uses version 9 of the C runtime (MSVCRT9).  The executables
-are linked to a CRT "side by side" assembly which must be present on the target
-machine.  This is available under the VC/Redist folder of your visual studio
-distribution. On XP and later operating systems that support
-side-by-side assemblies it is not enough to have the msvcrt90.dll present,
-it has to be there as a whole assembly, that is, a folder with the .dll
-and a .manifest.  Also, a check is made for the correct version.
-Therefore, one should distribute this assembly with the dlls, and keep
-it in the same directory.  For compatibility with older systems, one should
-also set the PATH to this directory so that the dll can be found.
-For more info, see the Readme in the VC/Redist folder.
+Visual Studio 2017 uses version 14.0 of the C runtime (vcruntime140).
+The executables no longer use the "Side by Side" assemblies used in
+previous versions of the compiler.  This simplifies distribution of
+applications.
+
+The run time libraries are available under the redist folder of your
+Visual Studio distribution. For more info, see the Readme in the
+redist folder.
 
 
 Sub-Projects
 ------------
 
-The CPython project is split up into several smaller sub-projects which
+The Tauthon project is split up into several smaller sub-projects which
 are managed by the pcbuild.sln solution file.  Each sub-project is
 represented by a .vcxproj and a .vcxproj.filters file starting with the
 name of the sub-project.  These sub-projects fall into a few general
 categories:
 
 The following sub-projects represent the bare minimum required to build
-a functioning CPython interpreter.  If nothing else builds but these,
-you'll have a very limited but usable python.exe:
+a functioning Tauthon interpreter.  If nothing else builds but these,
+you'll have a very limited but usable tauthon.exe:
 pythoncore
     .dll and .lib
-python
+tauthon
     .exe
 
 These sub-projects provide extra executables that are useful for running
-CPython in different ways:
-pythonw
-    pythonw.exe, a variant of python.exe that doesn't open a Command
+Tauthon in different ways:
+tauthonw
+    tauthonw.exe, a variant of tauthon.exe that doesn't open a Command
     Prompt window
 pylauncher
-    py.exe, the Python Launcher for Windows, see
+    py.exe, the Tauthon Launcher for Windows, see
         http://docs.python.org/3/using/windows.html#launcher
 pywlauncher
     pyw.exe, a variant of py.exe that doesn't open a Command Prompt
@@ -161,100 +113,90 @@ pywlauncher
 The following sub-projects are for individual modules of the standard
 library which are implemented in C; each one builds a DLL (renamed to
 .pyd) of the same name as the project:
+_asyncio
 _ctypes
 _ctypes_test
+_decimal
 _elementtree
 _hashlib
 _msi
 _multiprocessing
+_overlapped
 _socket
+_testbuffer
 _testcapi
+_testconsole
+_testimportmultiple
+_testmultiphase
+_tkinter
 pyexpat
 select
 unicodedata
 winsound
 
-There is also a w9xpopen project to build w9xpopen.exe, which is used
-for platform.popen() on platforms whose COMSPEC points to 'command.com'.
-
-The following Python-controlled sub-projects wrap external projects.
+The following Tauthon-controlled sub-projects wrap external projects.
 Note that these external libraries are not necessary for a working
 interpreter, but they do implement several major features.  See the
 "Getting External Sources" section below for additional information
 about getting the source for building these libraries.  The sub-projects
 are:
-_bsddb
-    Python wrapper for Berkeley DB version 4.7.25.
-    Homepage:
-        http://www.oracle.com/us/products/database/berkeley-db/
 _bz2
-    Python wrapper for version 1.0.6 of the libbzip2 compression library
+    Tauthon wrapper for version 1.0.8 of the libbzip2 compression library
     Homepage:
         http://www.bzip.org/
+_lzma
+    Tauthon wrapper for version 5.2.2 of the liblzma compression library
+    Homepage:
+        http://tukaani.org/xz/
 _ssl
-    Python wrapper for version 1.0.2s of the OpenSSL secure sockets
-    library, which is built by ssl.vcxproj
+    Tauthon wrapper for version 1.1.1k of the OpenSSL secure sockets
+    library, which is downloaded from our binaries repository at
+    https://github.com/python/cpython-bin-deps.
+
     Homepage:
         http://www.openssl.org/
 
-    Building OpenSSL requires nasm.exe (the Netwide Assembler), version
-    2.10 or newer from
-        http://www.nasm.us/
-    to be somewhere on your PATH.  More recent versions of OpenSSL may
-    need a later version of NASM. If OpenSSL's self tests don't pass,
-    you should first try to update NASM and do a full rebuild of
-    OpenSSL.  If you use the PCbuild\get_externals.bat method
-    for getting sources, it also downloads a version of NASM which the
-    libeay/ssleay sub-projects use.
+    Building OpenSSL requires Perl on your path, and can be performed by
+    running PCbuild\prepare_ssl.bat. This will retrieve the version of
+    the sources matched to the current commit from the OpenSSL branch
+    in our source repository at
+    https://github.com/python/cpython-source-deps.
 
-    The libeay/ssleay sub-projects expect your OpenSSL sources to have
-    already been configured and be ready to build.  If you get your sources
-    from svn.python.org as suggested in the "Getting External Sources"
-    section below, the OpenSSL source will already be ready to go.  If
-    you want to build a different version, you will need to run
+    To use an alternative build of OpenSSL completely, you should replace
+    the files in the externals/openssl-bin-<version> folder with your own.
+    As long as this folder exists, its contents will not be downloaded
+    again when building.
 
-       PCbuild\prepare_ssl.py path\to\openssl-source-dir
-
-    That script will prepare your OpenSSL sources in the same way that
-    those available on svn.python.org have been prepared.  Note that
-    Perl must be installed and available on your PATH to configure
-    OpenSSL.  ActivePerl is recommended and is available from
-        http://www.activestate.com/activeperl/
-
-    The libeay and ssleay sub-projects will build the modules of OpenSSL
-    required by _ssl and _hashlib and may need to be manually updated when
-    upgrading to a newer version of OpenSSL or when adding new
-    functionality to _ssl or _hashlib. They will not clean up their output
-    with the normal Clean target; CleanAll should be used instead.
 _sqlite3
-    Wraps SQLite 3.28.0.0, which is itself built by sqlite3.vcxproj
+    Wraps SQLite 3.35.5, which is itself built by sqlite3.vcxproj
     Homepage:
         http://www.sqlite.org/
 _tkinter
-    Wraps version 8.5.19 of the Tk windowing system.
+    Wraps version 8.6.6 of the Tk windowing system, which is downloaded
+    from our binaries repository at
+    https://github.com/python/cpython-bin-deps.
+
     Homepage:
         http://www.tcl.tk/
 
-    Tkinter's dependencies are built by the tcl.vcxproj and tk.vcxproj
-    projects.  The tix.vcxproj project also builds the Tix extended
-    widget set for use with Tkinter.
+    Building Tcl and Tk can be performed by running
+    PCbuild\prepare_tcltk.bat. This will retrieve the version of the
+    sources matched to the current commit from the Tcl and Tk branches
+    in our source repository at
+    https://github.com/python/cpython-source-deps.
 
-    Those three projects install their respective components in a
+    The two projects install their respective components in a
     directory alongside the source directories called "tcltk" on
     Win32 and "tcltk64" on x64.  They also copy the Tcl and Tk DLLs
     into the current output directory, which should ensure that Tkinter
     is able to load Tcl/Tk without having to change your PATH.
-
-    The tcl, tk, and tix sub-projects do not clean their builds with
-    the normal Clean target; if you need to rebuild, you should use the
-    CleanAll target or manually delete their builds.
 
 
 Getting External Sources
 ------------------------
 
 The last category of sub-projects listed above wrap external projects
-Python doesn't control, and as such a little more work is required in
+Tauthon doesn't control, and as such a little more work is required in
 order to download the relevant source files for each project before they
 can be built.  However, a simple script is provided to make this as
 painless as possible, called "get_externals.bat" and located in this
@@ -276,8 +218,8 @@ as the values of certain properties in order for the build solution to
 find them.  This is an advanced topic and not necessarily fully
 supported.
 
-The get_externals.bat script is called automatically by build.bat when
-you pass the '-e' option to it.
+The get_externals.bat script is called automatically by build.bat
+unless you pass the '-E' option.
 
 
 Profile Guided Optimization
@@ -291,10 +233,10 @@ binaries.
 
 The build_pgo.bat script automates the creation of optimized binaries.
 It creates the PGI files, runs the unit test suite or PyBench with the
-PGI python, and finally creates the optimized files.
+PGI tauthon, and finally creates the optimized files.
 
 See
-    http://msdn.microsoft.com/en-us/library/e7k32f4k(VS.90).aspx
+    http://msdn.microsoft.com/en-us/library/e7k32f4k(VS.140).aspx
 for more on this topic.
 
 
@@ -320,7 +262,7 @@ carefully modified by hand.
 The property files used are:
  * python (versions, directories and build names)
  * pyproject (base settings for all projects)
- * openssl (used by libeay and ssleay projects)
+ * openssl (used by projects dependent upon OpenSSL)
  * tcltk (used by _tkinter, tcl, tk and tix projects)
 
 The pyproject property file defines all of the build settings for each

@@ -35,7 +35,7 @@
       <BuildInParallel>false</BuildInParallel>
     </Projects>
     <!-- tauthon[w].exe -->
-    <Projects Include="python.vcxproj;pythonw.vcxproj" />
+    <Projects Include="tauthon.vcxproj;tauthonw.vcxproj" />
     <!-- Extension modules -->
     <ExtensionModules Include="_ctypes;_elementtree;_msi;_multiprocessing;pyexpat;select;unicodedata;winsound" />
     <!-- Extension modules that require external sources -->
@@ -43,7 +43,7 @@
     <!-- _ssl will build _socket as well, which may cause conflicts in parallel builds -->
     <ExtensionModules Include="_socket" Condition="!$(IncludeSSL) or !$(IncludeExternals)" />
     <ExternalModules Include="_ssl;_hashlib" Condition="$(IncludeSSL)" />
-    <ExternalModules Include="_tkinter;tix" Condition="$(IncludeTkinter)" />
+    <ExternalModules Include="_tkinter" Condition="$(IncludeTkinter) and $(Platform) != 'ARM' and $(Platform) != 'ARM64'" />
     <ExternalModules Include="_bsddb" Condition="$(IncludeBsddb)" />
     <ExtensionModules Include="@(ExternalModules->'%(Identity)')" Condition="$(IncludeExternals)" />
     <Projects Include="@(ExtensionModules->'%(Identity).vcxproj')" Condition="$(IncludeExtensions)" />
@@ -59,6 +59,7 @@
     <MSBuild Projects="@(Projects)"
              Properties="Configuration=%(Configuration);Platform=%(Platform);%(Properties)"
              BuildInParallel="%(BuildInParallel)"
+             StopOnFirstFailure="true"
              Targets="%(BuildTarget)" />
   </Target>
 

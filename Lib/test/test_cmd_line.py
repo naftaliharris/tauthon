@@ -6,8 +6,7 @@ import test.test_support
 import sys
 import unittest
 from test.script_helper import (
-    assert_python_ok, assert_python_failure, spawn_python, kill_python,
-    python_exit_code
+    assert_python_ok, assert_python_failure, spawn_python, kill_python
 )
 
 
@@ -16,12 +15,9 @@ class CmdLineTest(unittest.TestCase):
         p = spawn_python(*args)
         return kill_python(p)
 
-    def exit_code(self, *args):
-        return python_exit_code(*args)
-
     def test_directories(self):
-        self.assertNotEqual(self.exit_code('.'), 0)
-        self.assertNotEqual(self.exit_code('< .'), 0)
+        assert_python_failure('.')
+        assert_python_failure('< .')
 
     def verify_valid_flag(self, cmd_line):
         data = self.start_python(cmd_line)
@@ -51,20 +47,14 @@ class CmdLineTest(unittest.TestCase):
     def test_run_module(self):
         # Test expected operation of the '-m' switch
         # Switch needs an argument
-        self.assertNotEqual(self.exit_code('-m'), 0)
+        assert_python_failure('-m')
         # Check we get an error for a nonexistent module
-        self.assertNotEqual(
-            self.exit_code('-m', 'fnord43520xyz'),
-            0)
+        assert_python_failure('-m', 'fnord43520xyz')
         # Check the runpy module also gives an error for
         # a nonexistent module
-        self.assertNotEqual(
-            self.exit_code('-m', 'runpy', 'fnord43520xyz'),
-            0)
+        assert_python_failure('-m', 'runpy', 'fnord43520xyz')
         # All good if module is located and run successfully
-        self.assertEqual(
-            self.exit_code('-m', 'timeit', '-n', '1'),
-            0)
+        assert_python_ok('-m', 'timeit', '-n', '1')
 
     def test_run_module_bug1764407(self):
         # -m and -i need to play well together
@@ -80,15 +70,11 @@ class CmdLineTest(unittest.TestCase):
     def test_run_code(self):
         # Test expected operation of the '-c' switch
         # Switch needs an argument
-        self.assertNotEqual(self.exit_code('-c'), 0)
+        assert_python_failure('-c')
         # Check we get an error for an uncaught exception
-        self.assertNotEqual(
-            self.exit_code('-c', 'raise Exception'),
-            0)
+        assert_python_failure('-c', 'raise Exception')
         # All good if execution is successful
-        self.assertEqual(
-            self.exit_code('-c', 'pass'),
-            0)
+        assert_python_ok('-c', 'pass')
 
     def test_hash_randomization(self):
         # Verify that -R enables hash randomization:

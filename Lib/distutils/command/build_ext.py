@@ -19,10 +19,6 @@ from distutils.extension import Extension
 from distutils.util import get_platform
 from distutils import log
 
-if os.name == 'nt':
-    from distutils.msvccompiler import get_build_version
-    MSVC_VERSION = int(get_build_version())
-
 # An extension name is just a dot-separated list of Python NAMEs (ie.
 # the same as a fully-qualified module name).
 extension_name_re = re.compile \
@@ -200,10 +196,18 @@ class build_ext (Command):
                 else:
                     # win-amd64 or win-ia64
                     suffix = self.plat_name[4:]
-                new_lib = os.path.join(sys.exec_prefix, 'PCbuild')
-                if suffix:
-                    new_lib = os.path.join(new_lib, suffix)
-                self.library_dirs.append(new_lib)
+                if MSVC_VERSION >= 14:
+                    ldir = os.path.join(sys.exec_prefix, 'PCbuild')
+                    if suffix != 'win32':
+                        ldir = os.path.join(ldir, suffix)
+                    self.library_dirs.append(ldir)
+                else:
+                    # We could have been built in one of two places; add both
+                    for d in ('PCbuild',), ('PC', 'VS9.0'):
+                        new_lib = os.path.join(sys.exec_prefix, *d)
+                        if suffix:
+                            new_lib = os.path.join(new_lib, suffix)
+                        self.library_dirs.append(new_lib)
 
             elif MSVC_VERSION == 8:
                 self.library_dirs.append(os.path.join(sys.exec_prefix,
@@ -214,7 +218,6 @@ class build_ext (Command):
             else:
                 self.library_dirs.append(os.path.join(sys.exec_prefix,
                                          'PC', 'VC6'))
-
         # OS/2 (EMX) doesn't support Debug vs Release builds, but has the
         # import libraries in its "Config" subdirectory
         if os.name == 'os2':
@@ -699,7 +702,7 @@ class build_ext (Command):
         # to need it mentioned explicitly, though, so that's what we do.
         # Append '_d' to the python import library on debug builds.
         if sys.platform == "win32":
-            from distutils.msvccompiler import MSVCCompiler
+            from distutils._msvccompiler import MSVCCompiler
             if not isinstance(self.compiler, MSVCCompiler):
                 template = "python%d%d"
                 if self.debug:

@@ -98,15 +98,15 @@ static double floattime(void);
 /* For Y2K check */
 static PyObject *moddict = NULL;
 
-#ifdef _MSC_VER
-#define _Py_timezone _timezone
-#define _Py_daylight _daylight
-#define _Py_tzname _tzname
-#else
-#define _Py_timezone timezone
-#define _Py_daylight daylight
-#define _Py_tzname tzname
-#endif
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+# define _Py_timezone _timezone
+# define _Py_daylight _daylight
+# define _Py_tzname _tzname
+#else /* defined(_MSC_VER) && _MSC_VER >= 1900 */
+# define _Py_timezone timezone
+# define _Py_daylight daylight
+# define _Py_tzname tzname
+#endif /* defined(_MSC_VER) && _MSC_VER >= 1900 */
 
 #if defined(__APPLE__ ) && defined(__has_builtin)
 #  if __has_builtin(__builtin_available)

@@ -61,13 +61,6 @@ def assert_python_failure(*args, **env_vars):
     """
     return _assert_python(False, *args, **env_vars)
 
-def python_exit_code(*args):
-    cmd_line = [sys.executable, '-E']
-    cmd_line.extend(args)
-    with open(os.devnull, 'w') as devnull:
-        return subprocess.call(cmd_line, stdout=devnull,
-                                stderr=subprocess.STDOUT)
-
 def spawn_python(*args, **kwargs):
     cmd_line = [sys.executable, '-E']
     cmd_line.extend(args)

@@ -371,13 +371,13 @@ _PyOS_URandom(void *buffer, Py_ssize_t size)
     if (HAVE_GETENTRYPY_GETRANDOM_RUNTIME) {
         return py_getentropy(buffer, size, 0);
     }
-#else
+#else // MS_WINDOWS
 # ifdef __VMS
     return vms_urandom((unsigned char *)buffer, size, 1);
-# endif
-#endif
-
+# else
     return dev_urandom_python((char*)buffer, size);
+# endif
+#endif // MS_WINDOWS
 }
 
 void

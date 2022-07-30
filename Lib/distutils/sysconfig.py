@@ -23,22 +23,18 @@ PREFIX = os.path.normpath(sys.prefix)
 EXEC_PREFIX = os.path.normpath(sys.exec_prefix)
 
 # Path to the base directory of the project. On Windows the binary may
-# live in project/PCBuild/win32 or project/PCBuild/amd64.
-if sys.executable:
-    project_base = os.path.dirname(os.path.abspath(sys.executable))
-else:
-    # sys.executable can be empty if argv[0] has been changed and Python is
-    # unable to retrieve the real program name
-    project_base = os.getcwd()
-
-if (os.name == 'nt' and
-    project_base.lower().endswith(('\\pcbuild\\win32', '\\pcbuild\\amd64'))):
-    project_base = os.path.dirname(os.path.dirname(project_base))
-
+# live in project/PCbuild/win32 or project/PCbuild/amd64.
 # set for cross builds
 if "_PYTHON_PROJECT_BASE" in os.environ:
-    # this is the build directory, at least for posix
-    project_base = os.path.normpath(os.environ["_PYTHON_PROJECT_BASE"])
+    project_base = os.path.abspath(os.environ["_PYTHON_PROJECT_BASE"])
+else:
+    if sys.executable:
+        project_base = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # sys.executable can be empty if argv[0] has been changed and Python is
+        # unable to retrieve the real program name
+        project_base = os.getcwd()
+
 
 # python_build: (Boolean) if true, we're either building Python or
 # building an extension with an un-installed Python, so we use
@@ -95,6 +91,11 @@ def get_python_inc(plat_specific=0, prefix=None):
             return inc_dir
         return os.path.join(prefix, "include", "tauthon" + get_python_version())
     elif os.name == "nt":
+        if python_build:
+            # Include both the include and PC dir to ensure we can find
+            # pyconfig.h
+            return (os.path.join(prefix, "include") + os.path.pathsep +
+                    os.path.join(prefix, "PC"))
         return os.path.join(prefix, "include")
     elif os.name == "os2":
         return os.path.join(prefix, "Include")
@@ -133,10 +134,7 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
         if standard_lib:
             return os.path.join(prefix, "Lib")
         else:
-            if get_python_version() < "2.2":
-                return prefix
-            else:
-                return os.path.join(prefix, "Lib", "site-packages")
+            return os.path.join(prefix, "Lib", "site-packages")
 
     elif os.name == "os2":
         if standard_lib:
@@ -234,12 +232,8 @@ def get_config_h_filename():
             inc_dir = project_base
     else:
         inc_dir = get_python_inc(plat_specific=1)
-    if get_python_version() < '2.2':
-        config_h = 'config.h'
-    else:
-        # The name of the config.h file changed in 2.2
-        config_h = 'pyconfig.h'
-    return os.path.join(inc_dir, config_h)
+
+    return os.path.join(inc_dir, 'pyconfig.h')
 
 
 def get_makefile_filename():

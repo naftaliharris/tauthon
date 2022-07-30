@@ -59,9 +59,6 @@
   <PropertyGroup>
     <_ProjectFileVersion>10.0.30319.1</_ProjectFileVersion>
     <TargetName>$(PyDllName)</TargetName>
-    <!-- For VS2008, we have to embed the manifest to be able to run -->
-    <GenerateManifest Condition="'$(PlatformToolset)' == 'v90' or '$(BasePlatformToolset)' == 'v90'">true</GenerateManifest>
-    <EmbedManifest Condition="'$(PlatformToolset)' == 'v90' or '$(BasePlatformToolset)' == 'v90'">true</EmbedManifest>
   </PropertyGroup>
   <PropertyGroup>
     <CustomBuildBeforeTargets>Link</CustomBuildBeforeTargets>
@@ -73,8 +70,7 @@
       <PreprocessorDefinitions>_USRDLL;Py_BUILD_CORE;Py_ENABLE_SHARED;_CRT_SECURE_NO_WARNINGS;MS_DLL_ID="$(SysWinVer)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <BaseAddress>0x1e000000</BaseAddress>
+      <AdditionalDependencies>version.lib;shlwapi.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -416,7 +412,15 @@
       </ClCompile>
     </ItemGroup>
   </Target>
-  <Target Name="_WarnAboutToolset" BeforeTargets="PrepareForBuild" Condition="$(PlatformToolset) != 'v90'">
+  <Target Name="_WarnAboutToolset" BeforeTargets="PrepareForBuild" Condition="$(PlatformToolset) != 'v140' and $(PlatformToolset) != 'v141' and $(PlatformToolset) != 'v142'">
     <Warning Text="Toolset $(PlatformToolset) is not used for official builds. Your build may have errors or incompatibilities." />
+  </Target>
+  <Target Name="_CopyVCRuntime" AfterTargets="Build" Inputs="@(VCRuntimeDLL)" Outputs="$(OutDir)%(Filename)%(Extension)" DependsOnTargets="FindVCRuntime">
+    <!-- bpo-38597: When we switch to another VCRuntime DLL, include vcruntime140.dll as well -->
+    <Warning Text="A copy of vcruntime140.dll is also required" Condition="!$(VCToolsRedistVersion.StartsWith(`14.`))" />
+    <Copy SourceFiles="%(VCRuntimeDLL.FullPath)" DestinationFolder="$(OutDir)" />
+  </Target>
+  <Target Name="_CleanVCRuntime" AfterTargets="Clean">
+    <Delete Files="@(VCRuntimeDLL->'$(OutDir)%(Filename)%(Extension)')" />
   </Target>
 </Project>

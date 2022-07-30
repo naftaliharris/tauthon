@@ -20,8 +20,8 @@ jobs:
             cpu: i386
           - os: macos
             cpu: amd64
-          #- os: windows
-            #cpu: amd64
+          - os: windows
+            cpu: amd64
         include:
           - target:
               os: linux
@@ -29,9 +29,9 @@ jobs:
           - target:
               os: macos
             builder: macos-latest
-          #- target:
-              #os: windows
-            #builder: windows-latest
+          - target:
+              os: windows
+            builder: windows-2019
     name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
     runs-on: ${{ matrix.builder }}
     steps:
@@ -110,10 +110,8 @@ jobs:
           xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly"
           # doc checks:
           if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
-            # Sphinx is pinned so that new versions that introduce new warnings won't suddenly cause build failures.
-            # (Updating the version is fine as long as no warnings are raised by doing so.)
             cd Doc
-            python3 -m pip install sphinx~=2.0.1
+            python3 -m pip install -r requirements.txt
             make check suspicious html SPHINXOPTS="-q -j auto" PYTHON=python2
           fi
 
@@ -134,7 +132,7 @@ jobs:
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
-          .\PCbuild\build.bat -e -p x64 --platform-toolset v142
-          .\PCbuild\amd64\python.exe -m test.pythoninfo
-          .\PCbuild\rt.bat -x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures test_multiprocessing test_selectors test_asynchat test_asyncore
+          .\PCbuild\build.bat -e -p x64
+          .\tauthon.bat -m test.pythoninfo
+          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures test_multiprocessing test_selectors test_asynchat test_asyncore test_ftplib
 

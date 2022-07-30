@@ -232,6 +232,14 @@ static PyTypeObject spamdict_type = {
     0,                                          /* tp_new */
 };
 
+#ifndef CLOCKS_PER_SEC
+#  ifdef CLK_TCK
+#    define CLOCKS_PER_SEC CLK_TCK
+#  else
+#    define CLOCKS_PER_SEC 1000000
+#  endif
+#endif
+
 static PyObject *
 spam_bench(PyObject *self, PyObject *args)
 {

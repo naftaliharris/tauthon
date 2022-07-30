@@ -46,12 +46,6 @@ Tcl_AppInit(Tcl_Interp *interp)
     tclLibPath, MAX_PATH_LEN, 0);
 
     if (tclLibPath[0] != '\0') {
-    Tcl_SetVar(interp, "tcl_library", tclLibPath, TCL_GLOBAL_ONLY);
-        Tcl_SetVar(interp, "tclDefaultLibrary", tclLibPath, TCL_GLOBAL_ONLY);
-        Tcl_SetVar(interp, "tcl_pkgPath", tclLibPath, TCL_GLOBAL_ONLY);
-    }
-
-    if (tclLibPath[0] != '\0') {
         Tcl_SetVar(interp, "tcl_library", tclLibPath, TCL_GLOBAL_ONLY);
         Tcl_SetVar(interp, "tclDefaultLibrary", tclLibPath, TCL_GLOBAL_ONLY);
         Tcl_SetVar(interp, "tcl_pkgPath", tclLibPath, TCL_GLOBAL_ONLY);

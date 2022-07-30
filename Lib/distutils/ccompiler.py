@@ -20,7 +20,7 @@ from distutils import log
 # following import is for backward compatibility
 from distutils.sysconfig import customize_compiler
 
-class CCompiler:
+class CCompiler(object):
     """Abstract base class to define the interface that must be implemented
     by real compiler classes.  Also has some utility methods used by
     several compiler classes.
@@ -934,7 +934,7 @@ def get_default_compiler(osname=None, platform=None):
 # is assumed to be in the 'distutils' package.)
 compiler_class = { 'unix':    ('unixccompiler', 'UnixCCompiler',
                                "standard UNIX-style compiler"),
-                   'msvc':    ('msvccompiler', 'MSVCCompiler',
+                   'msvc':    ('_msvccompiler', 'MSVCCompiler',
                                "Microsoft Visual C++"),
                    'cygwin':  ('cygwinccompiler', 'CygwinCCompiler',
                                "Cygwin port of GNU C Compiler for Win32"),
