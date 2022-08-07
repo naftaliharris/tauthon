@@ -19,6 +19,10 @@ from distutils.extension import Extension
 from distutils.util import get_platform
 from distutils import log
 
+if os.name == 'nt':
+    from distutils.msvccompiler import get_build_version
+    MSVC_VERSION = int(get_build_version())
+
 # An extension name is just a dot-separated list of Python NAMEs (ie.
 # the same as a fully-qualified module name).
 extension_name_re = re.compile \
