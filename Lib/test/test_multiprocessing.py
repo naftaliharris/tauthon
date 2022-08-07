@@ -2589,6 +2589,7 @@ class TestStdinBadfiledescriptor(unittest.TestCase):
         assert sio.getvalue() == 'foo'
 
 
+@unittest.skipIf(sys.platform == "win32", "POSIX specific tests")
 class TestWait(unittest.TestCase):
 
     @classmethod
