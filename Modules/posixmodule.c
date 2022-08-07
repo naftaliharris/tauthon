@@ -649,51 +649,10 @@ _PyInt_FromDev(PY_LONG_LONG v)
         return PyLong_FromLongLong(v);
 }
 #else
-#  define _PyInt_FromDev PyInt_FromLong
+# define _PyInt_FromDev PyInt_FromLong
 #endif
 
-#if defined _MSC_VER && _MSC_VER >= 1700
-void
-_PyInvalidParameterHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
-{
-}
-
-int
-_PyVerify_fd(int fd)
-{
-	HANDLE hFd;
-	_invalid_parameter_handler oldHandler;
-
-	oldHandler = _set_invalid_parameter_handler(_PyInvalidParameterHandler);
-
-	hFd = _get_osfhandle(fd);
-	if (hFd == INVALID_HANDLE_VALUE)
-		goto fail;
-	if ((fd < 0) || _isatty(fd))
-		goto fail;
-
-	// FIXME: ensure that file descriptor is open too
-	_set_invalid_parameter_handler(oldHandler);
-	return 1;
-
-fail:
-	_set_invalid_parameter_handler(oldHandler);
-	return 0;
-}
-
-static int
-_PyVerify_fd_dup2(int fd1, int fd2)
-{
-	_invalid_parameter_handler oldHandler;
-
-	if (!_PyVerify_fd(fd1))
-		return 0;
-	if (fd2 < 0)
-		return 0;
-	return 1;
-}
-
-#elif defined _MSC_VER && _MSC_VER >= 1400
+#if defined _MSC_VER && _MSC_VER >= 1400 && _MSC_VER < 1900
 /* Microsoft CRT in VS2005 and higher will verify that a filehandle is
  * valid and raise an assertion if it isn't.
  * Normally, an invalid fd is likely to be a C program error and therefore
@@ -717,36 +676,18 @@ _PyVerify_fd_dup2(int fd1, int fd2)
 /* The actual size of the structure is determined at runtime.
  * Only the first items must be present.
  */
-
-#if _MSC_VER >= 1900
-
-typedef struct {
-    CRITICAL_SECTION lock;
-    intptr_t osfhnd;
-    __int64 startpos;
-    char osfile;
-} my_ioinfo;
-
-#define IOINFO_L2E 6
-#define IOINFO_ARRAYS 128
-
-#else
-
 typedef struct {
     intptr_t osfhnd;
     char osfile;
 } my_ioinfo;
-
-#define IOINFO_L2E 5
-#define IOINFO_ARRAYS 64
-
-#endif
 
 extern __declspec(dllimport) char * __pioinfo[];
-#define IOINFO_ARRAY_ELTS   (1 << IOINFO_L2E)
-#define _NHANDLE_           (IOINFO_ARRAYS * IOINFO_ARRAY_ELTS)
-#define FOPEN 0x01
-#define _NO_CONSOLE_FILENO (intptr_t)-2
+# define IOINFO_L2E 5
+# define IOINFO_ARRAY_ELTS   (1 << IOINFO_L2E)
+# define IOINFO_ARRAYS 64
+# define _NHANDLE_           (IOINFO_ARRAYS * IOINFO_ARRAY_ELTS)
+# define FOPEN 0x01
+# define _NO_CONSOLE_FILENO (intptr_t)-2
 
 /* This function emulates what the windows CRT does to validate file handles */
 int
@@ -799,10 +740,10 @@ _PyVerify_fd_dup2(int fd1, int fd2)
     else
         return 0;
 }
-#else
+#else /* defined _MSC_VER && _MSC_VER >= 1400 && _MSC_VER < 1900 */
 /* dummy version, we dont verify fds, we suppress asserts */
-#define _PyVerify_fd_dup2(A, B) (1)
-#endif
+# define _PyVerify_fd_dup2(A, B) (1)
+#endif /* defined _MSC_VER && _MSC_VER >= 1400 && _MSC_VER < 1900 */
 
 /* Return a dictionary corresponding to the POSIX environment table */
 #if defined(WITH_NEXT_FRAMEWORK) || (defined(__APPLE__) && defined(Py_ENABLE_SHARED))
@@ -810,7 +751,7 @@ _PyVerify_fd_dup2(int fd1, int fd2)
 ** environ directly, we must obtain it with _NSGetEnviron(). See also
 ** man environ(7).
 */
-#include <crt_externs.h>
+# include <crt_externs.h>
 static char **environ;
 #elif !defined(_MSC_VER) && ( !defined(__WATCOMC__) || defined(__QNX__) )
 extern char **environ;
