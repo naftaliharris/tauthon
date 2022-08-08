@@ -134,5 +134,5 @@ jobs:
         run: |
           .\PCbuild\build.bat -e -p x64
           .\tauthon.bat -m test.pythoninfo
-          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures test_multiprocessing test_selectors test_asynchat test_asyncore test_ftplib
+          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures
 
