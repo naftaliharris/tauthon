@@ -3779,11 +3779,11 @@ init_tkinter(void)
     /* This helps the dynamic loader; in Unicode aware Tcl versions
        it also helps Tcl find its encodings. */
     char *prog_name = Py_GetProgramName();
+#ifdef MS_WINDOWS
     uexe = PyUnicode_FromWideChar(prog_name, wcslen(prog_name));
     if (uexe) {
         cexe = PyUnicode_EncodeUTF16(PyUnicode_AS_UNICODE(uexe), PyUnicode_GET_SIZE(uexe), NULL, 0);
         if (cexe) {
-#ifdef MS_WINDOWS
             int set_var = 0;
             PyObject *str_path;
             wchar_t *wcs_path;
@@ -3820,11 +3820,11 @@ init_tkinter(void)
                 SetEnvironmentVariableW(L"TCL_LIBRARY", NULL);
                 PyMem_Free(wcs_path);
             }
-#else
-            Tcl_FindExecutable(PyBytes_AsString(cexe));
-#endif /* MS_WINDOWS */
         }
     }
+#else /* MS_WINDOWS */
+    Tcl_FindExecutable(prog_name);
+#endif /* MS_WINDOWS */
 
     if (PyErr_Occurred())
         return;
