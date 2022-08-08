@@ -25,7 +25,7 @@ else:
     def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
         with socket.socket(family, type, proto) as l:
             l.bind((support.HOST, 0))
-            l.listen()
+            l.listen(1)
             c = socket.socket(family, type, proto)
             try:
                 c.connect(l.getsockname())
@@ -98,6 +98,7 @@ class BaseSelectorTestCase(unittest.TestCase):
         # unregister twice
         self.assertRaises(KeyError, s.unregister, rd)
 
+    @unittest.skipIf(sys.platform == 'win32', "can't unregister after close on Windows")
     def test_unregister_after_fd_close(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -128,6 +129,7 @@ class BaseSelectorTestCase(unittest.TestCase):
         s.unregister(r)
         s.unregister(w)
 
+    @unittest.skipIf(sys.platform == 'win32', "can't unregister after close on Windows")
     def test_unregister_after_socket_close(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)

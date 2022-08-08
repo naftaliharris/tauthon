@@ -30,11 +30,11 @@ def _fileobj_to_fd(fileobj):
     Raises:
     ValueError if the object is invalid
     """
-    if isinstance(fileobj, int):
+    if isinstance(fileobj, (int, long)):
         fd = fileobj
     else:
         try:
-            fd = int(fileobj.fileno())
+            fd = fileobj.fileno()
         except (AttributeError, TypeError, ValueError):
             raise ValueError("Invalid file object: "
                              "{!r}".format(fileobj))

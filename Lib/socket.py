@@ -184,7 +184,7 @@ class _socketobject(object):
 
     __doc__ = _realsocket.__doc__
 
-    __slots__ = ["_sock", "__weakref__"] + list(_delegate_methods)
+    __slots__ = ["_sock", "__weakref__", "_closed"] + list(_delegate_methods)
 
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, _sock=None):
         if _sock is None:
@@ -192,6 +192,7 @@ class _socketobject(object):
         self._sock = _sock
         for method in _delegate_methods:
             setattr(self, method, getattr(_sock, method))
+        self._closed = False
 
     def __enter__(self):
         return self
@@ -203,6 +204,7 @@ class _socketobject(object):
     def close(self, _closedsocket=_closedsocket,
               _delegate_methods=_delegate_methods, setattr=setattr):
         # This function should not reference any globals. See issue #808164.
+        self._closed = True
         self._sock = _closedsocket()
         dummy = self._sock._dummy
         for method in _delegate_methods:
