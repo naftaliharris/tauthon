@@ -1,6 +1,8 @@
 Tauthon
 =======
 
+[![CI](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml/badge.svg)](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml)
+
 Tauthon is a backwards-compatible fork of the Python 2.7.18 interpreter with new
 syntax, builtins, and libraries backported from Python 3.x. Python code and
 C-extensions targeting Python 2.7 or below are expected to run unmodified on
@@ -8,8 +10,7 @@ Tauthon and produce the same output. [But with Tauthon, that code can now use
 some of the new features from Python
 3.x.](https://www.naftaliharris.com/blog/why-making-python-2.8/)
 
-
-[![CI](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml/badge.svg)](https://github.com/naftaliharris/tauthon/actions/workflows/ci.yml)
+Virtualenv support is provided by an external plugin: [virtualenv-tauthon](https://github.com/stefantalpalaru/virtualenv-tauthon).
 
 What's new in Tauthon
 -------------------------
