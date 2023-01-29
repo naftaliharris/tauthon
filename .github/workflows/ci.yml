@@ -94,7 +94,7 @@ jobs:
         run: |
           # https://bugs.python.org/msg376705
           OLD="/etc/ssl/openssl.cnf"
-          NEW="/etc/ssl/openssl.cnf.new"
+          NEW="openssl.cnf.new"
 
           echo "openssl_conf = default_conf" > "${NEW}"
           cat "${OLD}" >> "${NEW}"
@@ -111,7 +111,7 @@ jobs:
           CipherString = DEFAULT:@SECLEVEL=1
           EOF
 
-          mv "${NEW}" "${OLD}"
+          sudo mv "${NEW}" "${OLD}"
 
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
