@@ -25,7 +25,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-18.04 # 20.04 has an OpenSSL that disables TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+            builder: ubuntu-20.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
           - target:
               os: macos
             builder: macos-latest
@@ -88,6 +88,30 @@ jobs:
             build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev \
             liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev \
             libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev
+
+      - name: Enable TLS 1.0/1.1 in OpenSSL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # https://bugs.python.org/msg376705
+          OLD="/etc/ssl/openssl.cnf"
+          NEW="openssl.cnf.new"
+
+          echo "openssl_conf = default_conf" > "${NEW}"
+          cat "${OLD}" >> "${NEW}"
+
+          cat << EOF >> "${NEW}"
+          [default_conf]
+          ssl_conf = ssl_sect
+
+          [ssl_sect]
+          system_default = ssl_default_sect
+
+          [ssl_default_sect]
+          MinProtocol = None
+          CipherString = DEFAULT:@SECLEVEL=1
+          EOF
+
+          sudo mv "${NEW}" "${OLD}"
 
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
