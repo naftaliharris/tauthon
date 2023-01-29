@@ -36,7 +36,7 @@ jobs:
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Git checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Environment variables
         shell: bash
@@ -115,6 +115,12 @@ jobs:
             make check suspicious html SPHINXOPTS="-q -j auto" PYTHON=python2
           fi
 
+      - name: Select the Xcode version
+        if: runner.os == 'macOS'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '13' # 14 seems buggy: https://github.com/actions/runner-images/issues/6642
+
       - name: Run tests (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -127,7 +133,7 @@ jobs:
 
       - name: Add msbuild to PATH
         if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v1.0.2
+        uses: microsoft/setup-msbuild@v1
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
