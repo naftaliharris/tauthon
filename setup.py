@@ -2167,7 +2167,7 @@ class PyBuildExt(build_ext):
                     ffi_lib = lib_name
                     break
 
-        if ffi_inc and ffi_lib:
+        if ffi_inc:
             ffi_headers = glob(os.path.join(ffi_inc, '*.h'))
             if grep_headers_for('ffi_prep_cif_var', ffi_headers):
                 ext.extra_compile_args.append("-DHAVE_FFI_PREP_CIF_VAR=1")
@@ -2177,8 +2177,9 @@ class PyBuildExt(build_ext):
                 ext.extra_compile_args.append("-DHAVE_FFI_CLOSURE_ALLOC=1")
 
             ext.include_dirs.append(ffi_inc)
+
+        if ffi_lib:
             ext.libraries.append(ffi_lib)
-            self.use_system_libffi = True
 
         if sysconfig.get_config_var('HAVE_LIBDL'):
             # for dlopen, see bpo-32647
