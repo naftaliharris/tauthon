@@ -524,7 +524,7 @@ sharedmods: $(BUILDTAUTHON) pybuilddir.txt Modules/_math.o
 	    *\ -s*|s*) quiet="-q";; \
 	    *) quiet="";; \
 	esac; \
-	$(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' OPT='$(OPT)' \
+	$(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' CFLAGS='$(CFLAGS)' \
 		_TCLTK_INCLUDES='$(TCLTK_INCLUDES)' _TCLTK_LIBS='$(TCLTK_LIBS)' \
 		$(PYTHON_FOR_BUILD) $(srcdir)/setup.py $$quiet build
 

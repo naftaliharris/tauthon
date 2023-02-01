@@ -129,8 +129,10 @@ class CygwinCCompiler (UnixCCompiler):
         # dllwrap 2.10.90 is buggy
         if self.ld_version >= "2.10.90":
             self.linker_dll = "gcc"
+            self.linker_dll_cxx = "g++"
         else:
             self.linker_dll = "dllwrap"
+            self.linker_dll_cxx = "dllwrap"
 
         # ld_version >= "2.13" support -shared so use it instead of
         # -mdll -static
@@ -144,9 +146,13 @@ class CygwinCCompiler (UnixCCompiler):
         self.set_executables(compiler='gcc -mcygwin -O -Wall',
                              compiler_so='gcc -mcygwin -mdll -O -Wall',
                              compiler_cxx='g++ -mcygwin -O -Wall',
+                             compiler_so_cxx='g++ -mcygwin -mdll -O -Wall',
                              linker_exe='gcc -mcygwin',
                              linker_so=('%s -mcygwin %s' %
-                                        (self.linker_dll, shared_option)))
+                                        (self.linker_dll, shared_option)),
+                             linker_exe_cxx='g++ -mcygwin',
+                             linker_so_cxx=('%s -mcygwin %s' %
+                                            (self.linker_dll_cxx, shared_option)))
 
         # cygwin and mingw32 need different sets of libraries
         if self.gcc_version == "2.91.57":
@@ -172,8 +178,12 @@ class CygwinCCompiler (UnixCCompiler):
                 raise CompileError, msg
         else: # for other files use the C-compiler
             try:
-                self.spawn(self.compiler_so + cc_args + [src, '-o', obj] +
-                           extra_postargs)
+                if self.detect_language(src) == 'c++':
+                    self.spawn(self.compiler_so_cxx + cc_args + [src, '-o', obj] +
+                               extra_postargs)
+                else:
+                    self.spawn(self.compiler_so + cc_args + [src, '-o', obj] +
+                               extra_postargs)
             except DistutilsExecError, msg:
                 raise CompileError, msg
 
@@ -339,9 +349,14 @@ class Mingw32CCompiler (CygwinCCompiler):
         self.set_executables(compiler='gcc%s -O -Wall' % no_cygwin,
                              compiler_so='gcc%s -mdll -O -Wall' % no_cygwin,
                              compiler_cxx='g++%s -O -Wall' % no_cygwin,
+                             compiler_so_cxx='g++%s -mdll -O -Wall' % no_cygwin,
                              linker_exe='gcc%s' % no_cygwin,
                              linker_so='%s%s %s %s'
                                     % (self.linker_dll, no_cygwin,
+                                       shared_option, entry_point),
+                             linker_exe_cxx='g++%s' % no_cygwin,
+                             linker_so_cxx='%s%s %s %s'
+                                    % (self.linker_dll_cxx, no_cygwin,
                                        shared_option, entry_point))
         # Maybe we should also append -mthreads, but then the finished
         # dlls need another dll (mingwm10.dll see Mingw32 docs)

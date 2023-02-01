@@ -55,14 +55,17 @@ class UnixCCompiler(CCompiler):
     # are pretty generic; they will probably have to be set by an outsider
     # (eg. using information discovered by the sysconfig about building
     # Python extensions).
-    executables = {'preprocessor' : None,
-                   'compiler'     : ["cc"],
-                   'compiler_so'  : ["cc"],
-                   'compiler_cxx' : ["cc"],
-                   'linker_so'    : ["cc", "-shared"],
-                   'linker_exe'   : ["cc"],
-                   'archiver'     : ["ar", "-cr"],
-                   'ranlib'       : None,
+    executables = {'preprocessor'    : None,
+                   'compiler'        : ["cc"],
+                   'compiler_so'     : ["cc"],
+                   'compiler_cxx'    : ["c++"],
+                   'compiler_so_cxx' : ["c++"],
+                   'linker_so'       : ["cc", "-shared"],
+                   'linker_exe'      : ["cc"],
+                   'linker_so_cxx'   : ["c++", "-shared"],
+                   'linker_exe_cxx'  : ["c++"],
+                   'archiver'        : ["ar", "-cr"],
+                   'ranlib'          : None,
                   }
 
     if sys.platform[:6] == "darwin":
@@ -114,12 +117,19 @@ class UnixCCompiler(CCompiler):
 
     def _compile(self, obj, src, ext, cc_args, extra_postargs, pp_opts):
         compiler_so = self.compiler_so
+        compiler_so_cxx = self.compiler_so_cxx
         if sys.platform == 'darwin':
             compiler_so = _osx_support.compiler_fixup(compiler_so,
                                                     cc_args + extra_postargs)
+            compiler_so_cxx = _osx_support.compiler_fixup(compiler_so_cxx,
+                                                    cc_args + extra_postargs)
         try:
-            self.spawn(compiler_so + cc_args + [src, '-o', obj] +
-                       extra_postargs)
+            if self.detect_language(src) == 'c++':
+                self.spawn(compiler_so_cxx + cc_args + [src, '-o', obj] +
+                           extra_postargs)
+            else:
+                self.spawn(compiler_so + cc_args + [src, '-o', obj] +
+                           extra_postargs)
         except DistutilsExecError, msg:
             raise CompileError, msg
 
@@ -176,23 +186,16 @@ class UnixCCompiler(CCompiler):
                 ld_args.extend(extra_postargs)
             self.mkpath(os.path.dirname(output_filename))
             try:
-                if target_desc == CCompiler.EXECUTABLE:
-                    linker = self.linker_exe[:]
+                if target_lang == "c++":
+                    if target_desc == CCompiler.EXECUTABLE:
+                        linker = self.linker_exe_cxx[:]
+                    else:
+                        linker = self.linker_so_cxx[:]
                 else:
-                    linker = self.linker_so[:]
-                if target_lang == "c++" and self.compiler_cxx:
-                    # skip over environment variable settings if /usr/bin/env
-                    # is used to set up the linker's environment.
-                    # This is needed on OSX. Note: this assumes that the
-                    # normal and C++ compiler have the same environment
-                    # settings.
-                    i = 0
-                    if os.path.basename(linker[0]) == "env":
-                        i = 1
-                        while '=' in linker[i]:
-                            i = i + 1
-
-                    linker[i] = self.compiler_cxx[i]
+                    if target_desc == CCompiler.EXECUTABLE:
+                        linker = self.linker_exe[:]
+                    else:
+                        linker = self.linker_so[:]
 
                 if sys.platform == 'darwin':
                     linker = _osx_support.compiler_fixup(linker, ld_args)

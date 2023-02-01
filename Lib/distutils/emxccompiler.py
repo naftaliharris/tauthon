@@ -65,8 +65,12 @@ class EMXCCompiler (UnixCCompiler):
         # XXX optimization, warnings etc. should be customizable.
         self.set_executables(compiler='gcc -Zomf -Zmt -O3 -fomit-frame-pointer -mprobe -Wall',
                              compiler_so='gcc -Zomf -Zmt -O3 -fomit-frame-pointer -mprobe -Wall',
+                             compiler_cxx='g++ -Zomf -Zmt -O3 -fomit-frame-pointer -mprobe -Wall',
+                             compiler_so_cxx='g++ -Zomf -Zmt -O3 -fomit-frame-pointer -mprobe -Wall',
                              linker_exe='gcc -Zomf -Zmt -Zcrtdll',
-                             linker_so='gcc -Zomf -Zmt -Zcrtdll -Zdll')
+                             linker_so='gcc -Zomf -Zmt -Zcrtdll -Zdll',
+                             linker_exe_cxx='g++ -Zomf -Zmt -Zcrtdll',
+                             linker_so_cxx='g++ -Zomf -Zmt -Zcrtdll -Zdll')
 
         # want the gcc library statically linked (so that we don't have
         # to distribute a version dependent on the compiler we have)
@@ -83,8 +87,12 @@ class EMXCCompiler (UnixCCompiler):
                 raise CompileError, msg
         else: # for other files use the C-compiler
             try:
-                self.spawn(self.compiler_so + cc_args + [src, '-o', obj] +
-                           extra_postargs)
+                if self.detect_language(src) == 'c++':
+                    self.spawn(self.compiler_so_cxx + cc_args + [src, '-o', obj] +
+                               extra_postargs)
+                else:
+                    self.spawn(self.compiler_so + cc_args + [src, '-o', obj] +
+                               extra_postargs)
             except DistutilsExecError, msg:
                 raise CompileError, msg
 
