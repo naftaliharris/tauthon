@@ -2549,6 +2549,15 @@ else
   TCLTK_LIBS="$with_tcltk_libs"
 fi
 
+# Check for support for loadable sqlite extensions
+AC_MSG_CHECKING(for --enable-loadable-sqlite-extensions)
+AC_ARG_ENABLE(loadable-sqlite-extensions,
+              AS_HELP_STRING([--enable-loadable-sqlite-extensions], [support loadable extensions in _sqlite module]),
+              [],
+              [enable_loadable_sqlite_extensions="no"])
+
+AC_MSG_RESULT($enable_loadable_sqlite_extensions)
+
 # Check for --with-dbmliborder
 AC_MSG_CHECKING(for --with-dbmliborder)
 AC_ARG_WITH(dbmliborder,
