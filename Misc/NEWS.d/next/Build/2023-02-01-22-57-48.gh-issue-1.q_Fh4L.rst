@@ -1,0 +1,2 @@
+No longer building the "_Qt" extension on macOS, because the Quicktime
+Framework has been removed from Xcode 10.12.

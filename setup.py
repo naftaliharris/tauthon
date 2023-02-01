@@ -35,6 +35,8 @@ COMPILED_WITH_PYDEBUG = ('--with-pydebug' in sysconfig.get_config_var("CONFIG_AR
 # This global variable is used to hold the list of modules to be disabled.
 disabled_module_list = []
 
+exit_status = 0
+
 def add_dir_to_list(dirlist, dir):
     """Add the directory 'dir' to the list 'dirlist' (at the front) if
     1) 'dir' is not already in 'dirlist'
@@ -345,7 +347,10 @@ class PyBuildExt(build_ext):
                    " detect_modules() for the module's name.")
             print
 
+        global exit_status
+
         if self.failed:
+            exit_status = 1
             failed = self.failed[:]
             print
             print "Failed to build these modules:"
@@ -1789,10 +1794,11 @@ class PyBuildExt(build_ext):
             addMacExtension('_Launch', app_kwds)
             addMacExtension('_CG', app_kwds)
 
-            exts.append( Extension('_Qt', ['qt/_Qtmodule.c'],
-                        extra_compile_args=carbon_extra_compile_args,
-                        extra_link_args=['-framework', 'QuickTime',
-                                     '-framework', 'Carbon']) )
+            ## the Quicktime Framework has been removed from Xcode 10.12
+            #exts.append( Extension('_Qt', ['qt/_Qtmodule.c'],
+                        #extra_compile_args=carbon_extra_compile_args,
+                        #extra_link_args=['-framework', 'QuickTime',
+                                     #'-framework', 'Carbon']) )
 
 
         self.extensions.extend(exts)
@@ -2336,6 +2342,7 @@ and the Tauthon developers",
                      'Tools/scripts/2to3',
                      'Lib/smtpd.py']
         )
+    sys.exit(exit_status)
 
 # --install-platlib
 if __name__ == '__main__':
