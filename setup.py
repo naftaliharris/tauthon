@@ -1794,10 +1794,11 @@ class PyBuildExt(build_ext):
             addMacExtension('_Launch', app_kwds)
             addMacExtension('_CG', app_kwds)
 
-            exts.append( Extension('_Qt', ['qt/_Qtmodule.c'],
-                        extra_compile_args=carbon_extra_compile_args,
-                        extra_link_args=['-framework', 'QuickTime',
-                                     '-framework', 'Carbon']) )
+            ## the Quicktime Framework has been removed from Xcode 10.12
+            #exts.append( Extension('_Qt', ['qt/_Qtmodule.c'],
+                        #extra_compile_args=carbon_extra_compile_args,
+                        #extra_link_args=['-framework', 'QuickTime',
+                                     #'-framework', 'Carbon']) )
 
 
         self.extensions.extend(exts)
