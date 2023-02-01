@@ -434,7 +434,7 @@ profile-opt:
 	$(MAKE) profile-removal
 
 build_all_generate_profile:
-	$(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LDFLAGS="$(LDFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LIBS="$(LIBS)"
+	+ $(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LDFLAGS="$(LDFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LIBS="$(LIBS)"
 
 run_profile_task:
 	: # FIXME: can't run for a cross build
@@ -444,7 +444,7 @@ build_all_merge_profile:
 	$(LLVM_PROF_MERGER)
 
 build_all_use_profile:
-	$(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) $(PGO_PROF_USE_FLAG) @LTOFLAGS@" LDFLAGS="$(LDFLAGS) @LTOFLAGS@"
+	+ $(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) $(PGO_PROF_USE_FLAG) @LTOFLAGS@" LDFLAGS="$(LDFLAGS) @LTOFLAGS@"
 
 # Compile and run with gcov
 .PHONY=coverage coverage-lcov coverage-report
@@ -488,7 +488,7 @@ coverage-report: regen-grammar
 
 # Build the interpreter
 $(BUILDTAUTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY)
-		$(LINKCC) $(LDFLAGS) $(LINKFORSHARED) -o $@ \
+	+ $(LINKCC) $(LDFLAGS) $(LINKFORSHARED) -o $@ \
 			Modules/python.o \
 			$(BLDLIBRARY) $(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST)
 
@@ -520,7 +520,7 @@ Modules/_math.o: Modules/_math.c Modules/_math.h
 # -s, --silent or --quiet is always the first char.
 # Under BSD make, MAKEFLAGS might be " -s -v x=y".
 sharedmods: $(BUILDTAUTHON) pybuilddir.txt Modules/_math.o
-	@case "$$MAKEFLAGS" in \
+	+@case "$$MAKEFLAGS" in \
 	    *\ -s*|s*) quiet="-q";; \
 	    *) quiet="";; \
 	esac; \
