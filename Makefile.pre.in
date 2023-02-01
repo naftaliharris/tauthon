@@ -1020,6 +1020,19 @@ altbininstall:	$(BUILDTAUTHON)
 		fi; \
 	else	true; \
 	fi
+	@if test -f $(LIBRARY) && test $(LIBRARY) != $(LDLIBRARY); then \
+		if test "$(PYTHONFRAMEWORKDIR)" = no-framework; then \
+			if test "$(SO)" = .dll; then \
+				$(INSTALL_DATA) $(LDLIBRARY) $(DESTDIR)$(LIBDIR); \
+			else \
+				$(INSTALL_DATA) $(LIBRARY) $(DESTDIR)$(LIBDIR); \
+				$(RANLIB) $(DESTDIR)$(LIBDIR)/$(LIBRARY); \
+			fi; \
+		else \
+			echo "Skipped install of $(LIBRARY) - use make frameworkinstall"; \
+		fi; \
+	else	true; \
+	fi
 
 # Install the versioned manual page
 altmaninstall:
@@ -1225,18 +1238,6 @@ libainstall:	@DEF_MAKE_RULE@ python-config
 		else	true; \
 		fi; \
 	done
-	@if test -d $(LIBRARY); then :; else \
-		if test "$(PYTHONFRAMEWORKDIR)" = no-framework; then \
-			if test "$(SO)" = .dll; then \
-				$(INSTALL_DATA) $(LDLIBRARY) $(DESTDIR)$(LIBPL) ; \
-			else \
-				$(INSTALL_DATA) $(LIBRARY) $(DESTDIR)$(LIBPL)/$(LIBRARY) ; \
-				$(RANLIB) $(DESTDIR)$(LIBPL)/$(LIBRARY) ; \
-			fi; \
-		else \
-			echo Skip install of $(LIBRARY) - use make frameworkinstall; \
-		fi; \
-	fi
 	$(INSTALL_DATA) Modules/config.c $(DESTDIR)$(LIBPL)/config.c
 	$(INSTALL_DATA) Modules/python.o $(DESTDIR)$(LIBPL)/python.o
 	$(INSTALL_DATA) $(srcdir)/Modules/config.c.in $(DESTDIR)$(LIBPL)/config.c.in
