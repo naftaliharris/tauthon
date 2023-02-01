@@ -1,0 +1,1 @@
+New "configure" option: "--enable-loadable-sqlite-extensions".
