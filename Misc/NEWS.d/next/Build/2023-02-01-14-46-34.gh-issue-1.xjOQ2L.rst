@@ -1,0 +1,5 @@
+PGO: use "-fprofile-partial-training" with GCC, in order to optimise for
+speed those functions not executed during the training phase. Without it,
+they're optimised for size.
+
+This option was introduced in GCC-10.1.

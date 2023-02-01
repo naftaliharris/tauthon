@@ -1555,7 +1555,8 @@ case $CC in
         ;;
       *)
         PGO_PROF_GEN_FLAG="-fprofile-generate"
-        PGO_PROF_USE_FLAG="-fprofile-use -fprofile-correction"
+        # "-fprofile-partial-training" was introduced in GCC-10.1
+        PGO_PROF_USE_FLAG="-fprofile-use -fprofile-correction -fprofile-partial-training"
         LLVM_PROF_MERGER="true"
         LLVM_PROF_FILE=""
         ;;
