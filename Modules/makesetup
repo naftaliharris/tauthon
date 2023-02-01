@@ -87,9 +87,9 @@ NL='\
 case `uname -s` in
 CYGWIN*) if test $libdir = .
 	 then
-	 	ExtraLibDir=.
+		ExtraLibDir=.
 	 else
-	 	ExtraLibDir='$(LIBPL)'
+		ExtraLibDir='$(LIBDIR)'
 	 fi
 	 ExtraLibs="-L$ExtraLibDir -ltauthon\$(VERSION)";;
 esac
