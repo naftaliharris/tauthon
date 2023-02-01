@@ -421,17 +421,17 @@ profile-opt:
 		exit 1;\
 	fi
 	@echo "Building with support for profile generation:"
-	$(MAKE) clean
-	$(MAKE) profile-removal
-	$(MAKE) build_all_generate_profile
-	$(MAKE) profile-removal
+	+ $(MAKE) clean
+	+ $(MAKE) profile-removal
+	+ $(MAKE) build_all_generate_profile
+	+ $(MAKE) profile-removal
 	@echo "Running code to generate profile data (this can take a while):"
-	$(MAKE) run_profile_task
-	$(MAKE) build_all_merge_profile
+	+ $(MAKE) run_profile_task
+	+ $(MAKE) build_all_merge_profile
 	@echo "Rebuilding with profile guided optimizations:"
-	$(MAKE) clean
-	$(MAKE) build_all_use_profile
-	$(MAKE) profile-removal
+	+ $(MAKE) clean
+	+ $(MAKE) build_all_use_profile
+	+ $(MAKE) profile-removal
 
 build_all_generate_profile:
 	+ $(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LDFLAGS="$(LDFLAGS) $(PGO_PROF_GEN_FLAG) @LTOFLAGS@" LIBS="$(LIBS)"
@@ -450,8 +450,8 @@ build_all_use_profile:
 .PHONY=coverage coverage-lcov coverage-report
 coverage:
 	@echo "Building with support for coverage checking:"
-	$(MAKE) clean profile-removal
-	$(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) -O0 -pg -fprofile-arcs -ftest-coverage" LIBS="$(LIBS) -lgcov"
+	+ $(MAKE) clean profile-removal
+	+ $(MAKE) @DEF_MAKE_RULE@ CFLAGS="$(CFLAGS) -O0 -pg -fprofile-arcs -ftest-coverage" LIBS="$(LIBS) -lgcov"
 
 coverage-lcov:
 	@echo "Creating Coverage HTML report with LCOV:"
@@ -479,18 +479,18 @@ coverage-lcov:
 # Force regeneration of parser
 coverage-report: regen-grammar
 	: # build with coverage info
-	$(MAKE) coverage
+	+ $(MAKE) coverage
 	: # run tests, ignore failures
 	$(TESTPYTHON) $(TESTPROG) $(TESTOPTS) || true
 	: # build lcov report
-	$(MAKE) coverage-lcov
+	+ $(MAKE) coverage-lcov
 
 
 # Build the interpreter
 $(BUILDTAUTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY)
 	+ $(LINKCC) $(LDFLAGS) $(LINKFORSHARED) -o $@ \
-			Modules/python.o \
-			$(BLDLIBRARY) $(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST)
+		Modules/python.o \
+		$(BLDLIBRARY) $(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST)
 
 platform: $(BUILDTAUTHON) pybuilddir.txt
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) -c 'import sys ; from sysconfig import get_platform ; print get_platform()+"-"+sys.version[0:3]' >platform
@@ -860,7 +860,7 @@ TESTPYTHON=	$(RUNSHARED) ./$(BUILDTAUTHON) -Wd -E -tt $(TESTPYTHONOPTS)
 
 # Remove "test_python_*" directories of previous failed test jobs.
 # Pass TESTOPTS options because it can contain --tempdir option.
-cleantest: build_all
+cleantest: @DEF_MAKE_ALL_RULE@
 	$(TESTPYTHON) $(TESTPROG) $(TESTOPTS) --cleanup
 
 test:		@DEF_MAKE_RULE@ platform
@@ -890,13 +890,13 @@ testuniversal:	@DEF_MAKE_RULE@ platform
 
 # Like testall, but with a single pass only
 # run an optional script to include some information about the build environment
-buildbottest:	build_all platform
+buildbottest:	@DEF_MAKE_ALL_RULE@ platform
 		-@if which pybuildbot.identify >/dev/null 2>&1; then \
 			pybuildbot.identify "CC='$(CC)'" "CXX='$(CXX)'"; \
 		fi
 		$(TESTPYTHON) -R $(TESTPROG) -uall --slowest -rwW $(TESTOPTS)
 
-pythoninfo: build_all
+pythoninfo: @DEF_MAKE_ALL_RULE@
 		$(RUNSHARED) ./$(BUILDTAUTHON) -m test.pythoninfo
 
 QUICKTESTOPTS=	$(TESTOPTS) -x test_subprocess test_io test_lib2to3 \
@@ -917,14 +917,21 @@ memtest:	@DEF_MAKE_RULE@ platform
 
 # SSL tests
 .PHONY: multisslcompile multissltest
-multisslcompile: build_all
+multisslcompile: @DEF_MAKE_ALL_RULE@
 	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py --compile-only
 
-multissltest: build_all
+multissltest: @DEF_MAKE_ALL_RULE@
 	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py
 
+install:
+	if test ! -e "$(BUILDTAUTHON)"; then \
+		echo "Please run 'make' before 'make install', so LTO and PGO have a chance of being handled properly."; \
+		exit 1; \
+	fi
+	+ $(MAKE) install_internal
+
 # Install everything
-install:	@FRAMEWORKINSTALLFIRST@ commoninstall bininstall maninstall @FRAMEWORKINSTALLLAST@
+install_internal:	@FRAMEWORKINSTALLFIRST@ commoninstall bininstall maninstall @FRAMEWORKINSTALLLAST@
 	if test "x$(ENSUREPIP)" != "xno"  ; then \
 		case $(ENSUREPIP) in \
 			upgrade) ensurepip="--upgrade" ;; \
@@ -953,7 +960,7 @@ commoninstall:	check-clean-src @FRAMEWORKALTINSTALLFIRST@ \
 # Install shared libraries enabled by Setup
 DESTDIRS=	$(exec_prefix) $(LIBDIR) $(BINLIBDEST) $(DESTSHARED)
 
-oldsharedinstall: $(DESTSHARED) $(SHAREDMODS)
+oldsharedinstall:
 		@for i in X $(SHAREDMODS); do \
 		  if test $$i != X; then \
 		    echo $(INSTALL_SHARED) $$i $(DESTSHARED)/`basename $$i`; \
@@ -999,7 +1006,7 @@ bininstall:	altbininstall
 
 # Install the interpreter with $(VERSION) affixed
 # This goes into $(exec_prefix)
-altbininstall:	$(BUILDTAUTHON)
+altbininstall:
 	@for i in $(BINDIR) $(LIBDIR); \
 	do \
 		if test ! -d $(DESTDIR)$$i; then \
@@ -1099,7 +1106,7 @@ LIBSUBDIRS=	lib-tk lib-tk/test lib-tk/test/test_tkinter \
 		unittest unittest/test \
 		lib-old \
 		curses pydoc_data $(MACHDEPS)
-libinstall:	build_all $(srcdir)/Lib/$(PLATDIR) $(srcdir)/Modules/xxmodule.c
+libinstall:	$(srcdir)/Lib/$(PLATDIR) $(srcdir)/Modules/xxmodule.c
 	@for i in $(SCRIPTDIR) $(LIBDEST); \
 	do \
 		if test ! -d $(DESTDIR)$$i; then \
@@ -1229,7 +1236,7 @@ LIBPL=		$(LIBP)/config
 # pkgconfig directory
 LIBPC=		$(LIBDIR)/pkgconfig
 
-libainstall:	@DEF_MAKE_RULE@ python-config
+libainstall:	python-config
 	@for i in $(LIBDIR) $(LIBP) $(LIBPL) $(LIBPC); \
 	do \
 		if test ! -d $(DESTDIR)$$i; then \
@@ -1279,7 +1286,7 @@ libainstall:	@DEF_MAKE_RULE@ python-config
 
 # Install the dynamically loadable modules
 # This goes into $(exec_prefix)
-sharedinstall: sharedmods
+sharedinstall:
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) $(srcdir)/setup.py install \
 	   	--prefix=$(prefix) \
 		--install-scripts=$(BINDIR) \
@@ -1333,23 +1340,23 @@ frameworkinstallmaclib:
 	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/tauthon$(VERSION)/config/libtauthon$(VERSION).a"
 	ln -fs "../../../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/tauthon$(VERSION)/config/libtauthon$(VERSION).dylib"
 	ln -fs "../$(PYTHONFRAMEWORK)" "$(DESTDIR)$(prefix)/lib/libtauthon$(VERSION).dylib"
-	cd Mac && $(MAKE) installmacsubtree DESTDIR="$(DESTDIR)"
+	+ cd Mac && $(MAKE) installmacsubtree DESTDIR="$(DESTDIR)"
 
 # This installs the IDE, the Launcher and other apps into /Applications
 frameworkinstallapps:
-	cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
+	+ cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
 
 # This install the unix tauthon and tauthonw tools in /usr/local/bin
 frameworkinstallunixtools:
-	cd Mac && $(MAKE) installunixtools DESTDIR="$(DESTDIR)"
+	+ cd Mac && $(MAKE) installunixtools DESTDIR="$(DESTDIR)"
 
 frameworkaltinstallunixtools:
-	cd Mac && $(MAKE) altinstallunixtools DESTDIR="$(DESTDIR)"
+	+ cd Mac && $(MAKE) altinstallunixtools DESTDIR="$(DESTDIR)"
 
 # This installs the Demos and Tools into the applications directory.
 # It is not part of a normal frameworkinstall
 frameworkinstallextras:
-	cd Mac && $(MAKE) installextras DESTDIR="$(DESTDIR)"
+	+ cd Mac && $(MAKE) installextras DESTDIR="$(DESTDIR)"
 
 # This installs a few of the useful scripts in Tools/scripts
 scriptsinstall:
@@ -1362,7 +1369,7 @@ scriptsinstall:
 # Build the toplevel Makefile
 Makefile.pre: Makefile.pre.in config.status
 	CONFIG_FILES=Makefile.pre CONFIG_HEADERS= $(SHELL) config.status
-	$(MAKE) -f Makefile.pre Makefile
+	+ $(MAKE) -f Makefile.pre Makefile
 
 # Run the configure script.
 config.status:	$(srcdir)/configure
@@ -1497,7 +1504,7 @@ Python/thread.o: @THREADHEADERS@
 
 # Declare targets that aren't real files
 .PHONY: all build_all sharedmods check-clean-src oldsharedmods test quicktest memtest
-.PHONY: install altinstall oldsharedinstall bininstall altbininstall
+.PHONY: install install_internal altinstall oldsharedinstall bininstall altbininstall
 .PHONY: maninstall libinstall inclinstall libainstall sharedinstall
 .PHONY: frameworkinstall frameworkinstallframework frameworkinstallstructure
 .PHONY: frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools
