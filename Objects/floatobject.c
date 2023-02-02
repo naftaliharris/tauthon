@@ -1867,8 +1867,17 @@ float_getnewargs(PyFloatObject *v)
 /* this is for the benefit of the pack/unpack routines below */
 
 typedef enum {
-    unknown_format, ieee_big_endian_format, ieee_little_endian_format
+    unknown_format,
+    ieee_big_endian_format,
+    ieee_little_endian_format,
+    ieee_arm_mixed_endian_format
 } float_format_type;
+
+/* byte order of a C double for each of the recognised IEEE formats */
+
+static const unsigned char BIG_ENDIAN_BYTEORDER[8] = {7,6,5,4,3,2,1,0};
+static const unsigned char LITTLE_ENDIAN_BYTEORDER[8] = {0,1,2,3,4,5,6,7};
+static const unsigned char ARM_MIXED_ENDIAN_BYTEORDER[8] = {4,5,6,7,0,1,2,3};
 
 static float_format_type double_format, float_format;
 static float_format_type detected_double_format, detected_float_format;
@@ -1906,6 +1915,8 @@ float_getformat(PyTypeObject *v, PyObject* arg)
         return PyString_FromString("IEEE, little-endian");
     case ieee_big_endian_format:
         return PyString_FromString("IEEE, big-endian");
+    case ieee_arm_mixed_endian_format:
+        return PyString_FromString("IEEE, ARM mixed-endian");
     default:
         Py_FatalError("insane float_format or double_format");
         return NULL;
@@ -1919,8 +1930,9 @@ PyDoc_STRVAR(float_getformat_doc,
 "used in Python's test suite.\n"
 "\n"
 "typestr must be 'double' or 'float'.  This function returns whichever of\n"
-"'unknown', 'IEEE, big-endian' or 'IEEE, little-endian' best describes the\n"
-"format of floating point numbers used by the C type named by typestr.");
+"'unknown', 'IEEE, big-endian', 'IEEE, little-endian' or\n"
+"'IEEE, ARM mixed-endian' best describes the format of floating-point\n"
+"numbers used by the C type named by typestr.");
 
 static PyObject *
 float_setformat(PyTypeObject *v, PyObject* args)
@@ -1958,11 +1970,15 @@ float_setformat(PyTypeObject *v, PyObject* args)
     else if (strcmp(format, "IEEE, big-endian") == 0) {
         f = ieee_big_endian_format;
     }
+    else if (strcmp(format, "IEEE, ARM mixed-endian") == 0 &&
+             p == &double_format) {
+        f = ieee_arm_mixed_endian_format;
+    }
     else {
         PyErr_SetString(PyExc_ValueError,
                         "__setformat__() argument 2 must be "
-                        "'unknown', 'IEEE, little-endian' or "
-                        "'IEEE, big-endian'");
+                        "'unknown', 'IEEE, little-endian', "
+                        "'IEEE, big-endian' or 'IEEE, ARM mixed-endian'");
         return NULL;
 
     }
@@ -1985,8 +2001,10 @@ PyDoc_STRVAR(float_setformat_doc,
 "used in Python's test suite.\n"
 "\n"
 "typestr must be 'double' or 'float'.  fmt must be one of 'unknown',\n"
-"'IEEE, big-endian' or 'IEEE, little-endian', and in addition can only be\n"
-"one of the latter two if it appears to match the underlying C reality.\n"
+"'IEEE, big-endian', 'IEEE, little-endian' or 'IEEE, ARM mixed-endian'\n"
+"and in addition can only be one of the last three if it appears to\n"
+"match the underlying C reality.  Note that the ARM mixed-endian\n"
+"format can only be set for the 'double' type, not for 'float'.\n"
 "\n"
 "Override the automatic determination of C-level floating point type.\n"
 "This affects how floats are converted to and from binary strings.");
@@ -2181,7 +2199,11 @@ _PyFloat_Init(void)
        Note that if we're on some whacked-out platform which uses
        IEEE formats but isn't strictly little-endian or big-
        endian, we will fall back to the portable shifts & masks
-       method. */
+       method.
+
+       Addendum: We also attempt to detect the mixed-endian IEEE format
+       used by the ARM old ABI (OABI) and also used by the FPA
+       floating-point unit on some older ARM processors. */
 
 #if SIZEOF_DOUBLE == 8
     {
@@ -2190,6 +2212,8 @@ _PyFloat_Init(void)
             detected_double_format = ieee_big_endian_format;
         else if (memcmp(&x, "\x05\x04\x03\x02\x01\xff\x3f\x43", 8) == 0)
             detected_double_format = ieee_little_endian_format;
+        else if (memcmp(&x, "\x01\xff\x3f\x43\x05\x04\x03\x02", 8) == 0)
+            detected_double_format = ieee_arm_mixed_endian_format;
         else
             detected_double_format = unknown_format;
     }
@@ -2535,17 +2559,31 @@ _PyFloat_Pack8(double x, unsigned char *p, int le)
     }
     else {
         const char *s = (char*)&x;
-        int i, incr = 1;
+        int i;
+        const unsigned char *byteorder;
 
-        if ((double_format == ieee_little_endian_format && !le)
-            || (double_format == ieee_big_endian_format && le)) {
-            p += 7;
-            incr = -1;
+        switch (double_format) {
+        case ieee_little_endian_format:
+            byteorder = LITTLE_ENDIAN_BYTEORDER;
+            break;
+        case ieee_big_endian_format:
+            byteorder = BIG_ENDIAN_BYTEORDER;
+            break;
+        case ieee_arm_mixed_endian_format:
+            byteorder = ARM_MIXED_ENDIAN_BYTEORDER;
+            break;
+        default:
+            Py_FatalError("insane float_format or double_format");
+            return -1;
         }
 
-        for (i = 0; i < 8; i++) {
-            *p = *s++;
-            p += incr;
+        if (le) {
+            for (i = 0; i < 8; i++)
+                p[byteorder[i]] = *s++;
+        }
+        else {
+            for (i = 0; i < 8; i++)
+                p[7-byteorder[i]] = *s++;
         }
         return 0;
     }
@@ -2704,22 +2742,33 @@ _PyFloat_Unpack8(const unsigned char *p, int le)
     }
     else {
         double x;
+        char *s = (char*)&x;
+        const unsigned char *byteorder;
+        int i;
 
-        if ((double_format == ieee_little_endian_format && !le)
-            || (double_format == ieee_big_endian_format && le)) {
-            char buf[8];
-            char *d = &buf[7];
-            int i;
+        switch (double_format) {
+        case ieee_little_endian_format:
+            byteorder = LITTLE_ENDIAN_BYTEORDER;
+            break;
+        case ieee_big_endian_format:
+            byteorder = BIG_ENDIAN_BYTEORDER;
+            break;
+        case ieee_arm_mixed_endian_format:
+            byteorder = ARM_MIXED_ENDIAN_BYTEORDER;
+            break;
+        default:
+            Py_FatalError("insane float_format or double_format");
+            return -1.0;
+        }
 
-            for (i = 0; i < 8; i++) {
-                *d-- = *p++;
-            }
-            memcpy(&x, buf, 8);
+        if (le) {
+            for (i=0; i<8; i++)
+                *s++ = p[byteorder[i]];
         }
         else {
-            memcpy(&x, p, 8);
+            for (i=0; i<8; i++)
+                *s++ = p[7-byteorder[i]];
         }
-
         return x;
     }
 }
