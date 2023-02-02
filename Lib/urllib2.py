@@ -103,6 +103,7 @@ import time
 import urlparse
 import bisect
 import warnings
+from collections import OrderedDict
 
 try:
     from cStringIO import StringIO
@@ -785,7 +786,7 @@ class HTTPPasswordMgr:
         if isinstance(uri, basestring):
             uri = [uri]
         if not realm in self.passwd:
-            self.passwd[realm] = {}
+            self.passwd[realm] = OrderedDict()
         for default_port in True, False:
             reduced_uri = tuple(
                 [self.reduce_uri(u, default_port) for u in uri])
@@ -833,10 +834,10 @@ class HTTPPasswordMgr:
             return True
         if base[0] != test[0]:
             return False
-        common = posixpath.commonprefix((base[1], test[1]))
-        if len(common) == len(base[1]):
-            return True
-        return False
+        prefix = base[1]
+        if prefix[-1:] != '/':
+            prefix += '/'
+        return test[1].startswith(prefix)
 
 
 class HTTPPasswordMgrWithDefaultRealm(HTTPPasswordMgr):
