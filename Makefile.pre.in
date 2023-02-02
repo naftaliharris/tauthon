@@ -524,7 +524,7 @@ sharedmods: $(BUILDTAUTHON) pybuilddir.txt Modules/_math.o
 	    *\ -s*|s*) quiet="-q";; \
 	    *) quiet="";; \
 	esac; \
-	$(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' OPT='$(OPT)' \
+	$(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' CFLAGS='$(CFLAGS)' \
 		_TCLTK_INCLUDES='$(TCLTK_INCLUDES)' _TCLTK_LIBS='$(TCLTK_LIBS)' \
 		$(PYTHON_FOR_BUILD) $(srcdir)/setup.py $$quiet build
 
@@ -860,15 +860,15 @@ TESTPYTHON=	$(RUNSHARED) ./$(BUILDTAUTHON) -Wd -E -tt $(TESTPYTHONOPTS)
 
 # Remove "test_python_*" directories of previous failed test jobs.
 # Pass TESTOPTS options because it can contain --tempdir option.
-cleantest: @DEF_MAKE_ALL_RULE@
+cleantest:
 	$(TESTPYTHON) $(TESTPROG) $(TESTOPTS) --cleanup
 
-test:		@DEF_MAKE_RULE@ platform
+test:		platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
 		-$(TESTPYTHON) $(TESTPROG) $(TESTOPTS)
 		$(TESTPYTHON) $(TESTPROG) $(TESTOPTS)
 
-testall:	@DEF_MAKE_RULE@ platform
+testall:	platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
 		$(TESTPYTHON) $(srcdir)/Lib/compileall.py
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
@@ -877,7 +877,7 @@ testall:	@DEF_MAKE_RULE@ platform
 
 #  Run the unitests for both architectures in a Universal build on OSX
 #  Must be run on an Intel box.
-testuniversal:	@DEF_MAKE_RULE@ platform
+testuniversal:	platform
 		if [ `arch` != 'i386' ];then \
 			echo "This can only be used on OSX/i386" ;\
 			exit 1 ;\
@@ -890,37 +890,37 @@ testuniversal:	@DEF_MAKE_RULE@ platform
 
 # Like testall, but with a single pass only
 # run an optional script to include some information about the build environment
-buildbottest:	@DEF_MAKE_ALL_RULE@ platform
+buildbottest:	platform
 		-@if which pybuildbot.identify >/dev/null 2>&1; then \
 			pybuildbot.identify "CC='$(CC)'" "CXX='$(CXX)'"; \
 		fi
 		$(TESTPYTHON) -R $(TESTPROG) -uall --slowest -rwW $(TESTOPTS)
 
-pythoninfo: @DEF_MAKE_ALL_RULE@
+pythoninfo:
 		$(RUNSHARED) ./$(BUILDTAUTHON) -m test.pythoninfo
 
 QUICKTESTOPTS=	$(TESTOPTS) -x test_subprocess test_io test_lib2to3 \
 		test_multibytecodec test_urllib2_localnet test_itertools \
 		test_multiprocessing test_mailbox test_socket test_poll \
 		test_select test_zipfile
-quicktest:	@DEF_MAKE_RULE@ platform
+quicktest:	platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
 		-$(TESTPYTHON) $(TESTPROG) $(QUICKTESTOPTS)
 		$(TESTPYTHON) $(TESTPROG) $(QUICKTESTOPTS)
 
 MEMTESTOPTS=    $(QUICKTESTOPTS) -x test_dl test___all__ test_fork1 \
 		test_longexp
-memtest:	@DEF_MAKE_RULE@ platform
+memtest:	platform
 		-rm -f $(srcdir)/Lib/test/*.py[co]
 		-$(TESTPYTHON) $(TESTPROG) $(MEMTESTOPTS)
 		$(TESTPYTHON) $(TESTPROG) $(MEMTESTOPTS)
 
 # SSL tests
 .PHONY: multisslcompile multissltest
-multisslcompile: @DEF_MAKE_ALL_RULE@
+multisslcompile:
 	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py --compile-only
 
-multissltest: @DEF_MAKE_ALL_RULE@
+multissltest:
 	$(RUNSHARED) ./$(BUILDTAUTHON) Tools/ssl/multissltests.py
 
 install:
@@ -1461,7 +1461,7 @@ distclean: clobber
 				     -exec rm -f {} ';'
 
 # Check for smelly exported symbols (not starting with Py/_Py)
-smelly: @DEF_MAKE_RULE@
+smelly:
 	nm -p $(LIBRARY) | \
 		sed -n "/ [TDB] /s/.* //p" | grep -v "^_*Py" | sort -u; \
 

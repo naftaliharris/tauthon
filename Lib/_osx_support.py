@@ -14,13 +14,13 @@ __all__ = [
 # configuration variables that may contain universal build flags,
 # like "-arch" or "-isdkroot", that may need customization for
 # the user environment
-_UNIVERSAL_CONFIG_VARS = ('CFLAGS', 'LDFLAGS', 'CPPFLAGS', 'BASECFLAGS',
-                            'BLDSHARED', 'LDSHARED', 'CC', 'CXX',
-                            'PY_CFLAGS', 'PY_LDFLAGS', 'PY_CPPFLAGS',
-                            'PY_CORE_CFLAGS')
+_UNIVERSAL_CONFIG_VARS = ('CFLAGS', 'CXXFLAGS', 'LDFLAGS', 'CPPFLAGS',
+                          'BASECFLAGS', 'BLDSHARED', 'LDSHARED', 'LDCXXSHARED',
+                          'CC', 'CXX', 'PY_CFLAGS', 'PY_LDFLAGS',
+                          'PY_CPPFLAGS', 'PY_CORE_CFLAGS')
 
 # configuration variables that may contain compiler calls
-_COMPILER_CONFIG_VARS = ('BLDSHARED', 'LDSHARED', 'CC', 'CXX')
+_COMPILER_CONFIG_VARS = ('BLDSHARED', 'LDSHARED', 'LDCXXSHARED', 'CC', 'CXX')
 
 # prefix added to original configuration variable names
 _INITPRE = '_OSX_SUPPORT_INITIAL_'
