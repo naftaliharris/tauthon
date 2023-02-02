@@ -267,6 +267,9 @@ The :mod:`urlparse` module defines the following functions:
    decomposed before parsing, or is not a Unicode string, no error will be
    raised.
 
+   Following the `WHATWG spec`_ that updates RFC 3986, ASCII newline
+   ``\n``, ``\r`` and tab ``\t`` characters are stripped from the URL.
+
    .. versionadded:: 2.2
 
    .. versionchanged:: 2.5
@@ -276,6 +279,10 @@ The :mod:`urlparse` module defines the following functions:
       Characters that affect netloc parsing under NFKC normalization will
       now raise :exc:`ValueError`.
 
+   .. versionchanged:: 2.7.18_p9 (Gentoo)
+      ASCII newline and tab characters are stripped from the URL.
+
+.. _WHATWG spec: https://url.spec.whatwg.org/#concept-basic-url-parser
 
 .. function:: urlunsplit(parts)
 
@@ -327,6 +334,10 @@ The :mod:`urlparse` module defines the following functions:
 
 .. seealso::
 
+   `WHATWG`_ -  URL Living standard
+      Working Group for the URL Standard that defines URLs, domains, IP addresses, the
+      application/x-www-form-urlencoded format, and their API.
+
    :rfc:`3986` - Uniform Resource Identifiers
       This is the current standard (STD66). Any changes to urlparse module
       should conform to this. Certain deviations could be observed, which are
@@ -350,6 +361,8 @@ The :mod:`urlparse` module defines the following functions:
 
    :rfc:`1738` - Uniform Resource Locators (URL)
       This specifies the formal syntax and semantics of absolute URLs.
+
+.. _WHATWG: https://url.spec.whatwg.org/
 
 
 .. _urlparse-result-object:
