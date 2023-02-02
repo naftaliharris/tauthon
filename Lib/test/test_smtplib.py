@@ -286,7 +286,7 @@ class DebuggingServerTests(unittest.TestCase):
             timeout=10)  # support.LOOPBACK_TIMEOUT in newer Pythons
 
         self.addCleanup(smtp.close)
-#        smtp.sendmail("hi@me.com", "you@me.com", m)
+        smtp.sendmail("hi@me.com", "you@me.com", m)
         # NB: gross hack but still cleaner than backporting whole ESMTP
         # support to DebuggingServer
         smtp.does_esmtp = 1
