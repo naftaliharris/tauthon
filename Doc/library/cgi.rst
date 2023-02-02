@@ -285,10 +285,10 @@ These are useful if you want more control, or if you want to employ some of the
 algorithms implemented in this module in other circumstances.
 
 
-.. function:: parse(fp[, environ[, keep_blank_values[, strict_parsing]]])
+.. function:: parse(fp[, environ[, keep_blank_values[, strict_parsing]]], separator="&")
 
    Parse a query in the environment or from a file (the file defaults to
-   ``sys.stdin`` and environment defaults to ``os.environ``).  The *keep_blank_values* and *strict_parsing* parameters are
+   ``sys.stdin`` and environment defaults to ``os.environ``).  The *keep_blank_values*, *strict_parsing* and *separator* parameters are
    passed to :func:`urlparse.parse_qs` unchanged.
 
 
@@ -315,6 +315,9 @@ algorithms implemented in this module in other circumstances.
 
    Note that this does not parse nested multipart parts --- use
    :class:`FieldStorage` for that.
+
+   .. versionchanged:: 3.6.13
+      Added the *separator* parameter.
 
 
 .. function:: parse_header(string)
