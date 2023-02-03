@@ -6387,7 +6387,7 @@ then
 	    STRICT_PROTO="-Wstrict-prototypes"
 	fi
         # For gcc 4.x we need to use -fwrapv so lets check if its supported
-        if "$CC" -v --help 2>/dev/null |grep -- -fwrapv > /dev/null; then
+        if "$CC" -v --help 2>/dev/null | grep -- -fwrapv >/dev/null; then
            WRAP="-fwrapv"
         fi
 
@@ -6831,6 +6831,15 @@ if test "$Py_OPT" = 'true' ; then
   DEF_MAKE_ALL_RULE="profile-opt"
   REQUIRE_PGO="yes"
   DEF_MAKE_RULE="build_all"
+  case $CC in
+    *gcc*)
+      # https://developers.redhat.com/blog/2020/06/25/red-hat-enterprise-linux-8-2-brings-faster-python-3-8-run-speeds
+      if "$CC" -v --help 2>/dev/null | grep -- -fsemantic-interposition >/dev/null; then
+        OPT="$OPT -fno-semantic-interposition"
+        LDFLAGS="$LDFLAGS -fno-semantic-interposition"
+      fi
+      ;;
+  esac
 else
   DEF_MAKE_ALL_RULE="build_all"
   REQUIRE_PGO="no"
