@@ -1326,63 +1326,6 @@ then
 	BASECFLAGS="$BASECFLAGS $ac_arch_flags"
 fi
 
-# disable check for icc since it seems to pass, but generates a warning
-if test "$CC" = icc
-then
-  ac_cv_opt_olimit_ok=no
-fi
-
-AC_MSG_CHECKING(whether $CC accepts -OPT:Olimit=0)
-AC_CACHE_VAL(ac_cv_opt_olimit_ok,
-[ac_save_cc="$CC"
-CC="$CC -OPT:Olimit=0"
-AC_COMPILE_IFELSE(
-  [AC_LANG_PROGRAM([[]], [[]])],
-  [ac_cv_opt_olimit_ok=yes],
-  [ac_cv_opt_olimit_ok=no]
-  )
-CC="$ac_save_cc"])
-AC_MSG_RESULT($ac_cv_opt_olimit_ok)
-if test $ac_cv_opt_olimit_ok = yes; then
-    case $ac_sys_system in
-	# XXX is this branch needed? On MacOSX 10.2.2 the result of the
-	# olimit_ok test is "no".  Is it "yes" in some other Darwin-esque
-	# environment?
-        Darwin*)
-	    ;;
-        # XXX thankfully this useless troublemaker of a flag has been
-        # eradicated in the 3.x line.  For now, make sure it isn't picked
-        # up by any of our other platforms that use CC.
-        AIX*|SunOS*|HP-UX*|IRIX*)
-            ;;
-        *)
-	    BASECFLAGS="$BASECFLAGS -OPT:Olimit=0"
-	    ;;
-    esac
-else
-  AC_MSG_CHECKING(whether $CC accepts -Olimit 1500)
-  AC_CACHE_VAL(ac_cv_olimit_ok,
-  [ac_save_cc="$CC"
-  CC="$CC -Olimit 1500"
-  AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([[]], [[]])],
-    [ac_cv_olimit_ok=yes],
-    [ac_cv_olimit_ok=no]
-    )
-  CC="$ac_save_cc"])
-  AC_MSG_RESULT($ac_cv_olimit_ok)
-  if test $ac_cv_olimit_ok = yes; then
-    case $ac_sys_system in
-        # Issue #16534: On HP-UX ac_cv_olimit_ok=yes is a false positive.
-        HP-UX*)
-            ;;
-        *)
-            BASECFLAGS="$BASECFLAGS -Olimit 1500"
-            ;;
-    esac
-  fi
-fi
-
 # Check whether GCC supports PyArg_ParseTuple format
 if test "$GCC" = "yes"
 then
