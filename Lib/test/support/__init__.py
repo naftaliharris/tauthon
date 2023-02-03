@@ -291,7 +291,7 @@ def unlink(filename):
     try:
         _unlink(filename)
     except OSError as exc:
-        if exc.errno not in (errno.ENOENT, errno.ENOTDIR):
+        if exc.errno not in (errno.ENOENT, errno.ENOTDIR, errno.EACCES):
             raise
 
 def rmdir(dirname):
