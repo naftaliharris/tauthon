@@ -1424,6 +1424,9 @@ if test "$Py_LTO" = 'true' ; then
       # to get debug symbols.
       LTOFLAGS="$LTOFLAGS -g"
   fi
+
+  # LTO expects optimisation flags in LDFLAGS
+  LDFLAGS="${LDFLAGS} ${CFLAGS} ${OPT}"
 fi
 
 
