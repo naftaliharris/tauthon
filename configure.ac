@@ -2814,11 +2814,12 @@ if test "$posix_threads" = "yes"; then
       AC_CACHE_VAL(ac_cv_pthread_system_supported,
       [AC_RUN_IFELSE([AC_LANG_SOURCE([[
       #include <stdio.h>
+      #include <stdlib.h>
       #include <pthread.h>
       void *foo(void *parm) {
         return NULL;
       }
-      main() {
+      int main() {
         pthread_attr_t attr;
         pthread_t id;
         if (pthread_attr_init(&attr)) exit(-1);
@@ -4207,6 +4208,7 @@ then
   AC_MSG_CHECKING(whether wchar_t is signed)
   AC_CACHE_VAL(ac_cv_wchar_t_signed, [
   AC_RUN_IFELSE([AC_LANG_SOURCE([[
+  #include <stdlib.h>
   #include <wchar.h>
   int main()
   {
@@ -4296,6 +4298,7 @@ AC_C_BIGENDIAN
 AC_MSG_CHECKING(whether right shift extends the sign bit)
 AC_CACHE_VAL(ac_cv_rshift_extends_sign, [
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
+#include <stdlib.h>
 int main()
 {
 	exit(((-1)>>3 == -1) ? 0 : 1);
