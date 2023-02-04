@@ -2,6 +2,56 @@
 Python News
 +++++++++++
 
+What's New in Python 2.8.5 final?
+=================================
+
+*Release date: 2023-02-04*
+
+Security
+--------
+
+- bpo-42278: Replaced usage of :func:`tempfile.mktemp` with
+  :func:`tempfile.mkdtemp` to avoid a potential race condition.
+
+- bpo-43124: Made the internal ``putcmd`` function in :mod:`smtplib`
+  sanitize input for presence of ``\r`` and ``\n`` characters to avoid
+  (unlikely) command injection.
+
+- bpo-43882: The presence of newline or tab characters in parts of a URL
+  could allow some forms of attacks.
+
+  Following the controlling specification for URLs defined by WHATWG
+  :func:`urllib.parse` now removes ASCII newlines and tabs from URLs,
+  preventing such attacks.
+
+- bpo-42967: Fix web cache poisoning vulnerability by defaulting the query
+  args separator to ``&``, and allowing the user to choose a custom
+  separator.
+
+Build
+-----
+
+- gh-issue-1: LTO: add optimisation flags to LDFLAGS.
+
+- gh-issue-1: New "configure" option: "--enable-loadable-sqlite-extensions".
+
+- gh-issue-1: No longer building the "_Qt" extension on macOS, because the
+  Quicktime Framework has been removed from Xcode 10.12.
+
+- gh-issue-1: Do not build anything if "make install" is called on an empty
+  tree, because LTO and PGO settings are ignored in that scenario. Error out
+  instead.
+
+- gh-issue-1: PGO: use "-fprofile-partial-training" with GCC, in order to
+  optimise for speed those functions not executed during the training phase.
+  Without it, they're optimised for size.
+
+  This option was introduced in GCC-10.1.
+
+- gh-issue-1: LTO now runs in parallel. The use of "-flto=auto" requires
+  GCC-10 or newer.
+
+
 What's New in Python 2.8.4 final?
 =================================
 

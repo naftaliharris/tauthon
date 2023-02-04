@@ -1,0 +1,103 @@
+.. bpo: 42278
+.. date: 2021-08-29-12-39-44
+.. nonce: jvmQz_
+.. release date: 2023-02-04
+.. section: Security
+
+Replaced usage of :func:`tempfile.mktemp` with :func:`tempfile.mkdtemp` to
+avoid a potential race condition.
+
+..
+
+.. bpo: 43124
+.. date: 2021-05-08-11-50-46
+.. nonce: 2CTM6M
+.. section: Security
+
+Made the internal ``putcmd`` function in :mod:`smtplib` sanitize input for
+presence of ``\r`` and ``\n`` characters to avoid (unlikely) command
+injection.
+
+..
+
+.. bpo: 43882
+.. date: 2021-04-25-07-46-37
+.. nonce: Jpwx85
+.. section: Security
+
+The presence of newline or tab characters in parts of a URL could allow some
+forms of attacks.
+
+Following the controlling specification for URLs defined by WHATWG
+:func:`urllib.parse` now removes ASCII newlines and tabs from URLs,
+preventing such attacks.
+
+..
+
+.. bpo: 42967
+.. date: 2021-02-14-15-59-16
+.. nonce: YApqDS
+.. section: Security
+
+Fix web cache poisoning vulnerability by defaulting the query args separator
+to ``&``, and allowing the user to choose a custom separator.
+
+..
+
+.. date: 2023-02-03-23-44-21
+.. gh-issue: 1
+.. nonce: DxfKUA
+.. section: Build
+
+LTO: add optimisation flags to LDFLAGS.
+
+..
+
+.. date: 2023-02-01-23-20-11
+.. gh-issue: 1
+.. nonce: jcYm0U
+.. section: Build
+
+New "configure" option: "--enable-loadable-sqlite-extensions".
+
+..
+
+.. date: 2023-02-01-22-57-48
+.. gh-issue: 1
+.. nonce: q_Fh4L
+.. section: Build
+
+No longer building the "_Qt" extension on macOS, because the Quicktime
+Framework has been removed from Xcode 10.12.
+
+..
+
+.. date: 2023-02-01-18-22-47
+.. gh-issue: 1
+.. nonce: 0GYif8
+.. section: Build
+
+Do not build anything if "make install" is called on an empty tree, because
+LTO and PGO settings are ignored in that scenario. Error out instead.
+
+..
+
+.. date: 2023-02-01-14-46-34
+.. gh-issue: 1
+.. nonce: xjOQ2L
+.. section: Build
+
+PGO: use "-fprofile-partial-training" with GCC, in order to optimise for
+speed those functions not executed during the training phase. Without it,
+they're optimised for size.
+
+This option was introduced in GCC-10.1.
+
+..
+
+.. date: 2023-02-01-14-18-36
+.. gh-issue: 1
+.. nonce: iH6cxV
+.. section: Build
+
+LTO now runs in parallel. The use of "-flto=auto" requires GCC-10 or newer.

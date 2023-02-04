@@ -1,2 +1,0 @@
-Do not build anything if "make install" is called on an empty tree, because
-LTO and PGO settings are ignored in that scenario. Error out instead.

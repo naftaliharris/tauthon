@@ -1,1 +1,0 @@
-LTO now runs in parallel. The use of "-flto=auto" requires GCC-10 or newer.
