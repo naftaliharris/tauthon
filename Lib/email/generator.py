@@ -28,7 +28,6 @@ def _is8bitstring(s):
     return False
 
 
-
 class Generator:
     """Generates output from a Message object tree.
 
@@ -142,7 +141,7 @@ class Generator:
             print >> self._fp, '%s:' % h,
             if self._maxheaderlen == 0:
                 # Explicit no-wrapping
-                print >> self._fp, v
+                print >> self._fp, v.encode()
             elif isinstance(v, Header):
                 # Header instances know what to do
                 print >> self._fp, v.encode()
@@ -290,7 +289,6 @@ class Generator:
         self._fp.write(payload)
 
 
-
 _FMT = '[Non-text (%(type)s) part of message omitted, filename %(filename)s]'
 
 class DecodedGenerator(Generator):
@@ -348,7 +346,6 @@ class DecodedGenerator(Generator):
                     }
 
 
-
 # Helper
 _width = len(repr(sys.maxint-1))
 _fmt = '%%0%dd' % _width
