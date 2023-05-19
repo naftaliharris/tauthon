@@ -4404,6 +4404,7 @@ AC_MSG_CHECKING(for broken poll())
 AC_CACHE_VAL(ac_cv_broken_poll,
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <poll.h>
+#include <unistd.h>
 
 int main()
 {
