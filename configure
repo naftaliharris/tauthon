@@ -16569,6 +16569,7 @@ else $as_nop
 /* end confdefs.h.  */
 
 #include <poll.h>
+#include <unistd.h>
 
 int main()
 {
