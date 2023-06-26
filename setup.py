@@ -898,9 +898,12 @@ class PyBuildExt(build_ext):
             missing.append('_ssl')
 
         # find out which version of OpenSSL we have
-        openssl_ver = 0
+        openssl_major_re = re.compile(
+            '^\s*#\s*define\s+OPENSSL_VERSION_MAJOR\s+([0-9]+)' )
+        openssl_major = -1 # Filled only on OpenSSL 3.0
         openssl_ver_re = re.compile(
             '^\s*#\s*define\s+OPENSSL_VERSION_NUMBER\s+(0x[0-9a-fA-F]+)' )
+        openssl_ver = 0
 
         # look for the openssl version header on the compiler search path.
         opensslv_h = find_file('openssl/opensslv.h', [],
@@ -912,17 +915,22 @@ class PyBuildExt(build_ext):
             try:
                 incfile = open(name, 'r')
                 for line in incfile:
+                    m = openssl_major_re.match(line)
+                    if m:
+                        openssl_major = int(m.group(1))
                     m = openssl_ver_re.match(line)
                     if m:
-                        openssl_ver = eval(m.group(1))
+                        openssl_ver = int(m.group(1), 0)
             except IOError, msg:
                 print "IOError while reading opensshv.h:", msg
                 pass
 
+        min_openssl_major = 1
         min_openssl_ver = 0x00907000
         have_any_openssl = ssl_incs is not None and ssl_libs is not None
         have_usable_openssl = (have_any_openssl and
-                               openssl_ver >= min_openssl_ver)
+                               (openssl_ver >= min_openssl_ver or
+                                openssl_major >= min_openssl_major))
 
         if have_any_openssl:
             if have_usable_openssl:
@@ -947,7 +955,9 @@ class PyBuildExt(build_ext):
                             depends = ['md5.h']) )
 
         min_sha2_openssl_ver = 0x00908000
-        if COMPILED_WITH_PYDEBUG or openssl_ver < min_sha2_openssl_ver:
+        if (COMPILED_WITH_PYDEBUG or
+            (openssl_ver < min_sha2_openssl_ver and
+             openssl_major < min_openssl_major)):
             # OpenSSL doesn't do these until 0.9.8 so we'll bring our own hash
             exts.append( Extension('_sha256', ['sha256module.c']) )
             exts.append( Extension('_sha512', ['sha512module.c']) )
