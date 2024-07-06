@@ -170,9 +170,14 @@ syslog_syslog(PyObject * self, PyObject * args)
         }
     }
 
+#ifdef __APPLE__
+    // gh-98178: On macOS, libc syslog() is not thread-safe
+    syslog(priority, "%s", message);
+#else
     Py_BEGIN_ALLOW_THREADS;
     syslog(priority, "%s", message);
     Py_END_ALLOW_THREADS;
+#endif
     Py_INCREF(Py_None);
     return Py_None;
 }

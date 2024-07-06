@@ -1256,7 +1256,7 @@ AsObj(PyObject *value)
             return NULL;
         }
         if (sizeof(Py_UNICODE) == sizeof(Tcl_UniChar))
-            return Tcl_NewUnicodeObj(inbuf, size);
+            return Tcl_NewUnicodeObj((const Tcl_UniChar *)inbuf, size);
         allocsize = ((size_t)size) * sizeof(Tcl_UniChar);
         if (allocsize >= size)
             outbuf = (Tcl_UniChar*)attemptckalloc(allocsize);
