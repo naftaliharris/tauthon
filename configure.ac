@@ -893,6 +893,12 @@ if test "x$enable_profiling" = xyes; then
   LDFLAGS="-pg $LDFLAGS"
 fi
 
+case $CC in
+  *gcc* | *clang*)
+    BASECFLAGS="$BASECFLAGS -std=gnu17"
+  ;;
+esac
+
 AC_MSG_CHECKING(LDLIBRARY)
 
 # MacOSX framework builds need more magic. LDLIBRARY is the dynamic

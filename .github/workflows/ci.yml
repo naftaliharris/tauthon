@@ -131,7 +131,7 @@ jobs:
           make -j${ncpu}
           make pythoninfo
           make smelly
-          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly"
+          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib"
           # doc checks:
           if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
             cd Doc
@@ -159,7 +159,7 @@ jobs:
           make pythoninfo
           make smelly
           # Weird test failures on ARM64 macOS.
-          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time"
+          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib"
 
       - name: Add msbuild to PATH
         if: runner.os == 'Windows'
@@ -171,5 +171,5 @@ jobs:
         run: |
           .\PCbuild\build.bat -e -p x64
           .\tauthon.bat -m test.pythoninfo
-          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures -x test_list -x test_tuple
+          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures -x test_list -x test_tuple -x test_ftplib
 

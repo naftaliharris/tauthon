@@ -212,7 +212,7 @@ TCLTK_LIBS=	@TCLTK_LIBS@
 # We exclude unittests with -x that take a ridiculous amount of time to
 # run in the instrumented training build, do not provide much value
 # or fail randomly when run in parallel (test_epoll, test_selectors).
-PROFILE_TASK=-m test.regrtest --pgo -w $(EXTRATESTOPTS) -x test_asyncore test_gdb test_multiprocessing test_subprocess test_epoll test_selectors
+PROFILE_TASK=-m test.regrtest --pgo -w $(EXTRATESTOPTS) -x test_asyncore test_gdb test_multiprocessing test_subprocess test_epoll test_selectors test_ftplib test_concurrent_futures
 
 # report files for gcov / lcov coverage report
 COVERAGE_INFO=	$(abs_builddir)/coverage.info
