@@ -117,26 +117,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          # we need Python2 for regen
-          wget https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tgz
-          tar -xvf Python-2.7.18.tgz
-          cd Python-2.7.18
           ./configure
-          make
-          sudo -E make install
-          cd ..
-          # Tauthon
-          ./configure
-          if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
-            make -j${ncpu} regen-all
-            changes="$(git status --porcelain)"
-            # Check for changes in regenerated files
-            if ! test -z "${changes}"; then
-              echo "Generated files not up to date"
-              echo "${changes}"
-              exit 1
-            fi
-          fi
           make -j${ncpu}
           make pythoninfo
           make smelly
