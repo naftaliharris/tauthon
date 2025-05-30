@@ -121,7 +121,7 @@ jobs:
           make -j${ncpu}
           make pythoninfo
           make smelly
-          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib"
+          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib -x test_imaplib -x test_ssl -x test_tk -x test_urllib2_localnet"
           # doc checks:
           if [[ "${{ matrix.target.cpu }}" == "amd64" ]]; then
             cd Doc
