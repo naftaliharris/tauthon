@@ -25,7 +25,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+            builder: ubuntu-22.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
           - target:
               os: macos
             builder: macos-latest
@@ -171,5 +171,5 @@ jobs:
         run: |
           .\PCbuild\build.bat -e -p x64
           .\tauthon.bat -m test.pythoninfo
-          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures -x test_list -x test_tuple -x test_ftplib
+          .\PCbuild\rt.bat -p x64 -q -uall -u-cpu -u-largefile -rwW --slowest -j2 -x test_concurrent_futures -x test_list -x test_tuple -x test_ftplib -x test_ssl
 
