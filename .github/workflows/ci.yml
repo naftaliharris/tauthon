@@ -25,7 +25,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-22.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+            builder: ubuntu-24.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
           - target:
               os: macos
             builder: macos-latest
@@ -62,12 +62,13 @@ jobs:
       - name: Install build dependencies (Linux i386)
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
         run: |
+          sudo -E add-apt-repository ppa:deadsnakes/ppa
           sudo -E dpkg --add-architecture i386
           sudo -E apt-get update -qq
           sudo -E apt-get install --no-install-recommends -yq gcc-multilib \
             libbz2-dev:i386 libffi-dev:i386 libgdbm-dev:i386 \
             liblzma-dev:i386 libncurses5-dev:i386 libreadline6-dev:i386 libsqlite3-dev:i386 \
-            libssl-dev:i386 lzma:i386 uuid-dev:i386 zlib1g-dev:i386
+        libssl-dev:i386 lzma:i386 uuid-dev:i386 zlib1g-dev:i386 python2.7:i386
           mkdir -p external/bin
           cat << EOF > external/bin/gcc
           #!/bin/bash
@@ -83,11 +84,13 @@ jobs:
       - name: Install build dependencies (Linux AMD64)
         if: runner.os == 'Linux' && matrix.target.cpu == 'amd64'
         run: |
+          sudo -E add-apt-repository ppa:deadsnakes/ppa
           sudo -E apt-get update -qq
           sudo -E apt-get install --no-install-recommends -yq \
             build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev \
             liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev \
-            libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev
+            libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev \
+            python2.7
 
       - name: Enable TLS 1.0/1.1 in OpenSSL (Linux)
         if: runner.os == 'Linux'

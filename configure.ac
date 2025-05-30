@@ -19,7 +19,7 @@ AC_SUBST(host)
 # pybuilddir.txt will be created by --generate-posix-vars in the Makefile
 rm -f pybuilddir.txt
 
-AC_CHECK_PROGS(PYTHON_FOR_REGEN, tauthon$PACKAGE_VERSION tauthon python$PACKAGE_VERSION python2 python, python2)
+AC_CHECK_PROGS(PYTHON_FOR_REGEN, tauthon$PACKAGE_VERSION tauthon python$PACKAGE_VERSION python2 python2.7 python, python2)
 AC_SUBST(PYTHON_FOR_REGEN)
 
 if test "$cross_compiling" = yes; then
