@@ -68,7 +68,7 @@ jobs:
           sudo -E apt-get install --no-install-recommends -yq gcc-multilib \
             libbz2-dev:i386 libffi-dev:i386 libgdbm-dev:i386 \
             liblzma-dev:i386 libncurses5-dev:i386 libreadline6-dev:i386 libsqlite3-dev:i386 \
-        libssl-dev:i386 lzma:i386 uuid-dev:i386 zlib1g-dev:i386 python2.7:i386
+            libssl-dev:i386 lzma:i386 uuid-dev:i386 zlib1g-dev:i386 python2.7:i386
           mkdir -p external/bin
           cat << EOF > external/bin/gcc
           #!/bin/bash
