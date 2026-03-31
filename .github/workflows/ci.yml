@@ -36,7 +36,7 @@ jobs:
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Git checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Environment variables
         shell: bash
@@ -127,7 +127,7 @@ jobs:
         if: runner.os == 'macOS'
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '15' # 14 seems buggy: https://github.com/actions/runner-images/issues/6642
+          xcode-version: '16'
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
