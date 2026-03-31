@@ -1,0 +1,2 @@
+Fix negative reference count in _PyImport_Fini(), when configured with
+"--with-pydebug".

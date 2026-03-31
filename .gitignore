@@ -88,3 +88,4 @@ coverage/
 externals/
 htmlcov/
 gmon.out
+/stamp-h1
