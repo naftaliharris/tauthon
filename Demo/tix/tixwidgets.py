@@ -777,7 +777,7 @@ samples = {'Balloon'            : 'Balloon',
 # There are still a lot of demos to be translated:
 ##      set root {
 ##          {d "File Selectors"         file    }
-##          {d "Hierachical ListBox"    hlist   }
+##          {d "Hierarchical ListBox"    hlist   }
 ##          {d "Tabular ListBox"        tlist   {c tixTList}}
 ##          {d "Grid Widget"            grid    {c tixGrid}}
 ##          {d "Manager Widgets"        manager }
