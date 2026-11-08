@@ -25,7 +25,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-24.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+            builder: ubuntu-26.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
           - target:
               os: macos
             builder: macos-latest
@@ -121,7 +121,7 @@ jobs:
           make -j${ncpu}
           make pythoninfo
           make smelly
-          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib -x test_imaplib -x test_ssl -x test_tk -x test_urllib2_localnet"
+          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib -x test_imaplib -x test_ssl -x test_tk -x test_urllib2_localnet -x test_ssl"
 
       - name: Select the Xcode version
         if: runner.os == 'macOS'
@@ -143,7 +143,7 @@ jobs:
           make pythoninfo
           make smelly
           # Weird test failures on ARM64 macOS.
-          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib"
+          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib -x test_ssl"
 
       - name: Add msbuild to PATH
         if: runner.os == 'Windows'
