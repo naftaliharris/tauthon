@@ -628,7 +628,6 @@ newPySSLSocket(PySSLContext *sslctx, PySocketSockObject *sock,
     Py_INCREF(sslctx);
 
     /* Make sure the SSL error state is initialized */
-    (void) ERR_get_state();
     ERR_clear_error();
 
     PySSL_BEGIN_ALLOW_THREADS
@@ -992,18 +991,18 @@ _get_peer_alt_names (X509 *certificate) {
             goto fail;
         }
 
-        p = X509_EXTENSION_get_data(ext)->data;
+        p = ASN1_STRING_get0_data(X509_EXTENSION_get_data(ext));
         if (method->it)
             names = (GENERAL_NAMES*)
               (ASN1_item_d2i(NULL,
                              &p,
-                             X509_EXTENSION_get_data(ext)->length,
+                             ASN1_STRING_length(X509_EXTENSION_get_data(ext)),
                              ASN1_ITEM_ptr(method->it)));
         else
             names = (GENERAL_NAMES*)
               (method->d2i(NULL,
                            &p,
-                           X509_EXTENSION_get_data(ext)->length));
+                           ASN1_STRING_length(X509_EXTENSION_get_data(ext))));
 
         for(j = 0; j < sk_GENERAL_NAME_num(names); j++) {
             /* get a rendering of each name in the set of names */
@@ -1064,7 +1063,7 @@ _get_peer_alt_names (X509 *certificate) {
                     goto fail;
                 }
                 PyTuple_SET_ITEM(t, 0, v);
-                v = PyString_FromStringAndSize((char *)ASN1_STRING_data(as),
+                v = PyString_FromStringAndSize((char *)ASN1_STRING_get0_data(as),
                                                ASN1_STRING_length(as));
                 if (v == NULL) {
                     Py_DECREF(t);
@@ -1209,8 +1208,8 @@ _get_aia_uri(X509 *certificate, int nid) {
             continue;
         }
         uri = ad->location->d.uniformResourceIdentifier;
-        ostr = PyUnicode_FromStringAndSize((char *)uri->data,
-                                           uri->length);
+        ostr = PyUnicode_FromStringAndSize((char *)ASN1_STRING_get0_data(uri),
+                                           ASN1_STRING_length(uri));
         if (ostr == NULL) {
             goto fail;
         }
@@ -1276,8 +1275,8 @@ _get_crl_dp(X509 *certificate) {
                 continue;
             }
             uri = gn->d.uniformResourceIdentifier;
-            ouri = PyUnicode_FromStringAndSize((char *)uri->data,
-                                               uri->length);
+            ouri = PyUnicode_FromStringAndSize((char *)ASN1_STRING_get0_data(uri),
+                                               ASN1_STRING_length(uri));
             if (ouri == NULL)
                 goto done;
 
@@ -2226,20 +2225,20 @@ context_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     PySSL_BEGIN_ALLOW_THREADS
     if (proto_version == PY_SSL_VERSION_TLS1)
-        ctx = SSL_CTX_new(TLSv1_method());
+        ctx = SSL_CTX_new(TLS_method());
 #if HAVE_TLSv1_2
     else if (proto_version == PY_SSL_VERSION_TLS1_1)
-        ctx = SSL_CTX_new(TLSv1_1_method());
+        ctx = SSL_CTX_new(TLS_method());
     else if (proto_version == PY_SSL_VERSION_TLS1_2)
-        ctx = SSL_CTX_new(TLSv1_2_method());
+        ctx = SSL_CTX_new(TLS_method());
 #endif
 #ifndef OPENSSL_NO_SSL3
     else if (proto_version == PY_SSL_VERSION_SSL3)
-        ctx = SSL_CTX_new(SSLv3_method());
+        ctx = SSL_CTX_new(TLS_method());
 #endif
 #ifndef OPENSSL_NO_SSL2
     else if (proto_version == PY_SSL_VERSION_SSL2)
-        ctx = SSL_CTX_new(SSLv2_method());
+        ctx = SSL_CTX_new(TLS_method());
 #endif
     else if (proto_version == PY_SSL_VERSION_TLS)
         ctx = SSL_CTX_new(TLS_method());

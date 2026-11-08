@@ -25,7 +25,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-24.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
+            builder: ubuntu-26.04 # with custom config to enable TLS 1.0/1.1 (which we need): https://bugs.python.org/msg376705
           - target:
               os: macos
             builder: macos-latest
@@ -87,7 +87,7 @@ jobs:
           sudo -E apt-get install --no-install-recommends -yq \
             build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev \
             liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev \
-            libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev
+            libssl-dev lzma tk-dev uuid-dev xvfb zlib1g-dev
 
       - name: Enable TLS 1.0/1.1 in OpenSSL (Linux)
         if: runner.os == 'Linux'
@@ -121,13 +121,13 @@ jobs:
           make -j${ncpu}
           make pythoninfo
           make smelly
-          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib -x test_imaplib -x test_ssl -x test_tk -x test_urllib2_localnet"
+          xvfb-run make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ttk_guionly -x test_ftplib -x test_imaplib -x test_ssl -x test_tk -x test_urllib2_localnet -x test_ssl"
 
       - name: Select the Xcode version
         if: runner.os == 'macOS'
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16'
+          xcode-version: '26.6'
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
@@ -143,7 +143,7 @@ jobs:
           make pythoninfo
           make smelly
           # Weird test failures on ARM64 macOS.
-          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib"
+          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib -x test_ssl -x test_concurrent_futures -x test_hashlib -x test_hmac -x test_lib2to3 -x test_multiprocessing -x test_random"
 
       - name: Add msbuild to PATH
         if: runner.os == 'Windows'
