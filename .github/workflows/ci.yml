@@ -87,7 +87,7 @@ jobs:
           sudo -E apt-get install --no-install-recommends -yq \
             build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev \
             liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev \
-            libssl-dev lzma lzma-dev tk-dev uuid-dev xvfb zlib1g-dev
+            libssl-dev lzma tk-dev uuid-dev xvfb zlib1g-dev
 
       - name: Enable TLS 1.0/1.1 in OpenSSL (Linux)
         if: runner.os == 'Linux'
@@ -127,7 +127,7 @@ jobs:
         if: runner.os == 'macOS'
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16'
+          xcode-version: '26.6'
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
