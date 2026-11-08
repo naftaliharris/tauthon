@@ -903,7 +903,7 @@ class PyBuildExt(build_ext):
         openssl_major = -1 # Filled only on OpenSSL 3.0
         openssl_ver_re = re.compile(
             '^\s*#\s*define\s+OPENSSL_VERSION_NUMBER\s+(0x[0-9a-fA-F]+)' )
-        openssl_ver = 0x04000000
+        openssl_ver = 0
 
         # look for the openssl version header on the compiler search path.
         opensslv_h = find_file('openssl/opensslv.h', [],
