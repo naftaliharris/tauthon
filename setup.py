@@ -2180,7 +2180,9 @@ class PyBuildExt(build_ext):
                 ffi_inc = None
                 print('Header file ' + ffi_h + ' does not exist')
         if ffi_lib is None and ffi_inc:
-            for lib_name in ('ffi_convenience', 'ffi_pic', 'ffi'):
+            # the shared libffi first (as Python 3 does), so updates of
+            # libffi reach ctypes; the static variants only as a fallback
+            for lib_name in ('ffi', 'ffi_pic', 'ffi_convenience'):
                 if (self.compiler.find_library_file(lib_dirs, lib_name)):
                     ffi_lib = lib_name
                     break
