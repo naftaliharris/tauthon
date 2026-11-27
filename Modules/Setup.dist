@@ -172,7 +172,7 @@ GLHACK=-Dclear=__GLclear
 #cmath cmathmodule.c _math.c # -lm # complex math library functions
 #math mathmodule.c _math.c # -lm # math library functions, e.g. sin()
 #_struct _struct.c	# binary structure packing/unpacking
-#time timemodule.c # -lm # time operations and variables
+#time timemodule.c pytime.c # -lm # time operations and variables
 #operator operator.c	# operator.add() and similar goodies
 #_testcapi _testcapimodule.c    # Python C API test module
 #_random _randommodule.c	# Random number generator
@@ -183,7 +183,7 @@ GLHACK=-Dclear=__GLclear
 #_functools _functoolsmodule.c	# Tools for working with functions and callable objects
 #_elementtree -I$(srcdir)/Modules/expat -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI _elementtree.c	# elementtree accelerator
 #_pickle _pickle.c	# pickle accelerator
-#datetime datetimemodule.c	# date/time type
+#datetime datetimemodule.c timemodule.c pytime.c	# date/time type
 #_bisect _bisectmodule.c	# Bisection algorithms
 
 #unicodedata unicodedata.c    # static Unicode character database
@@ -211,7 +211,7 @@ GLHACK=-Dclear=__GLclear
 #_csv _csv.c
 
 # Socket module helper for socket(2)
-#_socket socketmodule.c timemodule.c
+#_socket socketmodule.c timemodule.c pytime.c
 
 # Socket module helper for SSL support; you must comment out the other
 # socket line above, and possibly edit the SSL variable:
